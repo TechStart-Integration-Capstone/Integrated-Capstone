@@ -31,7 +31,7 @@ services:
       - POSTGRES_USER=audit_user
       - POSTGRES_PASSWORD=AuditSecretPassword123
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./../backend/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -395,6 +395,20 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Layer 1: JMeter Load Generator
+  # ==========================================
+  jmeter:
+    build:
+      context: ./jmeter
+      dockerfile: Dockerfile
+    container_name: jmeter-runner
+    profiles: ["loadtest"]
+    volumes:
+      - ./jmeter:/jmeter
     networks:
       - ledger-net
 
