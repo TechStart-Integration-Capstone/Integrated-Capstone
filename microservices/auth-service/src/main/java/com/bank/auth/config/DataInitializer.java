@@ -22,9 +22,10 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        // Fix broken BCrypt hashes in DB — re-hash all customers with correct password
+        // Repair only the original demo users. Never overwrite registered customers' passwords.
         String correctHash = passwordEncoder.encode("password123");
         long updated = customerRepository.findAll().stream()
+                .filter(c -> java.util.Set.of("lviernes", "arosales", "glim").contains(c.getUsername()))
                 .filter(c -> !passwordEncoder.matches("password123", c.getPasswordHash()))
                 .peek(c -> {
                     c.setPasswordHash(correctHash);

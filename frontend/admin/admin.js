@@ -1,0 +1,64 @@
+/* Presentation for the operations workspace. Ledger actions remain in app.js. */
+(() => {
+    const pages = {
+        dashboard: ['Overview', 'Banking operations, in view.', 'Manage the demo portfolio and follow every ledger movement.', 'M3 10l9-7 9 7v11H3z M9 21v-8h6v8'],
+        concurrency: ['Concurrency', 'Confidence in every balance.', 'Explore how the ledger handles simultaneous debit requests.', 'M13 2L4 14h7l-1 8 10-13h-7z'],
+        lifecycle: ['Event lifecycle', 'Follow the money movement.', 'Trace a mutation from request validation to the immutable audit trail.', 'M4 7h16m-4-4 4 4-4 4 M20 17H4m4-4-4 4 4 4'],
+        mutation: ['Validation', 'Every request, checked.', 'Inspect validation rules, request payloads, and API responses.', 'M12 3l8 4v6c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6'],
+        reconciliation: ['Reconciliation', 'Keep the books aligned.', 'Compare account balances with the recorded ledger and review discrepancies.', 'M4 5h16v16H4z M8 9h8 M8 13h8 M8 17h4'],
+        telemetry: ['Observability', 'A closer look at performance.', 'Explore the simulation’s throughput, latency, and connection metrics.', 'M4 20V10 M10 20V4 M16 20v-8 M22 20H2']
+    };
+    const sidebar = document.createElement('aside');
+    sidebar.className = 'admin-sidebar';
+    sidebar.innerHTML = '<a class="admin-brand" href="/" aria-label="PayPink admin home"><span class="admin-mark">p</span>PayPink<sup>®</sup></a><div class="admin-eyebrow">ADMIN WORKSPACE</div>';
+    const nav = document.getElementById('app-tabs');
+    nav.setAttribute('aria-label', 'Administration');
+    sidebar.append(nav);
+    const footer = document.createElement('div');
+    footer.className = 'admin-sidebar-footer';
+    footer.innerHTML = '<div class="admin-workspace-note"><strong>A clear view of your bank.</strong><p>Ledger tools and simulation controls, together in one workspace.</p><span>Simulation environment</span></div><a href="/bank/" class="admin-bank-link">Open customer banking <span aria-hidden="true">↗</span></a>';
+    sidebar.append(footer);
+    document.getElementById('app-container').prepend(sidebar);
+    document.querySelector('.nav-brand').innerHTML = '<div class="admin-breadcrumb">PayPink <span>/</span> Admin <span>/</span> <strong id="admin-current-page">Overview</strong></div>';
+    document.querySelector('.badge-text').textContent = 'Session details';
+    document.querySelector('.badge-icon').textContent = '↗';
+    document.querySelector('.avatar-circle').textContent = 'PP';
+    document.querySelector('.user-name').textContent = 'Operations';
+    document.querySelector('.user-branch').textContent = 'Simulation workspace';
+    const main = document.getElementById('main-content');
+    const intro = document.createElement('div');
+    intro.className = 'admin-page-heading';
+    intro.innerHTML = '<div><div class="admin-eyebrow">PAYPINK OPERATIONS</div><h1 id="admin-page-title"></h1><p id="admin-page-description"></p></div><a class="admin-customer-button" href="/bank/">Customer banking <span aria-hidden="true">↗</span></a>';
+    main.prepend(intro);
+    const architecture = document.querySelector('.system-pills');
+    architecture.classList.add('admin-architecture');
+    architecture.setAttribute('aria-label', 'Configured simulation architecture');
+    architecture.insertAdjacentHTML('afterbegin', '<span class="admin-architecture-label">Architecture</span>');
+    intro.after(architecture);
+    const titles = document.querySelectorAll('#tab-dashboard .card-title');
+    titles[0].textContent = 'Demo customer accounts';
+    titles[1].textContent = 'Run a ledger mutation';
+    const banner = document.createElement('div');
+    banner.className = 'admin-overview-banner';
+    banner.innerHTML = '<div><span class="admin-banner-label">THE OPERATIONS DESK</span><h2>One workspace. Every movement.</h2><p>Review accounts, inspect transactions, and put the ledger through its paces.</p></div><div class="admin-banner-tag">Core retail ledger <span>Simulation & audit tools</span></div>';
+    document.getElementById('tab-dashboard').prepend(banner);
+    Object.entries(pages).forEach(([id, page]) => {
+        const button = document.getElementById(`tab-btn-${id}`);
+        button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${page[3]}"/></svg><span>${page[0]}</span><i aria-hidden="true"></i>`;
+        button.setAttribute('aria-controls', `tab-${id}`);
+    });
+    const originalSwitchTab = window.switchTab;
+    window.switchTab = function (id) {
+        if (!pages[id]) return;
+        originalSwitchTab(id);
+        document.getElementById('admin-current-page').textContent = pages[id][0];
+        document.getElementById('admin-page-title').textContent = pages[id][1];
+        document.getElementById('admin-page-description').textContent = pages[id][2];
+        Object.keys(pages).forEach(key => {
+            const button = document.getElementById(`tab-btn-${key}`);
+            if (key === id) button.setAttribute('aria-current', 'page');
+            else button.removeAttribute('aria-current');
+        });
+    };
+    window.switchTab('dashboard');
+})();

@@ -32,4 +32,15 @@ public class JwtTokenProvider {
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }
+
+    public Long customerId(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Missing bearer token");
+        }
+        Claims claims = Jwts.parserBuilder().setSigningKey(key).build()
+                .parseClaimsJws(authorization.substring(7)).getBody();
+        Number id = claims.get("customerId", Number.class);
+        if (id == null || id.longValue() <= 0) throw new IllegalArgumentException("Invalid customer");
+        return id.longValue();
+    }
 }
