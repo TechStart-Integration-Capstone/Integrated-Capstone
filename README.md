@@ -470,7 +470,9 @@ FSE-Capstone/
 ├── docs/
 │   ├── ARCHITECTURE.md
 │   ├── JIRA_BACKLOG.md
-│   └── SONARQUBE_QUALITY_REPORT.md
+│   ├── SONARQUBE_QUALITY_REPORT.md
+│   ├── TESTING.md
+│   └── CAPSTONE_DEFENSE_REVIEWER.md
 │
 └── README.md
 ```
