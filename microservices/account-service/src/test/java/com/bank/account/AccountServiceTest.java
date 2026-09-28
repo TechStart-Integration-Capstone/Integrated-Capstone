@@ -55,12 +55,7 @@ class AccountServiceTest {
         setField(customer1, "status", "ACTIVE");
     }
 
-    private void sf(Object o,String n,Object v){try{var x=o.getClass().getDeclaredField(n);x.setAccessible(true);x.set(o,v);}catch(Exception e){throw new RuntimeException(e);}}
-    @BeforeEach void setUp(){
-        acc1=new Account();sf(acc1,"accountId",1L);sf(acc1,"customerId",10L);sf(acc1,"accountNumber","ACC-001");sf(acc1,"accountType","SAVINGS");sf(acc1,"currency","PHP");sf(acc1,"currentBalance",new BigDecimal("1000.0000"));sf(acc1,"status","ACTIVE");
-        acc2=new Account();sf(acc2,"accountId",2L);sf(acc2,"customerId",10L);sf(acc2,"accountNumber","ACC-002");sf(acc2,"accountType","CHECKING");sf(acc2,"currency","PHP");sf(acc2,"currentBalance",new BigDecimal("500.0000"));sf(acc2,"status","ACTIVE");
-        customer1=new Customer();sf(customer1,"customerId",10L);sf(customer1,"username","jdelacruz");sf(customer1,"firstName","Juan");sf(customer1,"lastName","Dela Cruz");sf(customer1,"email","juan@paypink.ph");sf(customer1,"status","ACTIVE");
-    }
+
     @Test @DisplayName("getAllAccounts: returns mapped DTOs for all accounts")
     void getAllAccounts_returnsDtos(){
         when(accountRepository.findAll()).thenReturn(List.of(acc1,acc2));
