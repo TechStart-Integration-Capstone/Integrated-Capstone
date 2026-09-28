@@ -71,13 +71,11 @@
     </dependencies>
 
     <build>
+        <finalName>api-gateway</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <finalName>api-gateway</finalName>
-                </configuration>
             </plugin>
         </plugins>
     </build>

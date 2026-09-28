@@ -18,6 +18,8 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY index.html          /usr/share/nginx/html/index.html
 COPY src/css/style.css   /usr/share/nginx/html/src/css/style.css
 COPY src/js/app.js       /usr/share/nginx/html/src/js/app.js
+COPY bank/              /usr/share/nginx/html/bank/
+COPY admin/             /usr/share/nginx/html/admin/
 
 EXPOSE 80
 

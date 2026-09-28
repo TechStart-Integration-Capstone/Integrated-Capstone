@@ -24,11 +24,11 @@
         <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
     </dependencies>
     <build>
+        <finalName>audit-service</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration><finalName>audit-service</finalName></configuration>
             </plugin>
         </plugins>
     </build>
