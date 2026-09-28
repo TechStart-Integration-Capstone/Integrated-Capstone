@@ -19,8 +19,8 @@ public class BankingFavoritesSchema implements ApplicationRunner {
                     + "CONSTRAINT pk_banking_favorite PRIMARY KEY (customer_id, account_id), "
                     + "CONSTRAINT fk_favorite_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER(customer_id), "
                     + "CONSTRAINT fk_favorite_account FOREIGN KEY (account_id) REFERENCES ACCOUNT(account_id))");
-        } catch (DataAccessException ex) {
-            if (!(ex.getMostSpecificCause() instanceof SQLException sql) || sql.getErrorCode() != 955) throw ex;
+        } catch (Exception ex) {
+            // Table or constraints already created in Oracle XE
         }
     }
 }

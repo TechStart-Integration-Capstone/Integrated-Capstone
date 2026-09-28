@@ -6,7 +6,8 @@
         lifecycle: ['Event lifecycle', 'Follow the money movement.', 'Trace a mutation from request validation to the immutable audit trail.', 'M4 7h16m-4-4 4 4-4 4 M20 17H4m4-4-4 4 4 4'],
         mutation: ['Validation', 'Every request, checked.', 'Inspect validation rules, request payloads, and API responses.', 'M12 3l8 4v6c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6'],
         reconciliation: ['Reconciliation', 'Keep the books aligned.', 'Compare account balances with the recorded ledger and review discrepancies.', 'M4 5h16v16H4z M8 9h8 M8 13h8 M8 17h4'],
-        telemetry: ['Observability', 'A closer look at performance.', 'Explore the simulation’s throughput, latency, and connection metrics.', 'M4 20V10 M10 20V4 M16 20v-8 M22 20H2']
+        telemetry: ['Observability', 'A closer look at performance.', 'Explore the simulation’s throughput, latency, and connection metrics.', 'M4 20V10 M10 20V4 M16 20v-8 M22 20H2'],
+        customers: ['User Management', 'Customers & Bank Accounts.', 'Review portfolios, lock/unlock accounts, and override balances in Oracle XE.', 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75']
     };
     const sidebar = document.createElement('aside');
     sidebar.className = 'admin-sidebar';
@@ -44,20 +45,33 @@
     document.getElementById('tab-dashboard').prepend(banner);
     Object.entries(pages).forEach(([id, page]) => {
         const button = document.getElementById(`tab-btn-${id}`);
-        button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${page[3]}"/></svg><span>${page[0]}</span><i aria-hidden="true"></i>`;
-        button.setAttribute('aria-controls', `tab-${id}`);
+        if (button) {
+            button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${page[3]}"/></svg><span>${page[0]}</span><i aria-hidden="true"></i>`;
+            button.setAttribute('aria-controls', `tab-${id}`);
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                window.switchTab(id);
+            });
+        }
     });
     const originalSwitchTab = window.switchTab;
     window.switchTab = function (id) {
         if (!pages[id]) return;
-        originalSwitchTab(id);
-        document.getElementById('admin-current-page').textContent = pages[id][0];
-        document.getElementById('admin-page-title').textContent = pages[id][1];
-        document.getElementById('admin-page-description').textContent = pages[id][2];
+        if (typeof originalSwitchTab === 'function') {
+            originalSwitchTab(id);
+        }
+        const curPage = document.getElementById('admin-current-page');
+        const pageTitle = document.getElementById('admin-page-title');
+        const pageDesc = document.getElementById('admin-page-description');
+        if (curPage) curPage.textContent = pages[id][0];
+        if (pageTitle) pageTitle.textContent = pages[id][1];
+        if (pageDesc) pageDesc.textContent = pages[id][2];
         Object.keys(pages).forEach(key => {
             const button = document.getElementById(`tab-btn-${key}`);
-            if (key === id) button.setAttribute('aria-current', 'page');
-            else button.removeAttribute('aria-current');
+            if (button) {
+                if (key === id) button.setAttribute('aria-current', 'page');
+                else button.removeAttribute('aria-current');
+            }
         });
     };
     window.switchTab('dashboard');

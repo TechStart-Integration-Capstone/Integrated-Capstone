@@ -25,5 +25,6 @@ public class Account {
     public BigDecimal getCurrentBalance() { return currentBalance; }
     public void setCurrentBalance(BigDecimal currentBalance) { this.currentBalance = currentBalance; }
     public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public LocalDateTime getCreatedDate() { return createdDate; }
 }

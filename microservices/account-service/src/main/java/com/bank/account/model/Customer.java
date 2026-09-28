@@ -23,5 +23,6 @@ public class Customer {
     public String getEmail() { return email; }
     public String getContactNo() { return contactNo; }
     public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public LocalDateTime getCreatedDate() { return createdDate; }
 }

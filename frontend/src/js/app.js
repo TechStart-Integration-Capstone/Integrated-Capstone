@@ -3,17 +3,17 @@
  * Architecture: FSE Capstone 6-Layer Engine
  */
 
-let API_BASE = 'http://localhost:8080/api/v1';
+let API_BASE = '/api/v1';
 
-// Auto-detect backend port
+// Auto-detect backend port or relative proxy
 async function detectApiBase() {
-    const candidatePorts = [8080, 8085, 8081];
-    for (const port of candidatePorts) {
+    const candidateUrls = ['/api/v1', 'http://localhost:8080/api/v1'];
+    for (const url of candidateUrls) {
         try {
-            const res = await fetch(`http://localhost:${port}/api/v1/auth/demo-token`, { method: 'GET' });
+            const res = await fetch(`${url}/auth/demo-token`, { method: 'GET' });
             if (res.ok) {
-                API_BASE = `http://localhost:${port}/api/v1`;
-                console.log(`Connected to Core Retail Ledger Engine at http://localhost:${port}`);
+                API_BASE = url;
+                console.log(`Connected to Core Retail Ledger Engine at ${url}`);
                 return;
             }
         } catch (ignored) {}
@@ -42,6 +42,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTelemetryPolling();
     renderInitialLifecycleState();
     testScenario('valid'); // Pre-populate RFC-7807 tab
+
+    // Periodic live synchronization with Oracle XE Database
+    setInterval(async () => {
+        await loadCustomerAndAccounts();
+    }, 3000);
 });
 
 /**
@@ -712,6 +717,165 @@ function switchTab(tabName) {
 
     if (tabName === 'reconciliation') {
         loadReconciliationLogs();
+    } else if (tabName === 'customers') {
+        loadAllCustomers();
+    }
+}
+
+/**
+ * 10. User & Customer Management Logic
+ */
+let allCustomersData = [];
+
+async function loadAllCustomers() {
+    const tbody = document.getElementById('customer-table-body');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading customer directory from Oracle XE...</td></tr>';
+
+    try {
+        const res = await fetch(`${API_BASE}/accounts/customers`, {
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            allCustomersData = await res.json();
+            renderCustomerTable(allCustomersData);
+            updateExecutiveKPIs(allCustomersData);
+            return;
+        }
+    } catch (e) {
+        console.warn('Failed to fetch customers:', e);
+    }
+}
+
+function updateExecutiveKPIs(customers) {
+    let totalLiquidity = 0;
+    let totalAccounts = 0;
+
+    customers.forEach(c => {
+        (c.accounts || []).forEach(a => {
+            totalAccounts++;
+            totalLiquidity += parseFloat(a.currentBalance || 0);
+        });
+    });
+
+    const liqEl = document.getElementById('kpi-total-liquidity');
+    const custEl = document.getElementById('kpi-total-customers');
+    const accEl = document.getElementById('kpi-total-accounts');
+
+    if (liqEl) liqEl.textContent = `₱${formatCurrency(totalLiquidity)}`;
+    if (custEl) custEl.textContent = customers.length;
+    if (accEl) accEl.textContent = totalAccounts;
+}
+
+function renderCustomerTable(customers) {
+    const tbody = document.getElementById('customer-table-body');
+    if (!tbody) return;
+
+    if (!customers || customers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;">No customers found in datastore.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = customers.map(c => {
+        const totalCustBal = (c.accounts || []).reduce((sum, a) => sum + parseFloat(a.currentBalance || 0), 0);
+        const accountsHtml = (c.accounts || []).map(a => `
+            <div style="font-size: 0.8rem; margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px;">
+                <span><strong>${a.accountNumber}</strong> (${formatAccountType(a.accountType)})</span>
+                <span style="font-family: 'JetBrains Mono', monospace;">₱${formatCurrency(a.currentBalance)}</span>
+                <span class="status-tag ${a.status === 'ACTIVE' ? 'tag-success' : 'tag-error'}" style="font-size: 0.65rem; padding: 1px 4px; cursor: pointer;" onclick="toggleAccountStatus(${a.accountId}, '${a.status}')" title="Click to Freeze/Activate">${a.status}</span>
+                <a href="javascript:void(0)" onclick="openBalanceModal(${a.accountId}, '${a.accountNumber}', ${a.currentBalance})" style="color: var(--primary-pink); font-size: 0.75rem; text-decoration: underline;" title="Adjust Balance">✏️</a>
+            </div>
+        `).join('');
+
+        return `
+            <tr>
+                <td>#${c.customerId}</td>
+                <td><strong>${c.fullName || (c.firstName + ' ' + c.lastName)}</strong></td>
+                <td><code>${c.username}</code><br><span style="color: var(--text-muted); font-size: 0.75rem;">${c.email}</span></td>
+                <td>${c.contactNo || 'N/A'}</td>
+                <td>${accountsHtml || '<span style="color: var(--text-muted);">No accounts</span>'}</td>
+                <td><strong style="color: var(--primary-pink); font-family: 'JetBrains Mono', monospace;">₱${formatCurrency(totalCustBal)}</strong></td>
+                <td><span class="status-tag ${c.status === 'ACTIVE' ? 'tag-success' : 'tag-error'}">${c.status}</span></td>
+                <td>
+                    <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.75rem;" onclick="toggleCustomerStatus(${c.customerId}, '${c.status}')">
+                        ${c.status === 'ACTIVE' ? '❄️ Freeze' : '🔓 Activate'}
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function toggleCustomerStatus(customerId, currentStatus) {
+    const nextStatus = currentStatus === 'ACTIVE' ? 'FROZEN' : 'ACTIVE';
+    try {
+        const res = await fetch(`${API_BASE}/accounts/customer/${customerId}/status`, {
+            method: 'POST',
+            headers: {
+                ...getAuthHeaders(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: nextStatus })
+        });
+        if (res.ok) {
+            await loadAllCustomers();
+        }
+    } catch (e) {
+        alert('Failed to update customer status: ' + e.message);
+    }
+}
+
+async function toggleAccountStatus(accountId, currentStatus) {
+    const nextStatus = currentStatus === 'ACTIVE' ? 'FROZEN' : 'ACTIVE';
+    try {
+        const res = await fetch(`${API_BASE}/accounts/${accountId}/status`, {
+            method: 'POST',
+            headers: {
+                ...getAuthHeaders(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status: nextStatus })
+        });
+        if (res.ok) {
+            await loadAllCustomers();
+            await loadCustomerAndAccounts();
+        }
+    } catch (e) {
+        alert('Failed to update account status: ' + e.message);
+    }
+}
+
+function openBalanceModal(accountId, accNum, currentBal) {
+    document.getElementById('adjust-acc-id').value = accountId;
+    document.getElementById('adjust-acc-num').value = accNum;
+    document.getElementById('adjust-target-balance').value = parseFloat(currentBal).toFixed(4);
+    document.getElementById('modal-balance-adjust').classList.add('active');
+}
+
+async function submitBalanceAdjustment() {
+    const accountId = document.getElementById('adjust-acc-id').value;
+    const targetBal = parseFloat(document.getElementById('adjust-target-balance').value);
+
+    if (isNaN(targetBal) || targetBal < 0) {
+        alert('Please enter a valid positive balance.');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/accounts/${accountId}/reset-balance`, {
+            method: 'POST',
+            headers: {
+                ...getAuthHeaders(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ targetBalance: targetBal })
+        });
+        if (res.ok) {
+            closeModal('modal-balance-adjust');
+            await loadAllCustomers();
+            await loadCustomerAndAccounts();
+        }
+    } catch (e) {
+        alert('Failed to adjust balance: ' + e.message);
     }
 }
 
@@ -824,3 +988,18 @@ async function loadInitialAuditLogs() {
     ];
     renderOracleAuditLogs();
 }
+
+// Global window bindings for onclick handlers
+window.switchTab = switchTab;
+window.loadAllCustomers = loadAllCustomers;
+window.toggleCustomerStatus = toggleCustomerStatus;
+window.toggleAccountStatus = toggleAccountStatus;
+window.openBalanceModal = openBalanceModal;
+window.submitBalanceAdjustment = submitBalanceAdjustment;
+window.closeModal = closeModal;
+window.runStressSimulation = runStressSimulation;
+window.resetStressAccount = resetStressAccount;
+window.testScenario = testScenario;
+window.triggerScheduledReconciliation = triggerScheduledReconciliation;
+window.handleTransferSubmit = handleTransferSubmit;
+window.selectAccount = selectAccount;
