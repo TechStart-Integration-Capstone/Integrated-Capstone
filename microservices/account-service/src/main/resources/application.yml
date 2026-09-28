@@ -1,0 +1,28 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: account-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:oracle:thin:@localhost:1521/XE}
+    driver-class-name: oracle.jdbc.OracleDriver
+    username: ${SPRING_DATASOURCE_USERNAME:ledger_master}
+    password: ${SPRING_DATASOURCE_PASSWORD:MasterSecretPassword123}
+    hikari:
+      maximum-pool-size: 10
+      pool-name: AccountHikariPool
+  jpa:
+    database-platform: org.hibernate.dialect.OracleDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always

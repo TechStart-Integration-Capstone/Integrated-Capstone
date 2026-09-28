@@ -1,3 +1,54 @@
+<<<<<<< HEAD
+# ===== Environment / secrets =====
+.env
+*.env
+!.env.example
+
+# ===== Java / Maven (backend) =====
+target/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# ===== Java / Gradle (in case you switch) =====
+.gradle/
+build/
+
+# ===== Spring Boot =====
+application-local.yml
+application-local.properties
+HELP.md
+
+# ===== Node / frontend build artifacts =====
+node_modules/
+dist/
+.npm/
+npm-debug.log*
+
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+.classpath
+.project
+.settings/
+
+# ===== OS junk =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Docker / DB data =====
+docker/*.log
+*.pid
+
+# ===== Logs =====
+*.log
+logs/
+=======
 # Maven build outputs
 target/
 pom.xml.tag
@@ -28,3 +79,4 @@ Desktop.ini
 *.tmp
 oracle_data/
 postgres_data/
+>>>>>>> bacc780 (feat: complete FSE Capstone - Core Retail Ledger, Dual-Store Outbox Engine & PayPink UI)

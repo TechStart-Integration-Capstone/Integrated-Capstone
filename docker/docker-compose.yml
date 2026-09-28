@@ -14,6 +14,12 @@ services:
     volumes:
       - oracle_data:/opt/oracle/oradata
       - ./../backend/src/main/resources/schema-oracle.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM dual;' | sqlplus -s ledger_master/MasterSecretPassword123@localhost:1521/XE || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     networks:
       - ledger-net
 
@@ -29,6 +35,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./../backend/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - ledger-net
 
@@ -38,6 +50,11 @@ services:
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     ports:
       - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - ledger-net
 
@@ -50,6 +67,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
     networks:
       - ledger-net
 
@@ -67,36 +87,291 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     networks:
       - ledger-net
 
   # ==========================================
-  # Layer 2 & 3: Core Engine & Microservices
+  # Layer 1: Edge — API Gateway
   # ==========================================
-  core-retail-ledger-engine:
+  api-gateway:
     build:
-      context: ../backend
+      context: ../microservices/api-gateway
       dockerfile: Dockerfile
-    container_name: core-retail-ledger-app
+    container_name: api-gateway
     depends_on:
-      - oracle-xe
-      - postgresql
-      - redis
-      - kafka
+      auth-service:
+        condition: service_started
+      account-service:
+        condition: service_started
+      transaction-service:
+        condition: service_started
+      reconciliation-service:
+        condition: service_started
+      redis:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XE
+      - AUTH_SERVICE_HOST=auth-service
+      - ACCOUNT_SERVICE_HOST=account-service
+      - TRANSACTION_SERVICE_HOST=transaction-service
+      - RECONCILIATION_SERVICE_HOST=reconciliation-service
+      - ANALYTICS_SERVICE_HOST=analytics-service
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Layer 2 & 3: Microservices
+  # ==========================================
+  auth-service:
+    build:
+      context: ../microservices/auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
+      - SPRING_DATASOURCE_USERNAME=ledger_master
+      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    networks:
+      - ledger-net
+
+  account-service:
+    build:
+      context: ../microservices/account-service
+      dockerfile: Dockerfile
+    container_name: account-service
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
+      - SPRING_DATASOURCE_USERNAME=ledger_master
+      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+    networks:
+      - ledger-net
+
+  transaction-service:
+    build:
+      context: ../microservices/transaction-service
+      dockerfile: Dockerfile
+    container_name: transaction-service
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
       - SPRING_DATASOURCE_USERNAME=ledger_master
       - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
       - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - IDEMPOTENCY_TTL_HOURS=24
+    networks:
+      - ledger-net
+
+  notification-service:
+    build:
+      context: ../microservices/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
+      - SPRING_DATASOURCE_USERNAME=audit_user
+      - SPRING_DATASOURCE_PASSWORD=AuditSecretPassword123
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    networks:
+      - ledger-net
+
+  audit-service:
+    build:
+      context: ../microservices/audit-service
+      dockerfile: Dockerfile
+    container_name: audit-service
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
+      - SPRING_DATASOURCE_USERNAME=audit_user
+      - SPRING_DATASOURCE_PASSWORD=AuditSecretPassword123
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    networks:
+      - ledger-net
+
+  reconciliation-service:
+    build:
+      context: ../microservices/reconciliation-service
+      dockerfile: Dockerfile
+    container_name: reconciliation-service
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8086:8086"
+    environment:
+      - ORACLE_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
+      - ORACLE_DATASOURCE_USERNAME=ledger_master
+      - ORACLE_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
+      - POSTGRES_DATASOURCE_USERNAME=audit_user
+      - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    networks:
+      - ledger-net
+
+  outbox-publisher:
+    build:
+      context: ../microservices/outbox-publisher
+      dockerfile: Dockerfile
+    container_name: outbox-publisher
+    depends_on:
+      oracle-xe:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8087:8087"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
+      - SPRING_DATASOURCE_USERNAME=ledger_master
+      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - OUTBOX_POLL_INTERVAL_MS=5000
+      - OUTBOX_RETRY_INTERVAL_MS=30000
+      - OUTBOX_BATCH_SIZE=50
+      - OUTBOX_MAX_RETRIES=5
+    networks:
+      - ledger-net
+
+  analytics-service:
+    build:
+      context: ../microservices/analytics-service
+      dockerfile: Dockerfile
+    container_name: analytics-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    environment:
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ANALYTICS_SERVICE_HOST=analytics-service
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Legacy monolith (kept for reference — disabled)
+  # ==========================================
+  # core-retail-ledger-engine:
+  #   build:
+  #     context: ../backend
+  #     dockerfile: Dockerfile
+  #   container_name: core-retail-ledger-app
+  #   ports:
+  #     - "8099:8080"
+  #   networks:
+  #     - ledger-net
+
+  # ==========================================
+  # Layer 1: Frontend SPA (Nginx)
+  # ==========================================
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: frontend-spa
+    depends_on:
+      - api-gateway
+    ports:
+      - "3001:80"
     networks:
       - ledger-net
 
   # ==========================================
   # Layer 6: Observability & Telemetry
   # ==========================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.87.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel/otel-config.yaml"]
+    volumes:
+      - ./otel-config.yaml:/etc/otel/otel-config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8889:8889"   # Prometheus metrics exporter (OTEL -> Prometheus scrape)
+    depends_on:
+      - loki
+      - tempo
+    networks:
+      - ledger-net
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki-logs
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - ledger-net
+
+  tempo:
+    image: grafana/tempo:2.2.0
+    container_name: tempo-traces
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4317"        # Internal OTLP gRPC from otel-collector (not exposed to host)
+    networks:
+      - ledger-net
+
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: prometheus-telemetry
@@ -114,9 +389,12 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - loki
+      - tempo
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
     networks:
       - ledger-net
 
@@ -127,3 +405,8 @@ networks:
 volumes:
   oracle_data:
   postgres_data:
+  kafka_data:
+  zookeeper_data:
+  zookeeper_log:
+  loki_data:
+  tempo_data:

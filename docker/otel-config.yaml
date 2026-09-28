@@ -1,0 +1,50 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+
+exporters:
+  # Metrics -> Prometheus pull endpoint
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: ledger
+
+  # Logs -> Loki
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+
+  # Traces -> Tempo (via OTLP gRPC)
+  otlp/tempo:
+    endpoint: http://tempo:4317
+    tls:
+      insecure: true
+
+  # Debug logging (stdout) - useful during dev
+  logging:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo, logging]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus, logging]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [loki, logging]

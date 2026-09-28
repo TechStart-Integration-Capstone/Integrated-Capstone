@@ -1,0 +1,6 @@
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+COPY target/auth-service.jar app.jar
+COPY opentelemetry-javaagent.jar otel-agent.jar
+EXPOSE 8081
+ENTRYPOINT ["java", "-javaagent:/app/otel-agent.jar", "-Dotel.service.name=auth-service", "-Dotel.exporter.otlp.endpoint=http://otel-collector:4317", "-Dotel.exporter.otlp.protocol=grpc", "-Dotel.metrics.exporter=otlp", "-Dotel.logs.exporter=otlp", "-jar", "app.jar"]

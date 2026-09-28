@@ -9,10 +9,10 @@ spring:
   
   # Relational Persistence & HikariCP Configuration (Day 32 Requirement)
   datasource:
-    url: jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=Oracle
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=Oracle}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       maximum-pool-size: 30
       minimum-idle: 5
@@ -22,9 +22,9 @@ spring:
       pool-name: RetailLedgerHikariPool
 
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    database-platform: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.H2Dialect}
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     show-sql: false
     properties:
       hibernate:
@@ -40,13 +40,13 @@ spring:
   # Redis In-Memory Validation & Idempotency Configuration
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
       timeout: 5000ms
 
   # Asynchronous Kafka Streaming Configuration
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:
       group-id: core-ledger-group
       auto-offset-reset: earliest

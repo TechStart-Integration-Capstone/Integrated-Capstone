@@ -1,0 +1,100 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  # ── Redis — backing store for the token-bucket rate limiter ───────────────
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 3000ms
+      connect-timeout: 2000ms
+
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: ["GET","POST","PUT","DELETE","OPTIONS","PATCH"]
+            allowedHeaders: "*"
+            allowCredentials: true
+            exposedHeaders: ["Authorization","Idempotency-Key"]
+
+      # ── Default filters applied to every route ──────────────────────────────
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+      routes:
+        # Auth Service — public, no rate limiting
+        - id: auth-service
+          uri: http://${AUTH_SERVICE_HOST:auth-service}:8081
+          predicates:
+            - Path=/api/v1/auth/**
+
+        # Account Service — read-only, no rate limiting
+        - id: account-service
+          uri: http://${ACCOUNT_SERVICE_HOST:account-service}:8082
+          predicates:
+            - Path=/api/v1/accounts/**
+
+        # Transaction Service — RATE LIMITED (write path)
+        # Token bucket: 100 req/s steady-state, burst up to 200, keyed per user.
+        - id: transaction-service
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/api/v1/ledger/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+                deny-empty-key: false
+
+        # Stress Test — RATE LIMITED (spawns concurrent threads, needs cap)
+        - id: stress-test
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/api/v1/stress/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+                deny-empty-key: false
+
+        # Reconciliation Service — no rate limiting
+        - id: reconciliation-service
+          uri: http://${RECONCILIATION_SERVICE_HOST:reconciliation-service}:8086
+          predicates:
+            - Path=/api/v1/reconciliation/**
+
+        # Telemetry (transaction-service exposes telemetry)
+        - id: telemetry
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/api/v1/telemetry/**
+
+        # Analytics Service
+        - id: analytics-service
+          uri: http://${ANALYTICS_SERVICE_HOST:analytics-service}:8088
+          predicates:
+            - Path=/api/v1/analytics/**
+
+# ── JWT secret shared with auth-service ────────────────────────────────────
+app:
+  security:
+    jwt-secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+
+# ── Actuator ─────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
