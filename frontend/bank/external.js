@@ -98,7 +98,7 @@ async function sendExternalTransfer() {
         rail: receipt.rail || request.rail || 'INSTAPAY',
         reference: receipt.reference,
         sourceAccountId: request.sourceAccountId,
-        sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : 'ACC-PH-1001-8842',
+        sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : '001181233469',
         destinationAccountNumber: `${receipt.bank || 'External'} · ${receipt.destinationAccountNumber}`,
         amount: receipt.amount,
         currency: receipt.currency || 'PHP',

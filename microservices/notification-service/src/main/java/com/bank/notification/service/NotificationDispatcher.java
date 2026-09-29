@@ -2,14 +2,11 @@ package com.bank.notification.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -24,12 +21,8 @@ import java.util.UUID;
  *
  * Supports:
  * 1. Philippine SMS Gateway (Semaphore API - semaphore.co)
- * 2. Real Email Dispatch (Spring Mail / Gmail SMTP / SendGrid)
+ * 2. Real Email Dispatch (Direct SSL SMTP to Gmail)
  * 3. In-App / Push Notification Delivery
- *
- * When SEMAPHORE_API_KEY or SPRING_MAIL_USERNAME credentials are supplied,
- * real physical SMS and emails are immediately transmitted. Otherwise,
- * it runs seamlessly in banking simulation mode with detailed audit logs.
  */
 @Service
 public class NotificationDispatcher {
@@ -47,8 +40,8 @@ public class NotificationDispatcher {
     @Value("${spring.mail.username:}")
     private String mailUsername;
 
-    @Autowired(required = false)
-    private JavaMailSender mailSender;
+    @Value("${spring.mail.password:}")
+    private String mailPassword;
 
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -87,25 +80,44 @@ public class NotificationDispatcher {
                     ? "jonlevi.jlv@gmail.com" 
                     : "customer" + customerId + "@paypink.ph";
 
-            // If real mail credentials are configured, send real email
-            if (mailSender != null && mailUsername != null && !mailUsername.isBlank()) {
-                try {
-                    SimpleMailMessage mailMessage = new SimpleMailMessage();
-                    mailMessage.setFrom(mailUsername);
-                    mailMessage.setTo(recipient);
-                    mailMessage.setSubject("PayPink Banking: Transaction Alert [" + refNo + "]");
-                    mailMessage.setText(
-                        "Dear Customer,\n\n" +
+            // If real mail credentials are configured, send live email
+            if (mailUsername != null && !mailUsername.isBlank()) {
+                String emailSubject = "PayPink Banking: Transaction Alert [" + refNo + "]";
+                String emailBody = "Dear Levi Viernes,\n\n" +
                         message + "\n\n" +
-                        "Transaction Reference: " + refNo + "\n" +
-                        "Timestamp: " + deliveredAt + " (PHT)\n\n" +
+                        "• Transaction Reference: " + refNo + "\n" +
+                        "• Timestamp: " + deliveredAt + " (PHT)\n" +
+                        "• Primary Account: 001181233469\n\n" +
                         "Thank you for banking with PayPink.\n" +
-                        "PayPink Core Banking Engine (BSP Regulated)\n"
-                    );
-                    mailSender.send(mailMessage);
-                    log.info("[EMAIL-LIVE] Sent to {} via SMTP  ref={}  msgId={}", recipient, refNo, msgId);
-                } catch (Exception mailEx) {
-                    log.error("[EMAIL-LIVE-FAIL] Could not send live email to {}: {}", recipient, mailEx.getMessage());
+                        "PayPink Core Banking Engine (BSP Regulated)\n";
+                
+                boolean sent = false;
+                // Method 1: Try Local Email Relay Server
+                for (String relayUrl : new String[]{"http://host.docker.internal:8099/send", "http://172.17.0.1:8099/send", "http://localhost:8099/send"}) {
+                    try {
+                        HttpHeaders headers = new HttpHeaders();
+                        headers.setContentType(MediaType.APPLICATION_JSON);
+                        Map<String, String> payload = Map.of("to", recipient, "subject", emailSubject, "body", emailBody);
+                        HttpEntity<Map<String, String>> request = new HttpEntity<>(payload, headers);
+                        ResponseEntity<String> res = restTemplate.postForEntity(relayUrl, request, String.class);
+                        if (res.getStatusCode().is2xxSuccessful()) {
+                            log.info("[EMAIL-LIVE] Dispatched real email to {} via Relay ({})  ref={}  msgId={}", recipient, relayUrl, refNo, msgId);
+                            sent = true;
+                            break;
+                        }
+                    } catch (Exception relayEx) {
+                        // try next
+                    }
+                }
+
+                // Method 2: Fallback to direct SSL SMTP
+                if (!sent) {
+                    try {
+                        sendLiveEmailViaSslSmtp(recipient, emailSubject, emailBody);
+                        log.info("[EMAIL-LIVE] Dispatched real email to {} via Gmail SSL  ref={}  msgId={}", recipient, refNo, msgId);
+                    } catch (Exception mailEx) {
+                        log.error("[EMAIL-LIVE-FAIL] Could not send live email to {}: {}", recipient, mailEx.getMessage());
+                    }
                 }
             }
 
@@ -117,6 +129,62 @@ public class NotificationDispatcher {
             log.error("[EMAIL]  msgId={}  status=FAILED  reason={}", msgId, ex.getMessage());
             return false;
         }
+    }
+
+    private void sendLiveEmailViaSslSmtp(String to, String subject, String body) throws Exception {
+        javax.net.ssl.TrustManager[] trustAll = new javax.net.ssl.TrustManager[] {
+            new javax.net.ssl.X509TrustManager() {
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
+                public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+            }
+        };
+        javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("TLS");
+        sc.init(null, trustAll, new java.security.SecureRandom());
+        
+        try (javax.net.ssl.SSLSocket socket = (javax.net.ssl.SSLSocket) sc.getSocketFactory().createSocket("smtp.gmail.com", 465);
+             java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(socket.getInputStream()));
+             java.io.BufferedWriter w = new java.io.BufferedWriter(new java.io.OutputStreamWriter(socket.getOutputStream()))) {
+            
+            socket.startHandshake();
+            readSmtpResponse(r);
+            smtpCommand(w, r, "EHLO localhost");
+            smtpCommand(w, r, "AUTH LOGIN");
+            smtpCommand(w, r, java.util.Base64.getEncoder().encodeToString(mailUsername.trim().getBytes()));
+            String pwd = (mailPassword != null && !mailPassword.isBlank()) ? mailPassword.trim().replaceAll("\\s+", "") : "ffaeorqwvupclnrc";
+            smtpCommand(w, r, java.util.Base64.getEncoder().encodeToString(pwd.getBytes()));
+            smtpCommand(w, r, "MAIL FROM:<" + mailUsername.trim() + ">");
+            smtpCommand(w, r, "RCPT TO:<" + to.trim() + ">");
+            smtpCommand(w, r, "DATA");
+            
+            String content = "From: PayPink Banking <" + mailUsername.trim() + ">\r\n" +
+                             "To: <" + to.trim() + ">\r\n" +
+                             "Subject: " + subject + "\r\n" +
+                             "MIME-Version: 1.0\r\n" +
+                             "Content-Type: text/plain; charset=UTF-8\r\n\r\n" +
+                             body + "\r\n.\r\n";
+            w.write(content);
+            w.flush();
+            readSmtpResponse(r);
+            smtpCommand(w, r, "QUIT");
+        }
+    }
+
+    private void smtpCommand(java.io.BufferedWriter w, java.io.BufferedReader r, String cmd) throws Exception {
+        w.write(cmd + "\r\n");
+        w.flush();
+        readSmtpResponse(r);
+    }
+
+    private String readSmtpResponse(java.io.BufferedReader r) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = r.readLine()) != null) {
+            sb.append(line).append("\n");
+            if (line.length() >= 4 && line.charAt(3) == ' ') break;
+            if (line.length() == 3) break;
+        }
+        return sb.toString().trim();
     }
 
     // ── SMS channel (Semaphore PH / Simulator) ────────────────────────────────

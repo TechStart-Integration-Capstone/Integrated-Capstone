@@ -94,11 +94,11 @@ let recentTransactions = [];
 let oracleAuditLogs = [];
 let outboxEvents = [];
 let postgresAudits = [
-    { id: 'AUD-PG-DB-9902', txId: '102', account: 'ACC-PH-1001-8842', op: 'DEBIT', before: 735290.16, after: 734790.16, amt: 500.00, amount: 500.00, time: formatPhilippineDateTime(new Date(Date.now() - 1800000)) },
-    { id: 'AUD-PG-DB-9901', txId: '101', account: 'ACC-PH-1001-7714', op: 'DEBIT', before: 60.00, after: 10.00, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
-    { id: 'AUD-PG-CR-9901', txId: '101', account: 'ACC-PH-1001-8842', op: 'CREDIT', before: 20000.00, after: 20050.00, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
-    { id: 'AUD-PG-DB-9900', txId: '100', account: 'ACC-PH-1001-9921', op: 'DEBIT', before: 35000.00, after: 20000.00, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) },
-    { id: 'AUD-PG-CR-9900', txId: '100', account: 'ACC-PH-1001-8842', op: 'CREDIT', before: 110450.00, after: 125450.00, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) }
+    { id: 'AUD-PG-DB-9902', txId: '102', account: '001181233469', op: 'DEBIT', before: 684400.16, after: 683900.16, amt: 500.00, amount: 500.00, time: formatPhilippineDateTime(new Date(Date.now() - 1800000)) },
+    { id: 'AUD-PG-DB-9901', txId: '101', account: '001981233461', op: 'DEBIT', before: 200.00, after: 150.00, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
+    { id: 'AUD-PG-CR-9901', txId: '101', account: '001181233469', op: 'CREDIT', before: 683850.16, after: 683900.16, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
+    { id: 'AUD-PG-DB-9900', txId: '100', account: '001381233467', op: 'DEBIT', before: 60610.00, after: 45610.00, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) },
+    { id: 'AUD-PG-CR-9900', txId: '100', account: '001181233469', op: 'CREDIT', before: 668900.16, after: 683900.16, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) }
 ];
 
 // Initialize Application on DOM Ready
@@ -303,29 +303,29 @@ async function loadCustomerAndAccounts() {
         accountsData = [
             {
                 accountId: 1,
-                accountNumber: 'ACC-PH-1001-8842',
+                accountNumber: '001181233469',
                 accountType: 'SAVINGS_ACCOUNT',
                 currency: 'PHP',
-                currentBalance: 125450.00,
-                formattedBalance: '₱125,450.00',
+                currentBalance: 683900.16,
+                formattedBalance: '₱683,900.16',
                 status: 'ACTIVE'
             },
             {
                 accountId: 2,
-                accountNumber: 'ACC-PH-1001-9921',
+                accountNumber: '001381233467',
                 accountType: 'CHECKING_ACCOUNT',
                 currency: 'PHP',
-                currentBalance: 50000.00,
-                formattedBalance: '₱50,000.00',
+                currentBalance: 45610.00,
+                formattedBalance: '₱45,610.00',
                 status: 'ACTIVE'
             },
             {
                 accountId: 3,
-                accountNumber: 'ACC-PH-1001-7714',
+                accountNumber: '001981233461',
                 accountType: 'STRESS_TEST_ACCOUNT',
                 currency: 'PHP',
-                currentBalance: 60.00,
-                formattedBalance: '₱60.00',
+                currentBalance: 150.00,
+                formattedBalance: '₱150.00',
                 status: 'ACTIVE'
             }
         ];
@@ -341,7 +341,7 @@ function renderAccountsCarousel(accounts) {
     container.innerHTML = accounts.map((acc, idx) => `
         <div class="account-card ${acc.accountId === selectedSourceAccountId ? 'selected' : ''}" onclick="selectAccount(${acc.accountId})">
             <div class="account-card-type">${formatAccountType(acc.accountType)}</div>
-            <div class="account-card-num">${acc.accountNumber}</div>
+            <div class="account-card-num">${formatAccountNumber(acc.accountNumber)}</div>
             <div class="account-card-bal" id="card-bal-${acc.accountId}">₱${formatCurrency(acc.currentBalance)}</div>
             <div class="account-card-curr">PHP (₱) &bull; Master Oracle State</div>
         </div>
@@ -354,7 +354,7 @@ function populateSourceAccountSelect(accounts) {
 
     select.innerHTML = accounts.map(acc => `
         <option value="${acc.accountId}" ${acc.accountId === selectedSourceAccountId ? 'selected' : ''}>
-            ${acc.accountNumber} (${formatAccountType(acc.accountType)} - ₱${formatCurrency(acc.currentBalance)})
+            ${formatAccountNumber(acc.accountNumber)} (${formatAccountType(acc.accountType)} - ₱${formatCurrency(acc.currentBalance)})
         </option>
     `).join('');
 }
@@ -477,30 +477,35 @@ async function updateLocalStateAfterMutation(data) {
 
     // Add Outbox and Postgres entries in real-time
     const cleanTx = String(data.transactionId || data.referenceNo || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
-    const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
-    outboxEvents.unshift({
-        eventId: nextEvtId,
-        txId: cleanTx,
-        type: 'TRANSACTION_SUCCESS',
-        status: 'PROCESSED',
-        date: formatPhilippineTime(new Date())
-    });
-    renderOutboxTable();
+    if (!outboxEvents.some(e => String(e.txId) === String(cleanTx))) {
+        const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
+        outboxEvents.unshift({
+            eventId: nextEvtId,
+            txId: cleanTx,
+            type: 'TRANSACTION_SUCCESS',
+            status: 'PROCESSED',
+            date: formatPhilippineTime(new Date())
+        });
+        renderOutboxTable();
+    }
 
-    postgresAudits.unshift({
-        id: 'AUD-PG-DB-' + (data.transactionId || Math.floor(1000 + Math.random() * 9000)),
-        txId: cleanTx,
-        accId: data.accountId,
-        account: data.accountNumber || `ACC-PH-1001-884${data.accountId || 1}`,
-        op: data.operation || 'DEBIT',
-        amount: data.amount,
-        amt: data.amount,
-        before: data.beforeBalance,
-        after: data.afterBalance,
-        time: formatPhilippineDateTime(new Date())
-    });
-    loadPostgresAuditLogs();
-    renderPostgresAuditTable();
+    const auditId = 'AUD-PG-DB-' + cleanTx;
+    if (!postgresAudits.some(a => a.id === auditId)) {
+        postgresAudits.unshift({
+            id: auditId,
+            txId: cleanTx,
+            accId: data.accountId,
+            account: data.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : '001181233469'),
+            op: data.operation || 'DEBIT',
+            amount: data.amount,
+            amt: data.amount,
+            before: data.beforeBalance,
+            after: data.afterBalance,
+            time: formatPhilippineDateTime(new Date())
+        });
+        loadPostgresAuditLogs();
+        renderPostgresAuditTable();
+    }
 }
 
 /**
@@ -921,6 +926,15 @@ function renderPostgresAuditTable() {
         return;
     }
 
+    const seen = new Set();
+    const uniqueAudits = postgresAudits.filter(a => {
+        const cleanTx = String(a.txId || '').replace(/[^0-9]/g, '').slice(-4);
+        const key = a.id || `${cleanTx}-${a.op}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
     wrap.innerHTML = `
         <table class="recon-table">
             <thead>
@@ -933,7 +947,7 @@ function renderPostgresAuditTable() {
                 </tr>
             </thead>
             <tbody>
-                ${postgresAudits.slice(0, 15).map((a, idx) => {
+                ${uniqueAudits.slice(0, 15).map((a, idx) => {
                     const auditIdText = a.id ? (a.id.startsWith('AUD-PG-') ? `#${a.id.replace('AUD-PG-', '')}` : (a.id.startsWith('#') ? a.id : `#${a.id}`)) : `#${a.auditId || (idx + 1)}`;
                     const txIdText = a.txId ? (String(a.txId).startsWith('TX-') ? a.txId : `TX-${a.txId}`) : `TX-${101 + idx}`;
                     const amtVal = a.amt !== undefined ? a.amt : (a.amount !== undefined ? a.amount : 0);
@@ -1021,6 +1035,20 @@ async function loadAllCustomers(silent = false) {
     if (!allCustomersData || allCustomersData.length === 0) {
         allCustomersData = [
             {
+                customerId: 21,
+                username: 'scarletwitch',
+                firstName: 'Wanda',
+                lastName: 'Maximoff',
+                fullName: 'Wanda Maximoff',
+                email: 'wanda@paypink.com',
+                contactNo: '09876543211',
+                status: 'ACTIVE',
+                accounts: [
+                    { accountId: 21, customerId: 21, accountNumber: '001174500023', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 4950.00, status: 'ACTIVE' },
+                    { accountId: 22, customerId: 21, accountNumber: '001274500022', accountType: 'EVERYDAY_ACCOUNT', currency: 'PHP', currentBalance: 0.00, status: 'ACTIVE' }
+                ]
+            },
+            {
                 customerId: 1,
                 username: 'lviernes',
                 firstName: 'Levi',
@@ -1030,9 +1058,9 @@ async function loadAllCustomers(silent = false) {
                 contactNo: '+63 922 758 4285',
                 status: 'ACTIVE',
                 accounts: [
-                    { accountId: 1, accountNumber: 'ACC-PH-1001-8842', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 750308.00, status: 'ACTIVE' },
-                    { accountId: 2, accountNumber: 'ACC-PH-1001-9921', accountType: 'CHECKING_ACCOUNT', currency: 'PHP', currentBalance: 45050.00, status: 'ACTIVE' },
-                    { accountId: 3, accountNumber: 'ACC-PH-1001-7714', accountType: 'STRESS_TEST_ACCOUNT', currency: 'PHP', currentBalance: 10.00, status: 'ACTIVE' }
+                    { accountId: 1, customerId: 1, accountNumber: '001181233469', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 683900.16, status: 'ACTIVE' },
+                    { accountId: 2, customerId: 1, accountNumber: '001381233467', accountType: 'CHECKING_ACCOUNT', currency: 'PHP', currentBalance: 45610.00, status: 'ACTIVE' },
+                    { accountId: 3, customerId: 1, accountNumber: '001981233461', accountType: 'STRESS_TEST_ACCOUNT', currency: 'PHP', currentBalance: 150.00, status: 'ACTIVE' }
                 ]
             },
             {
@@ -1045,7 +1073,7 @@ async function loadAllCustomers(silent = false) {
                 contactNo: '+63 918 555 6789',
                 status: 'ACTIVE',
                 accounts: [
-                    { accountId: 4, accountNumber: 'ACC-PH-2002-3311', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 84820.50, status: 'ACTIVE' }
+                    { accountId: 4, customerId: 2, accountNumber: '001133218709', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 85320.50, status: 'ACTIVE' }
                 ]
             },
             {
@@ -1058,7 +1086,7 @@ async function loadAllCustomers(silent = false) {
                 contactNo: '+63 920 333 4567',
                 status: 'ACTIVE',
                 accounts: [
-                    { accountId: 5, accountNumber: 'ACC-PH-3003-4422', accountType: 'TIME_DEPOSIT', currency: 'PHP', currentBalance: 350000.00, status: 'ACTIVE' }
+                    { accountId: 5, customerId: 3, accountNumber: '001428928483', accountType: 'TIME_DEPOSIT', currency: 'PHP', currentBalance: 350000.00, status: 'ACTIVE' }
                 ]
             }
         ];
@@ -1098,7 +1126,7 @@ function filterCustomerTable() {
         const user = (c.username || '').toLowerCase();
         const email = (c.email || '').toLowerCase();
         const contact = (c.contactNo || '').toLowerCase();
-        const accounts = (c.accounts || []).map(a => (a.accountNumber || '').toLowerCase()).join(' ');
+        const accounts = (c.accounts || []).map(a => `${a.accountNumber || ''} ${formatAccountNumber(a.accountNumber)}`).join(' ').toLowerCase();
         return name.includes(q) || user.includes(q) || email.includes(q) || contact.includes(q) || accounts.includes(q);
     });
     renderCustomerTable(filtered);
@@ -1121,7 +1149,7 @@ function renderCustomerTable(customers) {
 
         const accountsHtml = (c.accounts || []).map(a => `
             <div style="font-size: 0.8rem; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                <span><strong>${a.accountNumber}</strong> <span style="color: var(--text-muted);">(${formatAccountType(a.accountType)})</span></span>
+                <span><strong>${formatAccountNumber(a.accountNumber)}</strong> <span style="color: var(--text-muted);">(${formatAccountType(a.accountType)})</span></span>
                 <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">₱${formatCurrency(a.currentBalance)}</span>
                 <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.68rem; border-color: ${a.status === 'ACTIVE' ? 'var(--border-rose-medium)' : 'var(--status-success)'};" onclick="toggleAccountStatus(${a.accountId}, '${a.status}')" title="Click to Freeze or Unfreeze Account">
                     ${a.status === 'ACTIVE' ? 'Freeze' : 'Unfreeze'}
@@ -1310,13 +1338,13 @@ function renderTransactionMonitor() {
     }
 
     tbody.innerHTML = list.map(tx => {
-        const accDisplay = tx.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : 'ACC-PH-1001-8842');
+        const accDisplay = tx.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : '001181233469');
         const isCredit = tx.type.includes('CREDIT') || tx.type.includes('IN');
         return `
         <tr>
             <td><code>${tx.ref}</code></td>
             <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${tx.date}</td>
-            <td><strong>${accDisplay}</strong></td>
+            <td><strong>${formatAccountNumber(accDisplay)}</strong></td>
             <td><span class="badge-chip">${tx.type}</span></td>
             <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${isCredit ? '+' : '-'}₱${formatCurrency(tx.amount)}</strong></td>
             <td><code>IDEMP-PH-${tx.id}</code></td>
@@ -1368,14 +1396,23 @@ function loadPostgresAuditLogs() {
     const tabBox = document.getElementById('audit-tab-postgres-logs');
     if (!tabBox) return;
 
-    tabBox.innerHTML = postgresAudits.map(p => {
+    const seen = new Set();
+    const uniqueAudits = postgresAudits.filter(a => {
+        const cleanTx = String(a.txId || '').replace(/[^0-9]/g, '').slice(-4);
+        const key = a.id || `${cleanTx}-${a.op}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    tabBox.innerHTML = uniqueAudits.map(p => {
         const isDebit = p.op === 'DEBIT';
         const opColor = isDebit ? '#E11D48' : '#10B981';
         const borderColor = isDebit ? '#E11D48' : '#3B82F6';
         return `
         <div class="log-entry" style="border-left-color: ${borderColor};">
             <span class="log-time">[${p.time}]</span>
-            <span class="log-action" style="color: ${opColor}; font-weight: 700;">${p.op}</span>: ${p.account} &bull; ₱${formatCurrency(p.before)} &rarr; <strong style="color: ${isDebit ? 'var(--primary-rose)' : 'var(--status-success)'};">₱${formatCurrency(p.after)}</strong> (Amt: ₱${formatCurrency(p.amt)}) [${p.id}]
+            <span class="log-action" style="color: ${opColor}; font-weight: 700;">${p.op}</span>: ${formatAccountNumber(p.account)} &bull; ₱${formatCurrency(p.before)} &rarr; <strong style="color: ${isDebit ? 'var(--primary-rose)' : 'var(--status-success)'};">₱${formatCurrency(p.after)}</strong> (Amt: ₱${formatCurrency(p.amt)}) [${p.id}]
         </div>
     `}).join('');
 }
@@ -1383,10 +1420,10 @@ function loadPostgresAuditLogs() {
 async function loadRecentTransactions() {
     if (recentTransactions.length === 0) {
         recentTransactions = [
-            { id: 103, ref: 'TX-PH-2026-0929-001', accountNumber: 'ACC-PH-1001-8842', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), status: 'SUCCESS' },
-            { id: 102, ref: 'TX-PH-2026-0929-000', accountNumber: 'ACC-PH-1001-9921', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 3600000)), status: 'SUCCESS' },
-            { id: 101, ref: 'TX-PH-INIT-001', accountNumber: 'ACC-PH-1001-8842', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 86400000)), status: 'SUCCESS' },
-            { id: 100, ref: 'TX-PH-INIT-000', accountNumber: 'ACC-PH-1001-7714', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 172800000)), status: 'SUCCESS' }
+            { id: 103, ref: 'TX-PH-2026-0929-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), status: 'SUCCESS' },
+            { id: 102, ref: 'TX-PH-2026-0929-000', accountNumber: '001381233467', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 3600000)), status: 'SUCCESS' },
+            { id: 101, ref: 'TX-PH-INIT-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 86400000)), status: 'SUCCESS' },
+            { id: 100, ref: 'TX-PH-INIT-000', accountNumber: '001981233461', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 172800000)), status: 'SUCCESS' }
         ];
     }
     renderTransactionFeed();
@@ -1407,6 +1444,8 @@ async function loadInitialAuditLogs() {
 /**
  * Real-Time Cross-Tab & Backend Synchronization Engine
  */
+const processedTransferEventIds = new Set();
+
 function setupRealtimeSync() {
     // 1. BroadcastChannel API for zero-latency same-origin cross-tab messages
     if (window.BroadcastChannel) {
@@ -1434,6 +1473,19 @@ function setupRealtimeSync() {
 }
 
 async function handleIncomingTransferEvent(data) {
+    if (!data) return;
+
+    // Deduplicate event if received simultaneously from BroadcastChannel and localStorage
+    const eventKey = `${data.reference || data.transactionId || ''}-${data.amount || ''}-${data.sourceAccountId || data.sourceAccountNumber || ''}-${data.destinationAccountNumber || ''}`;
+    if (processedTransferEventIds.has(eventKey)) {
+        return;
+    }
+    processedTransferEventIds.add(eventKey);
+    if (processedTransferEventIds.size > 200) {
+        const firstKey = processedTransferEventIds.values().next().value;
+        processedTransferEventIds.delete(firstKey);
+    }
+
     // A. Live fetch of fresh account balances and customer states
     await loadCustomerAndAccounts();
     await loadAllCustomers(true);
@@ -1442,6 +1494,23 @@ async function handleIncomingTransferEvent(data) {
     const txRef = data.reference || `TX-PH-${Date.now()}`;
     const normalizedStatus = (data.status === 'SUCCESS' || data.status === 'COMPLETED') ? 'COMPLETED' : (data.status || 'COMPLETED');
     const existing = recentTransactions.find(t => t.ref === txRef);
+
+    // Accurately resolve sending account from accountsData or data payload
+    let sourceAccObj = null;
+    if (data.sourceAccountId) {
+        sourceAccObj = accountsData.find(a => String(a.accountId) === String(data.sourceAccountId));
+    }
+    if (!sourceAccObj && data.sourceAccountNumber) {
+        const rawClean = String(data.sourceAccountNumber).replace(/\s+/g, '');
+        sourceAccObj = accountsData.find(a => a.accountNumber === rawClean || a.accountNumber === data.sourceAccountNumber || a.accountNumber.endsWith(rawClean.slice(-4)));
+    }
+    if (!sourceAccObj && accountsData.length > 0) {
+        sourceAccObj = accountsData[0];
+    }
+    const senderAcc = data.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : '001181233469');
+    const destAcc = data.destinationAccountNumber || data.recipientName || '001274500022';
+    const amt = parseFloat(data.amount || 0);
+    const cleanTxNum = String(txRef || data.transactionId || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
 
     if (existing) {
         if (existing.status !== normalizedStatus) {
@@ -1452,14 +1521,13 @@ async function handleIncomingTransferEvent(data) {
     } else {
         const formattedDate = formatPhilippineDateTime(data.date || new Date());
         const railLabel = data.rail ? `TRANSFER (${data.rail})` : (data.type === 'LEDGER_MUTATION' ? 'MUTATION (ACID)' : 'TRANSFER (INSTAPAY)');
-        const accNum = data.sourceAccountNumber || (data.sourceAccountId ? `ACC-PH-1001-884${data.sourceAccountId}` : (accountsData.length > 0 ? accountsData[0].accountNumber : 'ACC-PH-1001-8841'));
 
         recentTransactions.unshift({
             id: Date.now(),
             ref: txRef,
-            accountNumber: accNum,
+            accountNumber: senderAcc,
             type: railLabel,
-            amount: parseFloat(data.amount || 0),
+            amount: amt,
             currency: data.currency || 'PHP',
             date: formattedDate,
             status: normalizedStatus
@@ -1471,37 +1539,42 @@ async function handleIncomingTransferEvent(data) {
     // C. Dual-stream audit log recording: Oracle XE synchronous + PostgreSQL double-entry (DEBIT & CREDIT) + Oracle XE Outbox Event
     const timeStr = formatPhilippineTime(new Date());
     const dtStr = formatPhilippineDateTime(new Date());
-    
-    // Accurately resolve sending account from accountsData or data payload
-    let sourceAccObj = null;
-    if (data.sourceAccountId) {
-        sourceAccObj = accountsData.find(a => String(a.accountId) === String(data.sourceAccountId));
-    }
-    if (!sourceAccObj && data.sourceAccountNumber) {
-        sourceAccObj = accountsData.find(a => a.accountNumber === data.sourceAccountNumber || a.accountNumber.endsWith(data.sourceAccountNumber.slice(-4)));
-    }
-    if (!sourceAccObj && accountsData.length > 0) {
-        sourceAccObj = accountsData[0];
-    }
-    const senderAcc = data.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : 'ACC-PH-1001-8842');
-    const destAcc = data.destinationAccountNumber || data.recipientName || 'ACC-PH-TARGET';
-    const amt = parseFloat(data.amount || 0);
-    const cleanTxNum = String(txRef || data.transactionId || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
 
     // Dynamic before/after balance computation matching exact debited account
-    const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 734790.16;
+    const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 683900.16;
     const beforeBal = currBal + amt;
     const afterBal = currBal;
+
+    // Immediately reflect balance deduction/addition in memory
+    if (sourceAccObj) {
+        sourceAccObj.currentBalance = Math.max(0, afterBal);
+    }
+    const rawCleanSender = String(senderAcc).replace(/\s+/g, '');
+    const rawCleanDest = String(destAcc).replace(/\s+/g, '');
+    allCustomersData.forEach(c => {
+        (c.accounts || []).forEach(a => {
+            const rawCleanA = String(a.accountNumber).replace(/\s+/g, '');
+            if (rawCleanA === rawCleanSender || String(a.accountId) === String(data.sourceAccountId)) {
+                a.currentBalance = Math.max(0, parseFloat(a.currentBalance || 0) - amt);
+            }
+            if (rawCleanA === rawCleanDest) {
+                a.currentBalance = parseFloat(a.currentBalance || 0) + amt;
+            }
+        });
+    });
+    filterCustomerTable();
+    updateExecutiveKPIs(allCustomersData);
+    renderAccountsCarousel(accountsData);
 
     oracleAuditLogs.unshift({
         time: timeStr,
         action: 'CUSTOMER_TRANSFER_ACID',
-        details: `Customer transfer of ₱${formatCurrency(amt)} from ${senderAcc} to ${destAcc} (Ref: ${txRef}). Committed with Oracle XE ACID double-entry.`
+        details: `Customer transfer of ₱${formatCurrency(amt)} from ${formatAccountNumber(senderAcc)} to ${formatAccountNumber(destAcc)} (Ref: ${txRef}). Committed with Oracle XE ACID double-entry.`
     });
     renderOracleAuditLogs();
 
     // 1. Transactional Outbox Event (Oracle XE Real-Time Event Stream)
-    if (!outboxEvents.some(e => String(e.txId) === cleanTxNum)) {
+    if (!outboxEvents.some(e => String(e.txId) === String(cleanTxNum))) {
         const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
         outboxEvents.unshift({
             eventId: nextEvtId,
@@ -1516,37 +1589,43 @@ async function handleIncomingTransferEvent(data) {
     // 2. PostgreSQL Immutable Audit Trail (DEBIT sender; CREDIT only for internal PayPink accounts)
     const isExternal = Boolean(data.bank || (data.rail && data.rail !== 'INTERNAL') || (data.destinationAccountNumber && (data.destinationAccountNumber.includes('·') || /^(BDO|BPI|Metrobank|EXT)/i.test(data.destinationAccountNumber))));
 
-    postgresAudits.unshift({
-        id: 'AUD-PG-DB-' + cleanTxNum,
-        txId: cleanTxNum,
-        account: senderAcc,
-        op: 'DEBIT',
-        before: beforeBal,
-        after: afterBal,
-        amt: amt,
-        amount: amt,
-        time: dtStr
-    });
-
-    if (!isExternal) {
+    const dbId = 'AUD-PG-DB-' + cleanTxNum;
+    if (!postgresAudits.some(a => a.id === dbId || (String(a.txId) === cleanTxNum && a.op === 'DEBIT'))) {
         postgresAudits.unshift({
-            id: 'AUD-PG-CR-' + cleanTxNum,
+            id: dbId,
             txId: cleanTxNum,
-            account: destAcc,
-            op: 'CREDIT',
-            before: 0.00,
-            after: amt,
+            account: senderAcc,
+            op: 'DEBIT',
+            before: beforeBal,
+            after: afterBal,
             amt: amt,
             amount: amt,
             time: dtStr
         });
     }
 
+    if (!isExternal) {
+        const crId = 'AUD-PG-CR-' + cleanTxNum;
+        if (!postgresAudits.some(a => a.id === crId || (String(a.txId) === cleanTxNum && a.op === 'CREDIT'))) {
+            postgresAudits.unshift({
+                id: crId,
+                txId: cleanTxNum,
+                account: destAcc,
+                op: 'CREDIT',
+                before: 0.00,
+                after: amt,
+                amt: amt,
+                amount: amt,
+                time: dtStr
+            });
+        }
+    }
+
     loadPostgresAuditLogs();
     renderPostgresAuditTable();
 
     // D. Show real-time notification toast
-    showAdminToast(`Real-Time Transfer: ₱${formatCurrency(amt)} to ${destAcc} (Ref: ${txRef})`);
+    showAdminToast(`Real-Time Transfer: ₱${formatCurrency(amt)} to ${formatAccountNumber(destAcc)} (Ref: ${txRef})`);
 }
 
 async function syncBackendTransactions() {
@@ -1574,7 +1653,7 @@ async function syncBackendTransactions() {
                         recentTransactions.push({
                             id: log.transactionId,
                             ref: ref,
-                            accountNumber: 'ACC-PH-1001-8842',
+                            accountNumber: '001181233469',
                             type: 'TRANSFER (INSTAPAY)',
                             amount: 50.00,
                             currency: 'PHP',
@@ -1615,11 +1694,11 @@ async function syncBackendTransactions() {
                         if (!sourceAccObj && accountsData.length > 0) {
                             sourceAccObj = accountsData[0];
                         }
-                        const senderAcc = r.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : 'ACC-PH-1001-8842');
+                        const senderAcc = r.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : '001181233469');
                         const destAcc = `${r.bank || 'EXT'} · ${r.destinationAccountNumber}`;
                         const amt = parseFloat(r.amount || 0);
                         const dtStr = formatPhilippineDateTime(r.date);
-                        const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 734790.16;
+                        const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 683900.16;
                         const beforeBal = currBal + amt;
                         const afterBal = currBal;
 
@@ -1637,11 +1716,11 @@ async function syncBackendTransactions() {
                         oracleAuditLogs.unshift({
                             time: formatPhilippineTime(r.date),
                             action: 'EXTERNAL_SWITCH_COMMITTED',
-                            details: `External transfer ₱${formatCurrency(amt)} from ${senderAcc} to ${r.bank || 'Bank'} (${r.recipientName || 'External Customer'} - ${r.destinationAccountNumber}) settled via ${r.rail || 'INSTAPAY'}.`
+                            details: `External transfer ₱${formatCurrency(amt)} from ${formatAccountNumber(senderAcc)} to ${r.bank || 'Bank'} (${r.recipientName || 'External Customer'} - ${r.destinationAccountNumber}) settled via ${r.rail || 'INSTAPAY'}.`
                         });
 
                         // Transactional Outbox Event
-                        if (!outboxEvents.some(e => String(e.txId) === cleanTxNum)) {
+                        if (!outboxEvents.some(e => String(e.txId) === String(cleanTxNum))) {
                             const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
                             outboxEvents.unshift({
                                 eventId: nextEvtId,
@@ -1653,17 +1732,20 @@ async function syncBackendTransactions() {
                         }
 
                         // DEBIT from sender account for external interbank transfer
-                        postgresAudits.unshift({
-                            id: 'AUD-PG-DB-' + (r.id || cleanTxNum),
-                            txId: cleanTxNum,
-                            account: senderAcc,
-                            op: 'DEBIT',
-                            before: beforeBal,
-                            after: afterBal,
-                            amt: amt,
-                            amount: amt,
-                            time: dtStr
-                        });
+                        const dbAuditId = 'AUD-PG-DB-' + (r.id || cleanTxNum);
+                        if (!postgresAudits.some(a => a.id === dbAuditId || (String(a.txId) === String(cleanTxNum) && a.op === 'DEBIT'))) {
+                            postgresAudits.unshift({
+                                id: dbAuditId,
+                                txId: cleanTxNum,
+                                account: senderAcc,
+                                op: 'DEBIT',
+                                before: beforeBal,
+                                after: afterBal,
+                                amt: amt,
+                                amount: amt,
+                                time: dtStr
+                            });
+                        }
 
                         hasChanges = true;
                     }
@@ -1802,6 +1884,15 @@ function formatAccountType(type) {
     return (type || 'SAVINGS').replace('_', ' ');
 }
 
+function formatAccountNumber(number) {
+    if (!number) return '';
+    const s = String(number).trim();
+    if (/^\d{12}$/.test(s)) {
+        return s.replace(/^(\d{3})(\d)(\d{7})(\d)$/, '$1 $2 $3 $4');
+    }
+    return s;
+}
+
 function getAuthHeaders() {
     const headers = {};
     if (currentJwtToken) {
@@ -1813,7 +1904,7 @@ function getAuthHeaders() {
 function showReceiptModal(data) {
     document.getElementById('receipt-ref-no').textContent = data.referenceNo;
     document.getElementById('receipt-details').innerHTML = `
-        <div class="receipt-row"><span>Account Number:</span><strong>${data.accountNumber}</strong></div>
+        <div class="receipt-row"><span>Account Number:</span><strong>${formatAccountNumber(data.accountNumber)}</strong></div>
         <div class="receipt-row"><span>Operation:</span><strong>${data.operation}</strong></div>
         <div class="receipt-row"><span>Amount:</span><strong>₱${formatCurrency(data.amount)}</strong></div>
         <div class="receipt-row"><span>Previous Balance:</span><strong>₱${formatCurrency(data.beforeBalance)}</strong></div>
@@ -1856,4 +1947,5 @@ window.testScenario = testScenario;
 window.triggerScheduledReconciliation = triggerScheduledReconciliation;
 window.handleTransferSubmit = handleTransferSubmit;
 window.selectAccount = selectAccount;
+window.formatAccountNumber = formatAccountNumber;
 
