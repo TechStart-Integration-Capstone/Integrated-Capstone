@@ -2,6 +2,10 @@
 (() => {
     const pages = {
         dashboard: ['Overview', 'Banking operations, in view.', 'Manage the demo portfolio and follow every ledger movement.', 'M3 10l9-7 9 7v11H3z M9 21v-8h6v8'],
+        customers: ['Manage Users', 'Customers, Roles & Transaction Limits.', 'Manage users, assign roles, configure transfer limits, and freeze/unfreeze accounts.', 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75'],
+        transactions: ['Monitor Transactions', 'Real-Time Ledger Transaction Feed.', 'Monitor all live mutations, channel settlements, and authorization events.', 'M4 7h16m-4-4 4 4-4 4 M20 17H4m4-4-4 4 4 4'],
+        audit: ['View Audit Logs', 'Immutable Audit & Non-Repudiation.', 'Inspect synchronous Oracle XE audit logs and PostgreSQL double-entry audit streams.', 'M12 3l8 4v6c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6'],
+        reports: ['Generate Reports', 'Compliance & Reconciliation Reports.', 'Generate and export cross-database reconciliation, settlement, and regulatory audit reports.', 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z M9 9h1m-1 4h4'],
         concurrency: ['Concurrency', 'Confidence in every balance.', 'Explore how the ledger handles simultaneous debit requests.', 'M13 2L4 14h7l-1 8 10-13h-7z'],
         lifecycle: ['Event lifecycle', 'Follow the money movement.', 'Trace a mutation from request validation to the immutable audit trail.', 'M4 7h16m-4-4 4 4-4 4 M20 17H4m4-4-4 4 4 4'],
         mutation: ['Validation', 'Every request, checked.', 'Inspect validation rules, request payloads, and API responses.', 'M12 3l8 4v6c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6'],
@@ -44,20 +48,33 @@
     document.getElementById('tab-dashboard').prepend(banner);
     Object.entries(pages).forEach(([id, page]) => {
         const button = document.getElementById(`tab-btn-${id}`);
-        button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${page[3]}"/></svg><span>${page[0]}</span><i aria-hidden="true"></i>`;
-        button.setAttribute('aria-controls', `tab-${id}`);
+        if (button) {
+            button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${page[3]}"/></svg><span>${page[0]}</span><i aria-hidden="true"></i>`;
+            button.setAttribute('aria-controls', `tab-${id}`);
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                window.switchTab(id);
+            });
+        }
     });
     const originalSwitchTab = window.switchTab;
     window.switchTab = function (id) {
         if (!pages[id]) return;
-        originalSwitchTab(id);
-        document.getElementById('admin-current-page').textContent = pages[id][0];
-        document.getElementById('admin-page-title').textContent = pages[id][1];
-        document.getElementById('admin-page-description').textContent = pages[id][2];
+        if (typeof originalSwitchTab === 'function') {
+            originalSwitchTab(id);
+        }
+        const curPage = document.getElementById('admin-current-page');
+        const pageTitle = document.getElementById('admin-page-title');
+        const pageDesc = document.getElementById('admin-page-description');
+        if (curPage) curPage.textContent = pages[id][0];
+        if (pageTitle) pageTitle.textContent = pages[id][1];
+        if (pageDesc) pageDesc.textContent = pages[id][2];
         Object.keys(pages).forEach(key => {
             const button = document.getElementById(`tab-btn-${key}`);
-            if (key === id) button.setAttribute('aria-current', 'page');
-            else button.removeAttribute('aria-current');
+            if (button) {
+                if (key === id) button.setAttribute('aria-current', 'page');
+                else button.removeAttribute('aria-current');
+            }
         });
     };
     window.switchTab('dashboard');

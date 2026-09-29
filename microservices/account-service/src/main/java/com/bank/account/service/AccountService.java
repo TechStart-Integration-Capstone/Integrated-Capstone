@@ -48,6 +48,36 @@ public class AccountService {
         return dto;
     }
 
+    @Transactional(readOnly = true)
+    public List<CustomerDto> getAllCustomers() {
+        return customerRepository.findAll().stream().map(c -> {
+            CustomerDto dto = new CustomerDto(c.getCustomerId(), c.getUsername(),
+                    c.getFirstName(), c.getLastName(), c.getEmail(),
+                    c.getContactNo(), c.getStatus(), c.getCreatedDate());
+            List<AccountDto> accounts = accountRepository.findByCustomerId(c.getCustomerId())
+                    .stream().map(this::mapToDto).collect(Collectors.toList());
+            dto.setAccounts(accounts);
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public AccountDto updateAccountStatus(Long accountId, String status) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new RuntimeException("Account ID " + accountId + " not found."));
+        account.setStatus(status.toUpperCase());
+        return mapToDto(accountRepository.save(account));
+    }
+
+    @Transactional
+    public CustomerDto updateCustomerStatus(Long customerId, String status) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new RuntimeException("Customer ID " + customerId + " not found."));
+        customer.setStatus(status.toUpperCase());
+        customerRepository.save(customer);
+        return getCustomerProfile(customerId);
+    }
+
     @Transactional
     public AccountDto resetAccountBalance(Long accountId, BigDecimal targetBalance) {
         Account account = accountRepository.findById(accountId)

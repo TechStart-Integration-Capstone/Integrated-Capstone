@@ -10,7 +10,7 @@ services:
       - APP_USER=ledger_master
       - APP_USER_PASSWORD=MasterSecretPassword123
     ports:
-      - "1521:1521"
+      - "1522:1521"
     volumes:
       - oracle_data:/opt/oracle/oradata
       - ./../backend/src/main/resources/schema-oracle.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -129,6 +129,8 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    volumes:
+      - ./../microservices/api-gateway/target/api-gateway.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -150,6 +152,8 @@ services:
       - SPRING_DATASOURCE_USERNAME=ledger_master
       - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    volumes:
+      - ./../microservices/auth-service/target/auth-service.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -167,6 +171,8 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
       - SPRING_DATASOURCE_USERNAME=ledger_master
       - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+    volumes:
+      - ./../microservices/account-service/target/account-service.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -192,6 +198,8 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - IDEMPOTENCY_TTL_HOURS=24
+    volumes:
+      - ./../microservices/transaction-service/target/transaction-service.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -212,6 +220,8 @@ services:
       - SPRING_DATASOURCE_USERNAME=audit_user
       - SPRING_DATASOURCE_PASSWORD=AuditSecretPassword123
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    volumes:
+      - ./../microservices/notification-service/target/notification-service.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -232,6 +242,8 @@ services:
       - SPRING_DATASOURCE_USERNAME=audit_user
       - SPRING_DATASOURCE_PASSWORD=AuditSecretPassword123
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    volumes:
+      - ./../microservices/audit-service/target/audit-service.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -257,6 +269,8 @@ services:
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    volumes:
+      - ./../microservices/reconciliation-service/target/reconciliation-service.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -281,6 +295,8 @@ services:
       - OUTBOX_RETRY_INTERVAL_MS=30000
       - OUTBOX_BATCH_SIZE=50
       - OUTBOX_MAX_RETRIES=5
+    volumes:
+      - ./../microservices/outbox-publisher/target/outbox-publisher.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -297,6 +313,8 @@ services:
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - ANALYTICS_SERVICE_HOST=analytics-service
+    volumes:
+      - ./../microservices/analytics-service/target/analytics-service.jar:/app/app.jar
     networks:
       - ledger-net
 
@@ -395,6 +413,9 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
     networks:
       - ledger-net
 

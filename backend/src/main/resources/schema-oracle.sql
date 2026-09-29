@@ -108,13 +108,13 @@ CREATE INDEX idx_audit_cust_id ON AUDIT_LOG(customer_id, timestamp);
 
 -- Seed Initial Retail Banking Customer & Accounts (Philippine Context)
 INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
-VALUES ('lviernes', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Levi', 'Viernes', 'levi.viernes@paypink.ph', '+63 917 888 1234', 'ACTIVE');
+VALUES ('lviernes', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Levi', 'Viernes', 'levi.viernes@paypink.ph', '+63 917 888 1234', 'ACTIVE');
 
 INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
-VALUES ('arosales', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Aly', 'Rosales', 'aly.rosales@paypink.ph', '+63 918 555 6789', 'ACTIVE');
+VALUES ('arosales', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Aly', 'Rosales', 'aly.rosales@paypink.ph', '+63 918 555 6789', 'ACTIVE');
 
 INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
-VALUES ('glim', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'Gill', 'Lim', 'gill.lim@paypink.ph', '+63 920 333 4567', 'ACTIVE');
+VALUES ('glim', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Gill', 'Lim', 'gill.lim@paypink.ph', '+63 920 333 4567', 'ACTIVE');
 
 -- Accounts with initial balances (DECIMAL 18,4)
 INSERT INTO ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)

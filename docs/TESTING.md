@@ -99,11 +99,22 @@ Invoke-RestMethod -Uri "http://localhost:8080/api/v1/stress/double-spend-test" `
   -Headers @{ Authorization = "Bearer $token" } | Format-List
 ```
 
-### Runbook 3: Apache JMeter GUI & CLI Execution
-Open the pre-configured JMeter test plan in Apache JMeter:
+### Runbook 3: Apache JMeter Execution (via Docker or Native Runner)
 
-- **Test Plan Location**: `docker/jmeter/balance_mutation_stress.jmx`
-- **CLI Command**:
+You **do not need to install JMeter locally on Windows** because we have containerized it:
+
+- **Option A: Containerized JMeter (Recommended)**:
+  ```powershell
+  .\docker\jmeter\run_stress_test.ps1 -Threads 30 -Loops 10
+  ```
+  *This automatically builds the Docker JMeter runner and outputs the HTML dashboard report to `docker/jmeter/report/index.html`.*
+
+- **Option B: High-Performance Native Concurrency Runner**:
+  ```powershell
+  .\docker\jmeter\run_load_test.ps1 -TotalRequests 200 -Concurrency 30
+  ```
+
+- **Option C: Direct Local JMeter (If installed on Host)**:
   ```powershell
   jmeter -n -t .\docker\jmeter\balance_mutation_stress.jmx -l .\docker\jmeter\results.jtl -e -o .\docker\jmeter\report
   ```

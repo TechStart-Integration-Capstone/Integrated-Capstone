@@ -33,6 +33,25 @@ public class AccountController {
         return ResponseEntity.ok(accountService.getCustomerProfile(customerId));
     }
 
+    @GetMapping("/customers")
+    public ResponseEntity<List<CustomerDto>> getAllCustomers() {
+        return ResponseEntity.ok(accountService.getAllCustomers());
+    }
+
+    @PostMapping("/{accountId}/status")
+    public ResponseEntity<AccountDto> updateAccountStatus(@PathVariable Long accountId,
+                                                          @RequestBody Map<String, String> payload) {
+        String status = payload.getOrDefault("status", "ACTIVE");
+        return ResponseEntity.ok(accountService.updateAccountStatus(accountId, status));
+    }
+
+    @PostMapping("/customer/{customerId}/status")
+    public ResponseEntity<CustomerDto> updateCustomerStatus(@PathVariable Long customerId,
+                                                            @RequestBody Map<String, String> payload) {
+        String status = payload.getOrDefault("status", "ACTIVE");
+        return ResponseEntity.ok(accountService.updateCustomerStatus(customerId, status));
+    }
+
     @PostMapping("/{accountId}/reset-balance")
     public ResponseEntity<AccountDto> resetBalance(@PathVariable Long accountId,
                                                    @RequestBody Map<String, BigDecimal> payload) {
