@@ -1446,6 +1446,35 @@ async function loadInitialAuditLogs() {
  */
 const processedTransferEventIds = new Set();
 
+/**
+ * Helper to resolve an account across all bank customers and current session accounts
+ */
+function findAccountInSystem(accId, accNum) {
+    if (!accId && !accNum) return null;
+    const cleanTargetNum = accNum ? String(accNum).replace(/\s+/g, '') : null;
+    for (const c of (allCustomersData || [])) {
+        for (const a of (c.accounts || [])) {
+            if (accId && String(a.accountId) === String(accId)) return a;
+            if (cleanTargetNum) {
+                const cleanA = String(a.accountNumber || '').replace(/\s+/g, '');
+                if (cleanA === cleanTargetNum || (cleanTargetNum.length >= 4 && cleanA.endsWith(cleanTargetNum.slice(-4)))) {
+                    return a;
+                }
+            }
+        }
+    }
+    for (const a of (accountsData || [])) {
+        if (accId && String(a.accountId) === String(accId)) return a;
+        if (cleanTargetNum) {
+            const cleanA = String(a.accountNumber || '').replace(/\s+/g, '');
+            if (cleanA === cleanTargetNum || (cleanTargetNum.length >= 4 && cleanA.endsWith(cleanTargetNum.slice(-4)))) {
+                return a;
+            }
+        }
+    }
+    return null;
+}
+
 function setupRealtimeSync() {
     // 1. BroadcastChannel API for zero-latency same-origin cross-tab messages
     if (window.BroadcastChannel) {
@@ -1495,21 +1524,13 @@ async function handleIncomingTransferEvent(data) {
     const normalizedStatus = (data.status === 'SUCCESS' || data.status === 'COMPLETED') ? 'COMPLETED' : (data.status || 'COMPLETED');
     const existing = recentTransactions.find(t => t.ref === txRef);
 
-    // Accurately resolve sending account from accountsData or data payload
-    let sourceAccObj = null;
-    if (data.sourceAccountId) {
-        sourceAccObj = accountsData.find(a => String(a.accountId) === String(data.sourceAccountId));
-    }
-    if (!sourceAccObj && data.sourceAccountNumber) {
-        const rawClean = String(data.sourceAccountNumber).replace(/\s+/g, '');
-        sourceAccObj = accountsData.find(a => a.accountNumber === rawClean || a.accountNumber === data.sourceAccountNumber || a.accountNumber.endsWith(rawClean.slice(-4)));
-    }
-    if (!sourceAccObj && accountsData.length > 0) {
-        sourceAccObj = accountsData[0];
-    }
+    // Accurately resolve sending and destination accounts across the entire customer directory
+    const amt = parseFloat(data.amount || 0);
+    const sourceAccObj = findAccountInSystem(data.sourceAccountId, data.sourceAccountNumber);
+    const destAccObj = findAccountInSystem(null, data.destinationAccountNumber);
+
     const senderAcc = data.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : '001181233469');
     const destAcc = data.destinationAccountNumber || data.recipientName || '001274500022';
-    const amt = parseFloat(data.amount || 0);
     const cleanTxNum = String(txRef || data.transactionId || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
 
     if (existing) {
@@ -1541,24 +1562,44 @@ async function handleIncomingTransferEvent(data) {
     const dtStr = formatPhilippineDateTime(new Date());
 
     // Dynamic before/after balance computation matching exact debited account
-    const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 683900.16;
-    const beforeBal = currBal + amt;
-    const afterBal = currBal;
+    let beforeBal, afterBal;
+    if (data.sourceBeforeBalance !== undefined && data.sourceAfterBalance !== undefined && data.sourceBeforeBalance !== null && data.sourceAfterBalance !== null) {
+        beforeBal = parseFloat(data.sourceBeforeBalance);
+        afterBal = parseFloat(data.sourceAfterBalance);
+    } else if (data.beforeBalance !== undefined && data.afterBalance !== undefined && data.beforeBalance !== null && data.afterBalance !== null) {
+        beforeBal = parseFloat(data.beforeBalance);
+        afterBal = parseFloat(data.afterBalance);
+    } else if (sourceAccObj) {
+        afterBal = parseFloat(sourceAccObj.currentBalance || 0);
+        beforeBal = afterBal + amt;
+    } else {
+        afterBal = 0.00;
+        beforeBal = amt;
+    }
+
+    let destBeforeBal, destAfterBal;
+    if (data.destBeforeBalance !== undefined && data.destAfterBalance !== undefined && data.destBeforeBalance !== null && data.destAfterBalance !== null) {
+        destBeforeBal = parseFloat(data.destBeforeBalance);
+        destAfterBal = parseFloat(data.destAfterBalance);
+    } else if (destAccObj) {
+        destAfterBal = parseFloat(destAccObj.currentBalance || 0);
+        destBeforeBal = Math.max(0, destAfterBal - amt);
+    } else {
+        destBeforeBal = 0.00;
+        destAfterBal = amt;
+    }
 
     // Immediately reflect balance deduction/addition in memory
-    if (sourceAccObj) {
-        sourceAccObj.currentBalance = Math.max(0, afterBal);
-    }
     const rawCleanSender = String(senderAcc).replace(/\s+/g, '');
     const rawCleanDest = String(destAcc).replace(/\s+/g, '');
     allCustomersData.forEach(c => {
         (c.accounts || []).forEach(a => {
             const rawCleanA = String(a.accountNumber).replace(/\s+/g, '');
-            if (rawCleanA === rawCleanSender || String(a.accountId) === String(data.sourceAccountId)) {
-                a.currentBalance = Math.max(0, parseFloat(a.currentBalance || 0) - amt);
+            if (rawCleanA === rawCleanSender || (data.sourceAccountId && String(a.accountId) === String(data.sourceAccountId))) {
+                a.currentBalance = afterBal;
             }
             if (rawCleanA === rawCleanDest) {
-                a.currentBalance = parseFloat(a.currentBalance || 0) + amt;
+                a.currentBalance = destAfterBal;
             }
         });
     });
@@ -1612,8 +1653,8 @@ async function handleIncomingTransferEvent(data) {
                 txId: cleanTxNum,
                 account: destAcc,
                 op: 'CREDIT',
-                before: 0.00,
-                after: amt,
+                before: destBeforeBal,
+                after: destAfterBal,
                 amt: amt,
                 amount: amt,
                 time: dtStr
@@ -1687,18 +1728,12 @@ async function syncBackendTransactions() {
                             hasChanges = true;
                         }
                     } else {
-                        let sourceAccObj = null;
-                        if (r.sourceAccountId) {
-                            sourceAccObj = accountsData.find(a => String(a.accountId) === String(r.sourceAccountId));
-                        }
-                        if (!sourceAccObj && accountsData.length > 0) {
-                            sourceAccObj = accountsData[0];
-                        }
+                        const sourceAccObj = findAccountInSystem(r.sourceAccountId, r.sourceAccountNumber);
                         const senderAcc = r.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : '001181233469');
                         const destAcc = `${r.bank || 'EXT'} · ${r.destinationAccountNumber}`;
                         const amt = parseFloat(r.amount || 0);
                         const dtStr = formatPhilippineDateTime(r.date);
-                        const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 683900.16;
+                        const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 0.00;
                         const beforeBal = currBal + amt;
                         const afterBal = currBal;
 

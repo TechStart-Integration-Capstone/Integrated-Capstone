@@ -93,12 +93,16 @@ async function sendExternalTransfer() {
     // Broadcast external transfer event for instant real-time admin sync
     try {
       const sourceAcc = (state.profile?.accounts || []).find(a => String(a.accountId) === String(request.sourceAccountId));
+      const afterBal = sourceAcc ? parseFloat(sourceAcc.currentBalance || 0) : null;
+      const beforeBal = afterBal !== null ? (afterBal + parseFloat(request.amount)) : null;
       const syncEvent = {
         type: 'CUSTOMER_TRANSFER',
         rail: receipt.rail || request.rail || 'INSTAPAY',
         reference: receipt.reference,
         sourceAccountId: request.sourceAccountId,
         sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : '001181233469',
+        sourceBeforeBalance: beforeBal,
+        sourceAfterBalance: afterBal,
         destinationAccountNumber: `${receipt.bank || 'External'} · ${receipt.destinationAccountNumber}`,
         amount: receipt.amount,
         currency: receipt.currency || 'PHP',
