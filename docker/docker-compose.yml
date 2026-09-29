@@ -237,8 +237,8 @@ services:
       - SEMAPHORE_SENDER_NAME=${SEMAPHORE_SENDER_NAME:-PayPink}
       - SPRING_MAIL_HOST=${SPRING_MAIL_HOST:-smtp.gmail.com}
       - SPRING_MAIL_PORT=${SPRING_MAIL_PORT:-587}
-      - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME:-}
-      - SPRING_MAIL_PASSWORD=${SPRING_MAIL_PASSWORD:-}
+      - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME:-jonlevi.jlv@gmail.com}
+      - SPRING_MAIL_PASSWORD=${SPRING_MAIL_PASSWORD:-ffaeorqwvupclnrc}
     volumes:
       - ./../microservices/notification-service/target/notification-service.jar:/app/app.jar
     networks:
