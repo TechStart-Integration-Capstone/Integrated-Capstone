@@ -22,6 +22,37 @@ async function loadExternalHistory() {
       const current = rows.find(r => r.reference === state.transfer.receipt.reference);
       if (current && current.status !== state.transfer.receipt.status) { state.transfer.receipt = current; renderPage(); await refresh(); }
     }
+
+    // Broadcast status updates across tabs so admin monitor immediately receives batch completion
+    if (Array.isArray(rows)) {
+      rows.forEach(r => {
+        const normStatus = (r.status === 'SUCCESS' || r.status === 'COMPLETED') ? 'COMPLETED' : r.status;
+        const sourceAcc = (state.profile?.accounts || []).find(a => String(a.accountId) === String(r.sourceAccountId));
+        const syncEvent = {
+          type: 'CUSTOMER_TRANSFER',
+          rail: r.rail || 'PESONET',
+          reference: r.reference,
+          sourceAccountId: r.sourceAccountId,
+          sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : '001181233469',
+          destinationAccountNumber: `${r.bank || 'External'} · ${r.destinationAccountNumber}`,
+          amount: r.amount,
+          currency: r.currency || 'PHP',
+          status: normStatus,
+          date: r.date || new Date().toISOString(),
+          recipientName: r.recipientName || 'External Customer',
+          bank: r.bank || 'External Bank',
+          timestamp: Date.now()
+        };
+        try {
+          if (window.BroadcastChannel) {
+            new BroadcastChannel('paypink_ledger_channel').postMessage(syncEvent);
+          }
+          localStorage.setItem('paypink_last_transfer_event', JSON.stringify(syncEvent));
+          localStorage.setItem('paypink_sync_timestamp', String(Date.now()));
+        } catch (e) {}
+      });
+    }
+
     const history = document.querySelector('#external-history');
     if (history) history.innerHTML = externalHistoryMarkup(rows);
   } catch (error) {

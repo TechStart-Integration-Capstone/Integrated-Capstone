@@ -465,6 +465,7 @@ async function updateLocalStateAfterMutation(data) {
         date: new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString(),
         status: 'SUCCESS'
     });
+    saveTransactionsToStorage();
     renderTransactionFeed();
 
     // Add to Oracle synchronous security log
@@ -503,8 +504,11 @@ async function updateLocalStateAfterMutation(data) {
             after: data.afterBalance,
             time: formatPhilippineDateTime(new Date())
         });
+        saveAuditsToStorage();
         loadPostgresAuditLogs();
         renderPostgresAuditTable();
+    } else {
+        saveAuditsToStorage();
     }
 }
 
@@ -1417,7 +1421,33 @@ function loadPostgresAuditLogs() {
     `}).join('');
 }
 
+function saveTransactionsToStorage() {
+    try {
+        localStorage.setItem('paypink_admin_recent_transactions', JSON.stringify(recentTransactions));
+    } catch (e) {}
+}
+
+function saveAuditsToStorage() {
+    try {
+        localStorage.setItem('paypink_admin_oracle_audits', JSON.stringify(oracleAuditLogs));
+        localStorage.setItem('paypink_admin_postgres_audits', JSON.stringify(postgresAudits));
+        localStorage.setItem('paypink_admin_outbox_events', JSON.stringify(outboxEvents));
+    } catch (e) {}
+}
+
 async function loadRecentTransactions() {
+    const saved = localStorage.getItem('paypink_admin_recent_transactions');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                recentTransactions = parsed;
+                renderTransactionFeed();
+                return;
+            }
+        } catch (e) {}
+    }
+
     if (recentTransactions.length === 0) {
         recentTransactions = [
             { id: 103, ref: 'TX-PH-2026-0929-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), status: 'SUCCESS' },
@@ -1425,11 +1455,35 @@ async function loadRecentTransactions() {
             { id: 101, ref: 'TX-PH-INIT-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 86400000)), status: 'SUCCESS' },
             { id: 100, ref: 'TX-PH-INIT-000', accountNumber: '001981233461', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 172800000)), status: 'SUCCESS' }
         ];
+        saveTransactionsToStorage();
     }
     renderTransactionFeed();
 }
 
 async function loadInitialAuditLogs() {
+    const savedOracle = localStorage.getItem('paypink_admin_oracle_audits');
+    const savedPg = localStorage.getItem('paypink_admin_postgres_audits');
+    const savedOutbox = localStorage.getItem('paypink_admin_outbox_events');
+
+    if (savedOracle) {
+        try {
+            const parsed = JSON.parse(savedOracle);
+            if (Array.isArray(parsed) && parsed.length > 0) oracleAuditLogs = parsed;
+        } catch (e) {}
+    }
+    if (savedPg) {
+        try {
+            const parsed = JSON.parse(savedPg);
+            if (Array.isArray(parsed) && parsed.length > 0) postgresAudits = parsed;
+        } catch (e) {}
+    }
+    if (savedOutbox) {
+        try {
+            const parsed = JSON.parse(savedOutbox);
+            if (Array.isArray(parsed) && parsed.length > 0) outboxEvents = parsed;
+        } catch (e) {}
+    }
+
     if (oracleAuditLogs.length === 0) {
         oracleAuditLogs = [
             { time: formatPhilippineTime(new Date(Date.now() - 1800000)), action: 'SECURITY_AUDIT', details: 'Stateless JWT verified at API Gateway. User [lviernes] authorized with ROLE_CUSTOMER.' },
@@ -1437,8 +1491,10 @@ async function loadInitialAuditLogs() {
             { time: formatPhilippineTime(new Date(Date.now() - 5400000)), action: 'TRANSACTION_SETTLED', details: 'PESONet settlement batch commit on Oracle XE. 0% Overdraft verified.' },
             { time: formatPhilippineTime(new Date(Date.now() - 7200000)), action: 'ACID_MUTATION', details: 'Committed local ACID mutation of ₱15,000.0000 on ACC-PH-1001-8842.' }
         ];
+        saveAuditsToStorage();
     }
     renderOracleAuditLogs();
+    loadPostgresAuditLogs();
 }
 
 /**
@@ -1504,8 +1560,12 @@ function setupRealtimeSync() {
 async function handleIncomingTransferEvent(data) {
     if (!data) return;
 
+    const txRef = data.reference || `TX-PH-${Date.now()}`;
+    const normalizedStatus = (data.status === 'SUCCESS' || data.status === 'COMPLETED') ? 'COMPLETED' : (data.status || 'COMPLETED');
+    const existing = recentTransactions.find(t => t.ref === txRef);
+
     // Deduplicate event if received simultaneously from BroadcastChannel and localStorage
-    const eventKey = `${data.reference || data.transactionId || ''}-${data.amount || ''}-${data.sourceAccountId || data.sourceAccountNumber || ''}-${data.destinationAccountNumber || ''}`;
+    const eventKey = `${txRef}-${normalizedStatus}`;
     if (processedTransferEventIds.has(eventKey)) {
         return;
     }
@@ -1519,11 +1579,6 @@ async function handleIncomingTransferEvent(data) {
     await loadCustomerAndAccounts();
     await loadAllCustomers(true);
 
-    // B. Prepend transaction to transaction feeds if not already recorded, or update status if changed
-    const txRef = data.reference || `TX-PH-${Date.now()}`;
-    const normalizedStatus = (data.status === 'SUCCESS' || data.status === 'COMPLETED') ? 'COMPLETED' : (data.status || 'COMPLETED');
-    const existing = recentTransactions.find(t => t.ref === txRef);
-
     // Accurately resolve sending and destination accounts across the entire customer directory
     const amt = parseFloat(data.amount || 0);
     const sourceAccObj = findAccountInSystem(data.sourceAccountId, data.sourceAccountNumber);
@@ -1536,26 +1591,30 @@ async function handleIncomingTransferEvent(data) {
     if (existing) {
         if (existing.status !== normalizedStatus) {
             existing.status = normalizedStatus;
+            saveTransactionsToStorage();
             renderTransactionFeed();
             renderTransactionMonitor();
+            showAdminToast(`Transaction Updated: ${txRef} is now ${normalizedStatus}`);
         }
-    } else {
-        const formattedDate = formatPhilippineDateTime(data.date || new Date());
-        const railLabel = data.rail ? `TRANSFER (${data.rail})` : (data.type === 'LEDGER_MUTATION' ? 'MUTATION (ACID)' : 'TRANSFER (INSTAPAY)');
-
-        recentTransactions.unshift({
-            id: Date.now(),
-            ref: txRef,
-            accountNumber: senderAcc,
-            type: railLabel,
-            amount: amt,
-            currency: data.currency || 'PHP',
-            date: formattedDate,
-            status: normalizedStatus
-        });
-        renderTransactionFeed();
-        renderTransactionMonitor();
+        return;
     }
+
+    const formattedDate = formatPhilippineDateTime(data.date || new Date());
+    const railLabel = data.rail ? `TRANSFER (${data.rail})` : (data.type === 'LEDGER_MUTATION' ? 'MUTATION (ACID)' : 'TRANSFER (INSTAPAY)');
+
+    recentTransactions.unshift({
+        id: Date.now(),
+        ref: txRef,
+        accountNumber: senderAcc,
+        type: railLabel,
+        amount: amt,
+        currency: data.currency || 'PHP',
+        date: formattedDate,
+        status: normalizedStatus
+    });
+    saveTransactionsToStorage();
+    renderTransactionFeed();
+    renderTransactionMonitor();
 
     // C. Dual-stream audit log recording: Oracle XE synchronous + PostgreSQL double-entry (DEBIT & CREDIT) + Oracle XE Outbox Event
     const timeStr = formatPhilippineTime(new Date());
@@ -1662,6 +1721,7 @@ async function handleIncomingTransferEvent(data) {
         }
     }
 
+    saveAuditsToStorage();
     loadPostgresAuditLogs();
     renderPostgresAuditTable();
 
@@ -1790,6 +1850,8 @@ async function syncBackendTransactions() {
     } catch (e) {}
 
     if (hasChanges) {
+        saveTransactionsToStorage();
+        saveAuditsToStorage();
         renderTransactionFeed();
         renderTransactionMonitor();
         renderOracleAuditLogs();
