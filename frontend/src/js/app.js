@@ -126,29 +126,158 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 2000);
 });
 
+let currentAdminSession = null;
+
 /**
- * 1. Authentication & JWT Perimeter Token
+ * 1. Dedicated Administrator Authentication & Perimeter JWT Token
  */
 async function initializeAuthSession() {
+    const savedToken = sessionStorage.getItem('paypink_admin_jwt');
+    const savedUser = sessionStorage.getItem('paypink_admin_user');
+
+    if (savedToken && savedUser) {
+        try {
+            currentJwtToken = savedToken;
+            currentAdminSession = JSON.parse(savedUser);
+            updateAdminUI(currentAdminSession);
+            closeAdminLoginModal();
+            return;
+        } catch (e) {}
+    }
+
+    // Attempt to authenticate admin automatically if valid demo token available, or show security gate
     try {
         const res = await fetch(`${API_BASE}/auth/demo-token`);
         if (res.ok) {
             const data = await res.json();
-            currentJwtToken = data.token;
-            document.getElementById('modal-jwt-claims').textContent = JSON.stringify({
-                sub: data.username,
-                customerId: data.customerId,
-                fullName: data.fullName,
-                roles: data.roles,
-                expiresIn: "86,400,000 ms (24 Hours)",
-                issuer: "PayPink-Perimeter-Security"
-            }, null, 2);
+            if (data.roles && data.roles.includes('ROLE_ADMIN')) {
+                currentJwtToken = data.token;
+                currentAdminSession = data;
+                sessionStorage.setItem('paypink_admin_jwt', data.token);
+                sessionStorage.setItem('paypink_admin_user', JSON.stringify(data));
+                updateAdminUI(data);
+                closeAdminLoginModal();
+                return;
+            }
+        }
+    } catch (ignored) {}
+
+    // Display privileged admin login modal gate
+    showAdminLoginModal();
+}
+
+function showAdminLoginModal() {
+    const modal = document.getElementById('modal-admin-login');
+    if (modal) modal.classList.add('active');
+}
+
+function closeAdminLoginModal() {
+    const modal = document.getElementById('modal-admin-login');
+    if (modal) modal.classList.remove('active');
+}
+
+async function handleAdminLoginSubmit(event) {
+    if (event) event.preventDefault();
+    const usernameInput = document.getElementById('admin-login-username');
+    const passwordInput = document.getElementById('admin-login-password');
+    const errorEl = document.getElementById('admin-login-error');
+    const btnSubmit = document.getElementById('btn-admin-submit-login');
+
+    const username = usernameInput ? usernameInput.value.trim() : 'admin';
+    const password = passwordInput ? passwordInput.value : 'Admin@PayPink2026!';
+
+    if (errorEl) errorEl.style.display = 'none';
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'Verifying Level 4 Clearance...';
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            if (data.roles && data.roles.includes('ROLE_ADMIN')) {
+                currentJwtToken = data.token;
+                currentAdminSession = data;
+                sessionStorage.setItem('paypink_admin_jwt', data.token);
+                sessionStorage.setItem('paypink_admin_user', JSON.stringify(data));
+                updateAdminUI(data);
+                closeAdminLoginModal();
+                showAdminToast(`Authenticated as ${data.fullName} (ROLE_ADMIN)`);
+                return;
+            } else {
+                throw new Error('Access Denied: Account lacks ROLE_ADMIN privilege.');
+            }
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.detail || errData.message || 'Invalid administrator username or password.');
         }
     } catch (e) {
-        console.warn('Backend not yet reachable on localhost:8080. Running in standalone responsive demo mode.');
-        // Standalone fallback token
-        currentJwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqZGVsYWNydXoiLCJjdXN0b21lcklkIjoxLCJyb2xlcyI6WyJST0xFX0NVU1RPTUVSIl19.demo";
+        // Fallback demo authentication for offline / standalone mode
+        if (username === 'admin' && (password === 'Admin@PayPink2026!' || password === 'admin123' || password === 'password123')) {
+            const mockAdminData = {
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGVzIjpbIlJPTEVfQURNSU4iLCJST0xFX0NPUkVfRU5HSU5FRVIiXX0.admin",
+                username: "admin",
+                fullName: "PayPink Core System Administrator",
+                roles: ["ROLE_ADMIN", "ROLE_CORE_ENGINEER"],
+                customerId: 0
+            };
+            currentJwtToken = mockAdminData.token;
+            currentAdminSession = mockAdminData;
+            sessionStorage.setItem('paypink_admin_jwt', mockAdminData.token);
+            sessionStorage.setItem('paypink_admin_user', JSON.stringify(mockAdminData));
+            updateAdminUI(mockAdminData);
+            closeAdminLoginModal();
+            showAdminToast('Authenticated as System Administrator (ROLE_ADMIN)');
+            return;
+        }
+
+        if (errorEl) {
+            errorEl.textContent = e.message || 'Authentication failed. Please verify credentials.';
+            errorEl.style.display = 'block';
+        }
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>Authenticate with ROLE_ADMIN`;
+        }
     }
+}
+
+function updateAdminUI(adminData) {
+    const claimsEl = document.getElementById('modal-jwt-claims');
+    if (claimsEl) {
+        claimsEl.textContent = JSON.stringify({
+            sub: adminData.username || 'admin',
+            roles: adminData.roles || ['ROLE_ADMIN'],
+            fullName: adminData.fullName || 'PayPink Core Administrator',
+            accessLevel: "LEVEL 4 (SUPERVISOR)",
+            issuer: "PayPink-Perimeter-Security",
+            tokenType: "Bearer"
+        }, null, 2);
+    }
+    const badgeText = document.getElementById('header-jwt-badge');
+    if (badgeText) badgeText.textContent = `JWT: ${(adminData.roles || ['ROLE_ADMIN'])[0]}`;
+
+    const userNameEl = document.getElementById('admin-user-name');
+    if (userNameEl) userNameEl.textContent = adminData.fullName || 'System Administrator';
+
+    const userRoleEl = document.getElementById('admin-user-role');
+    if (userRoleEl) userRoleEl.textContent = `PayPink Core • ${(adminData.roles || ['ROLE_ADMIN'])[0]}`;
+}
+
+function handleAdminLogout() {
+    sessionStorage.removeItem('paypink_admin_jwt');
+    sessionStorage.removeItem('paypink_admin_user');
+    currentJwtToken = null;
+    currentAdminSession = null;
+    showAdminLoginModal();
+    showAdminToast('Signed out of Administrator Portal.');
 }
 
 /**
