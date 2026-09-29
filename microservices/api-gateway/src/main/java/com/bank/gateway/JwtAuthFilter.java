@@ -48,7 +48,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         boolean isPublic = PUBLIC_PATHS.stream().anyMatch(path::startsWith);
         if (isPublic) {
             String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-            if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
+            if (authHeader != null && authHeader.startsWith("Bearer ") && authHeader.length() > 7) {
                 try {
                     String token = authHeader.substring(7);
                     Claims claims = Jwts.parserBuilder()
@@ -63,13 +63,13 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                             )
                             .build();
                     return chain.filter(mutated);
-                } catch (Exception ignored) {}
+                } catch (JwtException | IllegalArgumentException ignored) {}
             }
             return chain.filter(exchange);
         }
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ") || authHeader.length() <= 7) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }

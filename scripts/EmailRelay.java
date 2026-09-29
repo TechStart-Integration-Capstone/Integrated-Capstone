@@ -1,10 +1,8 @@
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.*;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.regex.Matcher;
@@ -17,15 +15,15 @@ public class EmailRelay {
 
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", 8099), 0);
-        server.createContext("/send", new HttpHandler() {
-            @Override
-            public void handle(HttpExchange exchange) throws IOException {
-                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                    exchange.sendResponseHeaders(405, -1);
-                    return;
-                }
-                
-                String body = new String(exchange.getRequestBody().readAllBytes(), "UTF-8");
+        server.createContext("/send", exchange -> {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+            
+            try (InputStream is = exchange.getRequestBody();
+                 OutputStream os = exchange.getResponseBody()) {
+                String body = new String(is.readAllBytes(), "UTF-8");
                 String to = extractJsonField(body, "to", GMAIL_USER);
                 String subject = extractJsonField(body, "subject", "PayPink Banking: Transaction Alert");
                 String text = extractJsonField(body, "body", "");
@@ -36,16 +34,16 @@ public class EmailRelay {
                     byte[] response = "{\"status\":\"DELIVERED\"}".getBytes("UTF-8");
                     exchange.getResponseHeaders().set("Content-Type", "application/json");
                     exchange.sendResponseHeaders(200, response.length);
-                    exchange.getResponseBody().write(response);
+                    os.write(response);
                 } catch (Exception ex) {
                     System.err.println("[EMAIL_RELAY_ERROR] " + ex.getMessage());
                     byte[] response = ("{\"error\":\"" + ex.getMessage() + "\"}").getBytes("UTF-8");
                     exchange.getResponseHeaders().set("Content-Type", "application/json");
                     exchange.sendResponseHeaders(500, response.length);
-                    exchange.getResponseBody().write(response);
-                } finally {
-                    exchange.close();
+                    os.write(response);
                 }
+            } finally {
+                exchange.close();
             }
         });
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
@@ -56,8 +54,11 @@ public class EmailRelay {
     private static void sendEmail(String to, String subject, String body) throws Exception {
         TrustManager[] trustAll = new TrustManager[] {
             new X509TrustManager() {
-                public X509Certificate[] getAcceptedIssuers() { return null; }
+                @Override
+                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                @Override
                 public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                @Override
                 public void checkServerTrusted(X509Certificate[] certs, String authType) {}
             }
         };

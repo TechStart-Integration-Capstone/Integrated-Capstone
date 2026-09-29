@@ -155,8 +155,11 @@ public class NotificationDispatcher {
     private void sendLiveEmailViaSslSmtp(String to, String subject, String body) throws Exception {
         javax.net.ssl.TrustManager[] trustAll = new javax.net.ssl.TrustManager[] {
             new javax.net.ssl.X509TrustManager() {
-                public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
+                @Override
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[0]; }
+                @Override
                 public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                @Override
                 public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
             }
         };
