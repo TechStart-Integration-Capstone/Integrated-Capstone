@@ -41,6 +41,6 @@ class EmailRelayHandler(http.server.BaseHTTPRequestHandler):
         pass
 
 if __name__ == '__main__':
-    server = http.server.HTTPServer(('0.0.0.0', 8095), EmailRelayHandler)
-    print("PayPink Email Relay listening on 0.0.0.0:8095...")
+    server = http.server.HTTPServer(('0.0.0.0', 8099), EmailRelayHandler)
+    print("PayPink Email Relay listening on 0.0.0.0:8099...")
     server.serve_forever()

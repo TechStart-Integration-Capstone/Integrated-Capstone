@@ -70,24 +70,45 @@ public class NotificationDispatcher {
         return allDelivered;
     }
 
+    private Map<String, Object> fetchCustomerDetails(Long customerId) {
+        if (customerId == null) return null;
+        for (String url : new String[]{
+                "http://account-service:8082/api/v1/accounts/customer/" + customerId,
+                "http://localhost:8082/api/v1/accounts/customer/" + customerId,
+                "http://host.docker.internal:8082/api/v1/accounts/customer/" + customerId
+        }) {
+            try {
+                ResponseEntity<Map> res = restTemplate.getForEntity(url, Map.class);
+                if (res.getStatusCode().is2xxSuccessful() && res.getBody() != null) {
+                    return (Map<String, Object>) res.getBody();
+                }
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
     // ── Email channel ─────────────────────────────────────────────────────────
 
     private boolean dispatchEmail(Long customerId, String message,
                                    String msgId, String refNo, String deliveredAt) {
         try {
-            // Target recipient: Levi Viernes -> jonlevi.jlv@gmail.com
-            String recipient = (customerId != null && customerId == 1L) 
-                    ? "jonlevi.jlv@gmail.com" 
-                    : "customer" + customerId + "@paypink.ph";
+            Map<String, Object> cust = fetchCustomerDetails(customerId);
+            String custEmail = (cust != null && cust.get("email") != null) ? cust.get("email").toString().trim() : null;
+            String custName = (cust != null && cust.get("fullName") != null) ? cust.get("fullName").toString().trim()
+                    : ((cust != null && cust.get("firstName") != null) ? cust.get("firstName").toString().trim() : "Valued Customer");
+
+            // Dynamically route to customer's registered email, with sensible defaults
+            String recipient = (custEmail != null && !custEmail.isBlank() && custEmail.contains("@"))
+                    ? custEmail
+                    : ((customerId != null && customerId == 1L) ? "jonlevi.jlv@gmail.com" : "customer" + customerId + "@paypink.ph");
 
             // If real mail credentials are configured, send live email
             if (mailUsername != null && !mailUsername.isBlank()) {
                 String emailSubject = "PayPink Banking: Transaction Alert [" + refNo + "]";
-                String emailBody = "Dear Levi Viernes,\n\n" +
+                String emailBody = "Dear " + custName + ",\n\n" +
                         message + "\n\n" +
                         "• Transaction Reference: " + refNo + "\n" +
-                        "• Timestamp: " + deliveredAt + " (PHT)\n" +
-                        "• Primary Account: 001181233469\n\n" +
+                        "• Timestamp: " + deliveredAt + " (PHT)\n\n" +
                         "Thank you for banking with PayPink.\n" +
                         "PayPink Core Banking Engine (BSP Regulated)\n";
                 
@@ -101,7 +122,7 @@ public class NotificationDispatcher {
                         HttpEntity<Map<String, String>> request = new HttpEntity<>(payload, headers);
                         ResponseEntity<String> res = restTemplate.postForEntity(relayUrl, request, String.class);
                         if (res.getStatusCode().is2xxSuccessful()) {
-                            log.info("[EMAIL-LIVE] Dispatched real email to {} via Relay ({})  ref={}  msgId={}", recipient, relayUrl, refNo, msgId);
+                            log.info("[EMAIL-LIVE] Dispatched real email to {} ({}) via Relay ({})  ref={}  msgId={}", custName, recipient, relayUrl, refNo, msgId);
                             sent = true;
                             break;
                         }
@@ -114,7 +135,7 @@ public class NotificationDispatcher {
                 if (!sent) {
                     try {
                         sendLiveEmailViaSslSmtp(recipient, emailSubject, emailBody);
-                        log.info("[EMAIL-LIVE] Dispatched real email to {} via Gmail SSL  ref={}  msgId={}", recipient, refNo, msgId);
+                        log.info("[EMAIL-LIVE] Dispatched real email to {} ({}) via Gmail SSL  ref={}  msgId={}", custName, recipient, refNo, msgId);
                     } catch (Exception mailEx) {
                         log.error("[EMAIL-LIVE-FAIL] Could not send live email to {}: {}", recipient, mailEx.getMessage());
                     }
@@ -192,14 +213,20 @@ public class NotificationDispatcher {
     private boolean dispatchSms(Long customerId, String message,
                                  String msgId, String refNo, String deliveredAt) {
         try {
-            // Target recipient: Levi Viernes -> 09227584285 / +63 922 758 4285
-            String rawNumber = (customerId != null && customerId == 1L)
-                    ? "09227584285"
-                    : "0917" + String.format("%03d", customerId % 1000) + String.format("%04d", (customerId * 7919L) % 10000);
+            Map<String, Object> cust = fetchCustomerDetails(customerId);
+            String custPhone = (cust != null && cust.get("contactNo") != null) ? cust.get("contactNo").toString().trim() : null;
 
-            String formattedNumber = (customerId != null && customerId == 1L)
-                    ? "+63 922 758 4285"
-                    : "+63 917 " + String.format("%03d", customerId % 1000) + " " + String.format("%04d", (customerId * 7919L) % 10000);
+            String rawNumber = (custPhone != null && !custPhone.isBlank())
+                    ? custPhone.replaceAll("[^0-9]", "")
+                    : ((customerId != null && customerId == 1L)
+                            ? "09227584285"
+                            : "0917" + String.format("%03d", customerId % 1000) + String.format("%04d", (customerId * 7919L) % 10000));
+
+            String formattedNumber = (custPhone != null && !custPhone.isBlank())
+                    ? custPhone
+                    : ((customerId != null && customerId == 1L)
+                            ? "+63 922 758 4285"
+                            : "+63 917 " + String.format("%03d", customerId % 1000) + " " + String.format("%04d", (customerId * 7919L) % 10000));
 
             String smsBody = truncate(message + " Ref:" + refNo, 160);
 
