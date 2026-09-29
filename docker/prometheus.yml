@@ -37,3 +37,17 @@ scrape_configs:
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['reconciliation-service:8086']
+
+  - job_name: 'outbox-publisher'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['outbox-publisher:8087']
+
+  - job_name: 'analytics-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['analytics-service:8088']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']

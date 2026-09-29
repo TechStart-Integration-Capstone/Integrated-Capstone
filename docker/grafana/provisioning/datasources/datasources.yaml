@@ -15,6 +15,25 @@ datasources:
     access: proxy
     url: http://loki:3100
     editable: true
+    jsonData:
+      derivedFields:
+        - name: "Jaeger Trace"
+          matcherRegex: '"traceid"?: *"([a-fA-F0-9]+)"'
+          url: 'http://localhost:16686/trace/$${__value.raw}'
+          datasourceUid: "jaeger"
+        - name: "Tempo Trace"
+          matcherRegex: '"traceid"?: *"([a-fA-F0-9]+)"'
+          url: '$${__value.raw}'
+          datasourceUid: "tempo"
+
+  - name: Jaeger
+    uid: jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: true
+
+
 
   - name: Tempo
     uid: tempo

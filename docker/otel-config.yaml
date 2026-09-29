@@ -30,6 +30,12 @@ exporters:
     tls:
       insecure: true
 
+  # Traces -> Jaeger (via OTLP gRPC)
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
   # Debug logging (stdout) - useful during dev
   logging:
     verbosity: basic
@@ -39,7 +45,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/tempo, logging]
+      exporters: [otlp/jaeger, otlp/tempo, logging]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]

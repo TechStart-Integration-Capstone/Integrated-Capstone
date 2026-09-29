@@ -23,7 +23,7 @@
   "tags": ["paypink", "microservices", "observability", "tracing", "tempo", "loki", "prometheus"],
   "timezone": "browser",
   "schemaVersion": 38,
-  "version": 8,
+  "version": 9,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -77,13 +77,13 @@
       {
         "current": {
           "selected": true,
-          "text": "c03a5a964cbbbf9c2a630e1b89e58b",
-          "value": "c03a5a964cbbbf9c2a630e1b89e58b"
+          "text": "81eeef4c573979a01332803550c2347",
+          "value": "81eeef4c573979a01332803550c2347"
         },
         "name": "trace_id",
-        "label": "Trace ID",
+        "label": "Trace ID (Tempo)",
         "type": "textbox",
-        "query": "c03a5a964cbbbf9c2a630e1b89e58b"
+        "query": "81eeef4c573979a01332803550c2347"
       }
     ]
   },
@@ -135,16 +135,22 @@
     },
     {
       "id": 2,
-      "title": "Global P95 Response Latency",
+      "title": "Global Average & Max Response Latency",
       "type": "stat",
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[1m])) by (le)) * 1000",
-          "legendFormat": "P95 Latency",
+          "expr": "(sum(rate(http_server_requests_seconds_sum{job=~\"$service\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))) * 1000",
+          "legendFormat": "Avg Latency",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max(http_server_requests_seconds_max{job=~\"$service\"}) * 1000",
+          "legendFormat": "Max Latency",
+          "refId": "B"
         }
       ],
       "options": {
@@ -268,15 +274,15 @@
     },
     {
       "id": 6,
-      "title": "P95 Latency Breakdown per Service (ms)",
+      "title": "Response Latency Breakdown per Service (ms)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=~\"$service\"}[1m])) by (le, job)) * 1000",
-          "legendFormat": "{{job}} (P95)",
+          "expr": "(sum(rate(http_server_requests_seconds_sum{job=~\"$service\"}[1m])) by (job) / sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m])) by (job)) * 1000",
+          "legendFormat": "{{job}} (Avg)",
           "refId": "A"
         }
       ],
@@ -295,47 +301,42 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
       "id": 102,
-      "title": "3. Distributed Tracing & End-to-End Traceability (Tempo)",
+      "title": "3. Distributed Tracing & End-to-End Traceability (Jaeger)",
       "type": "row"
     },
     {
       "id": 7,
-      "title": "Tempo Distributed Trace Waterfall Graph",
-      "type": "traces",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 15 },
-      "datasource": { "type": "tempo", "uid": "tempo" },
-      "targets": [
-        {
-          "datasource": { "type": "tempo", "uid": "tempo" },
-          "queryType": "traceId",
-          "query": "$trace_id",
-          "refId": "A"
-        }
-      ]
+      "title": "Jaeger Distributed Tracing Hub & Live Trace Waterfall Portal",
+      "type": "text",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 15 },
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"padding: 16px; background: rgba(30, 34, 42, 0.6); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); font-family: sans-serif;\">\n  <div style=\"display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;\">\n    <div>\n      <h3 style=\"margin: 0; color: #4FC3F7;\">🔍 Jaeger Distributed Tracing Portal</h3>\n      <p style=\"margin: 4px 0 0 0; color: #B0BEC5; font-size: 14px;\">Inspect microservice dependency calls, span latencies, and end-to-end execution waterfalls.</p>\n    </div>\n    <div>\n      <a href=\"http://localhost:16686\" target=\"_blank\" style=\"background: #1976D2; color: #FFF; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 14px; box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);\">🚀 Open Jaeger Web UI</a>\n    </div>\n  </div>\n  <hr style=\"border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 12px 0;\" />\n  <div style=\"display: flex; gap: 24px; color: #ECEFF1; font-size: 13px;\">\n    <div style=\"flex: 1;\">\n      <strong style=\"color: #81C784;\">1. Direct Trace Lookup</strong>\n      <p style=\"margin: 4px 0 0 0;\">Click any log line in <em>Section 4 (Logs)</em> below that contains a <code>traceid</code>. Click the blue <strong>Jaeger Trace</strong> badge to open its waterfall timeline.</p>\n    </div>\n    <div style=\"flex: 1;\">\n      <strong style=\"color: #FFB74D;\">2. Search Traces by Microservice</strong>\n      <p style=\"margin: 4px 0 0 0;\">Open Jaeger UI to search by service (<code>api-gateway</code>, <code>transaction-service</code>, <code>auth-service</code>) or operation duration.</p>\n    </div>\n    <div style=\"flex: 1;\">\n      <strong style=\"color: #BA68C8;\">3. Active Trace Target</strong>\n      <p style=\"margin: 4px 0 0 0;\">Current Trace ID variable: <code style=\"background: #263238; padding: 2px 6px; border-radius: 4px; color: #4FC3F7;\">$trace_id</code></p>\n    </div>\n  </div>\n</div>"
+      }
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "id": 103,
-      "title": "4. Unified Application Log Stream & Outbox / Kafka Tables",
+      "title": "4. Critical Application Logs & Transaction Audit Streams",
       "type": "row"
     },
     {
-      "id": 8,
-      "title": "Centralized Application Log Stream (Filtered by Service & Level)",
+      "id": 10,
+      "title": "Transaction Service Audit Logs (transaction-service)",
       "type": "logs",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 26 },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 24 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "{job=~\"$service\"} | json | line_format \"{{.body}}\" |~ \"(?i)$log_level\"",
+          "expr": "{job=\"transaction-service\"} | json | line_format \"{{.body}}\" |~ \"(?i)$log_level\"",
           "legendFormat": "",
           "refId": "A"
         }
       ],
       "options": {
-        "showLabels": true,
+        "showLabels": false,
         "wrapLogMessage": true,
         "enableLogDetails": true,
         "showTime": true,
@@ -343,10 +344,10 @@
       }
     },
     {
-      "id": 9,
-      "title": "Transactional Outbox Publisher Event Log (Table)",
+      "id": 12,
+      "title": "Transactional Outbox Publisher Event Stream (Table)",
       "type": "table",
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 37 },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 33 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
@@ -376,7 +377,7 @@
             "indexByName": {},
             "renameByName": {
               "Line": "Raw Line",
-              "body": "Outbox Event Payload / Message",
+              "body": "Outbox Event Payload",
               "job": "Microservice",
               "severity": "Severity",
               "traceid": "Trace ID"
@@ -386,10 +387,10 @@
       ]
     },
     {
-      "id": 10,
-      "title": "Kafka Event Stream & Consumer Audit Log (Table)",
+      "id": 13,
+      "title": "Kafka Event Bus & Consumer Audit Stream (Table)",
       "type": "table",
-      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 37 },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 33 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
@@ -419,7 +420,7 @@
             "indexByName": {},
             "renameByName": {
               "Line": "Raw Line",
-              "body": "Kafka Event Payload / Message",
+              "body": "Kafka Message Payload",
               "job": "Microservice",
               "severity": "Severity",
               "traceid": "Trace ID"
@@ -429,17 +430,101 @@
       ]
     },
     {
+      "id": 14,
+      "title": "Reconciliation & Analytics Service Logs",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 42 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=~\"reconciliation-service|analytics-service\"} | json | line_format \"{{.body}}\" |~ \"(?i)$log_level\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "showTime": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 50 },
       "id": 104,
-      "title": "5. Event Pipeline & Database Telemetry",
+      "title": "5. In-Memory Matrix (Redis) & Datastore Telemetry",
       "type": "row"
     },
     {
-      "id": 11,
+      "id": 17,
+      "title": "Redis Idempotency Matrix Status & Active Clients",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 51 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "redis_up",
+          "legendFormat": "Redis Status",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "redis_connected_clients",
+          "legendFormat": "Connected Clients",
+          "refId": "B"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Redis Memory Usage (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 51 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "redis_memory_used_bytes / 1024 / 1024",
+          "legendFormat": "Used Memory (MB)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15
+          },
+          "unit": "megabytes"
+        }
+      }
+    },
+    {
+      "id": 15,
       "title": "Database Connection Pool Active Connections (HikariCP)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 51 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
@@ -458,10 +543,10 @@
       }
     },
     {
-      "id": 12,
+      "id": 16,
       "title": "JVM Memory Heap Usage (MB)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 51 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {

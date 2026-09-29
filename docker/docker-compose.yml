@@ -58,6 +58,19 @@ services:
     networks:
       - ledger-net
 
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ledger-net
+
   # ==========================================
   # Layer 5: Event Streaming (Apache Kafka)
   # ==========================================
@@ -390,6 +403,17 @@ services:
     networks:
       - ledger-net
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: jaeger-tracing
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    networks:
+      - ledger-net
+
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: prometheus-telemetry
@@ -409,6 +433,7 @@ services:
       - prometheus
       - loki
       - tempo
+      - jaeger
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin

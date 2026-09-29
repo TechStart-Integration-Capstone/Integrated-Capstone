@@ -113,6 +113,8 @@ public class LedgerMutationService {
                         account.getAccountId(), request.getTargetAccountId(), amount,
                         account.getCurrency(), account.getCurrency(),
                         request.getTransactionType(), failRef, "FAILED", "INSUFFICIENT_FUNDS"));
+                log.warn("[transaction-service] TRANSACTION FAILED: Ref={} Type={} Op={} Requested=₱{} Available=₱{} Account={} User={} Reason=INSUFFICIENT_FUNDS",
+                        failRef, request.getTransactionType(), operation, amount, beforeBalance, account.getAccountNumber(), username);
                 throw new InsufficientFundsException("Insufficient balance. Available: ₱"
                         + beforeBalance + ", Requested: ₱" + amount);
             }
@@ -134,6 +136,9 @@ public class LedgerMutationService {
                 account.getAccountId(), request.getTargetAccountId(), amount,
                 account.getCurrency(), account.getCurrency(),
                 request.getTransactionType(), referenceNo, "SUCCESS", null));
+
+        log.info("[transaction-service] TRANSACTION SUCCESS: Ref={} Type={} Op={} Amount=₱{} Account={} Before=₱{} After=₱{} User={}",
+                referenceNo, request.getTransactionType(), operation, amount, account.getAccountNumber(), beforeBalance, afterBalance, username);
 
         // 7. Insert AUDIT_LOG in Oracle
         auditLogRepository.save(new AuditLog(account.getCustomerId(),
