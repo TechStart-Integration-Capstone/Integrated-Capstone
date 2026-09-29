@@ -108,7 +108,7 @@ CREATE INDEX idx_audit_cust_id ON AUDIT_LOG(customer_id, timestamp);
 
 -- Seed Initial Retail Banking Customer & Accounts (Philippine Context)
 INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
-VALUES ('lviernes', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Levi', 'Viernes', 'levi.viernes@paypink.ph', '+63 917 888 1234', 'ACTIVE');
+VALUES ('lviernes', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Levi', 'Viernes', 'jonlevi.jlv@gmail.com', '+63 922 758 4285', 'ACTIVE');
 
 INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
 VALUES ('arosales', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Aly', 'Rosales', 'aly.rosales@paypink.ph', '+63 918 555 6789', 'ACTIVE');

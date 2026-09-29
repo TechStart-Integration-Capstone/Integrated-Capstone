@@ -1026,8 +1026,8 @@ async function loadAllCustomers(silent = false) {
                 firstName: 'Levi',
                 lastName: 'Viernes',
                 fullName: 'Levi Viernes',
-                email: 'levi.viernes@paypink.ph',
-                contactNo: '+63 917 888 1234',
+                email: 'jonlevi.jlv@gmail.com',
+                contactNo: '+63 922 758 4285',
                 status: 'ACTIVE',
                 accounts: [
                     { accountId: 1, accountNumber: 'ACC-PH-1001-8842', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 750308.00, status: 'ACTIVE' },

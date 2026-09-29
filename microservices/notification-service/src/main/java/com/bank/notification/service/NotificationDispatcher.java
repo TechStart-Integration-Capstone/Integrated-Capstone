@@ -70,8 +70,10 @@ public class NotificationDispatcher {
     private boolean dispatchEmail(Long customerId, String message,
                                    String msgId, String refNo, String deliveredAt) {
         try {
-            // Derive a deterministic mock email from customerId
-            String recipient = "customer" + customerId + "@paypink.ph";
+            // Derive email: Levi Viernes (customerId=1) -> jonlevi.jlv@gmail.com
+            String recipient = (customerId != null && customerId == 1L) 
+                    ? "jonlevi.jlv@gmail.com" 
+                    : "customer" + customerId + "@paypink.ph";
 
             log.info("[EMAIL]  msgId={}  to={}  subject=\"PayPink Transaction Alert\"  " +
                      "body=\"{}\"  ref={}  status=DELIVERED  at={}",
@@ -89,9 +91,11 @@ public class NotificationDispatcher {
     private boolean dispatchSms(Long customerId, String message,
                                  String msgId, String refNo, String deliveredAt) {
         try {
-            // Derive a deterministic mock Philippine mobile number from customerId
-            String recipient = "+63 917 " + String.format("%03d", customerId % 1000) + " "
-                    + String.format("%04d", (customerId * 7919L) % 10000);
+            // Derive mobile number: Levi Viernes (customerId=1) -> +63 922 758 4285 (09227584285)
+            String recipient = (customerId != null && customerId == 1L)
+                    ? "+63 922 758 4285"
+                    : "+63 917 " + String.format("%03d", customerId % 1000) + " "
+                            + String.format("%04d", (customerId * 7919L) % 10000);
 
             // SMS body is truncated to 160 chars (single SMS segment)
             String smsBody = truncate(message, 160);
