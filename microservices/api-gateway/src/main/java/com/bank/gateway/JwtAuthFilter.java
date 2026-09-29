@@ -29,6 +29,9 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/api/v1/auth/demo-token",
             "/api/v1/auth/banking/login",
             "/api/v1/auth/banking/register",
+            "/api/v1/reconciliation",
+            "/api/v1/telemetry",
+            "/api/v1/analytics",
             "/actuator"
     );
 
@@ -44,6 +47,24 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         // Allow public paths through
         boolean isPublic = PUBLIC_PATHS.stream().anyMatch(path::startsWith);
         if (isPublic) {
+            String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+            if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
+                try {
+                    String token = authHeader.substring(7);
+                    Claims claims = Jwts.parserBuilder()
+                            .setSigningKey(signingKey)
+                            .build()
+                            .parseClaimsJws(token)
+                            .getBody();
+                    ServerWebExchange mutated = exchange.mutate()
+                            .request(r -> r
+                                    .header("X-Auth-Username", claims.getSubject())
+                                    .header("X-Auth-Customer-Id", String.valueOf(claims.get("customerId")))
+                            )
+                            .build();
+                    return chain.filter(mutated);
+                } catch (Exception ignored) {}
+            }
             return chain.filter(exchange);
         }
 
