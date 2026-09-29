@@ -1,10 +1,11 @@
 # Stage 1: Build
-FROM eclipse-temurin:17-jdk-alpine AS build
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -q 2>/dev/null || true
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests -q
+RUN mvn clean package -DskipTests -q \
+    -Dhttps.protocols=TLSv1.2 \
+    -Djdk.tls.client.protocols=TLSv1.2
 
 # Stage 2: Run
 FROM eclipse-temurin:17-jre-alpine

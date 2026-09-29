@@ -225,8 +225,8 @@ Default demo credentials (auto-seeded on first startup by `DataInitializer`):
 
 | Username | Password |
 |---|---|
-| `alice` | `password123` |
-| `bob` | `password123` |
+| `lviernes` | `password123` |
+| `arosales`| `password123` |
 
 To get a JWT token via the API:
 
