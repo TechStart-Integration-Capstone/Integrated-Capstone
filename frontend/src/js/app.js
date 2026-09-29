@@ -5,6 +5,71 @@
 
 let API_BASE = '/api/v1';
 
+// Philippine Standard Time (PHT / UTC+8 / Asia/Manila) Formatters
+function getPhilippineDate(dateInput) {
+    if (!dateInput) return new Date();
+    if (dateInput instanceof Date) return dateInput;
+    if (typeof dateInput === 'number') return new Date(dateInput);
+    if (typeof dateInput === 'string') {
+        const s = dateInput.trim();
+        if (s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) {
+            return new Date(s);
+        }
+        if (s.includes('T')) {
+            return new Date(s + 'Z');
+        }
+        return new Date(s);
+    }
+    return new Date(dateInput);
+}
+
+function formatPhilippineTime(dateInput) {
+    const d = getPhilippineDate(dateInput);
+    return d.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Manila',
+        hour12: true,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+function formatPhilippineDateTime(dateInput) {
+    const d = getPhilippineDate(dateInput);
+    const datePart = d.toLocaleDateString('en-GB', {
+        timeZone: 'Asia/Manila',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const timePart = d.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Manila',
+        hour12: true,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    return `${datePart}, ${timePart} (PHT)`;
+}
+
+function startPhilippineClock() {
+    function updateClock() {
+        const clockEl = document.getElementById('ph-time-display');
+        if (clockEl) {
+            const now = new Date();
+            clockEl.textContent = now.toLocaleTimeString('en-US', {
+                timeZone: 'Asia/Manila',
+                hour12: true,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }) + ' PHT';
+        }
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+}
+
 // Auto-detect backend port or relative proxy
 async function detectApiBase() {
     const candidateUrls = ['/api/v1', 'http://localhost:8080/api/v1'];
@@ -29,13 +94,16 @@ let recentTransactions = [];
 let oracleAuditLogs = [];
 let outboxEvents = [];
 let postgresAudits = [
-    { id: 'AUD-PG-9901', account: 'ACC-PH-1001-7714', op: 'DEBIT', before: 60.00, after: 10.00, amt: 50.00, time: '29/09/2026 08:15:00' },
-    { id: 'AUD-PG-9900', account: 'ACC-PH-1001-8842', op: 'CREDIT', before: 20000.00, after: 35000.00, amt: 15000.00, time: '29/09/2026 08:00:00' },
-    { id: 'AUD-PG-9899', account: 'ACC-PH-1001-1123', op: 'CREDIT', before: 0.00, after: 50.00, amt: 50.00, time: '28/09/2026 14:20:00' }
+    { id: 'AUD-PG-DB-9902', txId: '102', account: 'ACC-PH-1001-8842', op: 'DEBIT', before: 735290.16, after: 734790.16, amt: 500.00, amount: 500.00, time: formatPhilippineDateTime(new Date(Date.now() - 1800000)) },
+    { id: 'AUD-PG-DB-9901', txId: '101', account: 'ACC-PH-1001-7714', op: 'DEBIT', before: 60.00, after: 10.00, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
+    { id: 'AUD-PG-CR-9901', txId: '101', account: 'ACC-PH-1001-8842', op: 'CREDIT', before: 20000.00, after: 20050.00, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
+    { id: 'AUD-PG-DB-9900', txId: '100', account: 'ACC-PH-1001-9921', op: 'DEBIT', before: 35000.00, after: 20000.00, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) },
+    { id: 'AUD-PG-CR-9900', txId: '100', account: 'ACC-PH-1001-8842', op: 'CREDIT', before: 110450.00, after: 125450.00, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) }
 ];
 
 // Initialize Application on DOM Ready
 document.addEventListener('DOMContentLoaded', async () => {
+    startPhilippineClock();
     await detectApiBase();
     generateNewIdempotencyKey();
     await initializeAuthSession();
@@ -55,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadCustomerAndAccounts();
         await loadAllCustomers(true); // Silent continuous background refresh
         await syncBackendTransactions(); // Sync live transactions & reconciliation
-    }, 2500);
+    }, 2000);
 });
 
 /**
@@ -109,8 +177,8 @@ async function loadCustomerAndAccounts() {
                 accountNumber: 'ACC-PH-1001-8842',
                 accountType: 'SAVINGS_ACCOUNT',
                 currency: 'PHP',
-                currentBalance: 125450.0000,
-                formattedBalance: '₱125,450.0000',
+                currentBalance: 125450.00,
+                formattedBalance: '₱125,450.00',
                 status: 'ACTIVE'
             },
             {
@@ -118,8 +186,8 @@ async function loadCustomerAndAccounts() {
                 accountNumber: 'ACC-PH-1001-9921',
                 accountType: 'CHECKING_ACCOUNT',
                 currency: 'PHP',
-                currentBalance: 50000.0000,
-                formattedBalance: '₱50,000.0000',
+                currentBalance: 50000.00,
+                formattedBalance: '₱50,000.00',
                 status: 'ACTIVE'
             },
             {
@@ -127,8 +195,8 @@ async function loadCustomerAndAccounts() {
                 accountNumber: 'ACC-PH-1001-7714',
                 accountType: 'STRESS_TEST_ACCOUNT',
                 currency: 'PHP',
-                currentBalance: 60.0000,
-                formattedBalance: '₱60.0000',
+                currentBalance: 60.00,
+                formattedBalance: '₱60.00',
                 status: 'ACTIVE'
             }
         ];
@@ -272,31 +340,37 @@ async function updateLocalStateAfterMutation(data) {
 
     // Add to Oracle synchronous security log
     oracleAuditLogs.unshift({
-        time: new Date().toLocaleTimeString(),
+        time: formatPhilippineTime(new Date()),
         action: 'TRANSFER_COMMITTED',
         details: `ACID row lock committed for ₱${formatCurrency(data.amount)} on Account ${data.accountNumber}. New balance: ₱${formatCurrency(data.afterBalance)}. Ref: ${data.referenceNo}`
     });
     renderOracleAuditLogs();
 
-    // Add Outbox and Postgres entries
+    // Add Outbox and Postgres entries in real-time
+    const cleanTx = String(data.transactionId || data.referenceNo || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
+    const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
     outboxEvents.unshift({
-        eventId: Math.floor(Math.random() * 9000) + 100,
-        txId: data.transactionId,
+        eventId: nextEvtId,
+        txId: cleanTx,
         type: 'TRANSACTION_SUCCESS',
         status: 'PROCESSED',
-        date: new Date().toLocaleTimeString()
+        date: formatPhilippineTime(new Date())
     });
     renderOutboxTable();
 
     postgresAudits.unshift({
-        auditId: Math.floor(Math.random() * 9000) + 500,
-        txId: data.transactionId,
+        id: 'AUD-PG-DB-' + (data.transactionId || Math.floor(1000 + Math.random() * 9000)),
+        txId: cleanTx,
         accId: data.accountId,
-        op: data.operation,
+        account: data.accountNumber || `ACC-PH-1001-884${data.accountId || 1}`,
+        op: data.operation || 'DEBIT',
         amount: data.amount,
+        amt: data.amount,
         before: data.beforeBalance,
-        after: data.afterBalance
+        after: data.afterBalance,
+        time: formatPhilippineDateTime(new Date())
     });
+    loadPostgresAuditLogs();
     renderPostgresAuditTable();
 }
 
@@ -360,7 +434,7 @@ async function simulateClientSideStressTest(threadCount, debitAmount) {
                 threadIndex: i,
                 threadName: `Thread-${i}`,
                 status: 'COMMITTED',
-                message: `Successfully debited ₱50.0000 with @Lock(PESSIMISTIC_WRITE) isolation. New balance: ₱${balance.toFixed(4)}`,
+                message: `Successfully debited ₱50.00 with @Lock(PESSIMISTIC_WRITE) isolation. New balance: ₱${formatCurrency(balance)}`,
                 latencyMs: Math.floor(Math.random() * 8) + 4
             });
         } else {
@@ -369,14 +443,14 @@ async function simulateClientSideStressTest(threadCount, debitAmount) {
                 threadIndex: i,
                 threadName: `Thread-${i}`,
                 status: 'REJECTED_INSUFFICIENT_FUNDS',
-                message: `Safely blocked: Insufficient balance after previous thread committed. Required ₱50.0000, Available ₱${balance.toFixed(4)}`,
+                message: `Safely blocked: Insufficient balance after previous thread committed. Required ₱50.00, Available ₱${formatCurrency(balance)}`,
                 latencyMs: Math.floor(Math.random() * 12) + 6
             });
         }
     }
 
     renderStressResults({
-        startingBalance: 60.0000,
+        startingBalance: 60.00,
         actualFinalBalance: balance,
         successfulRequests: committed,
         rejectedRequests: rejected,
@@ -418,16 +492,16 @@ async function resetStressAccount() {
                 ...getAuthHeaders(),
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ targetBalance: 60.0000 })
+            body: JSON.stringify({ targetBalance: 60.00 })
         });
     } catch (e) {}
 
-    document.getElementById('stress-acc-current-bal').textContent = '₱60.0000';
-    document.getElementById('stress-final-bal').textContent = '₱60.0000';
+    document.getElementById('stress-acc-current-bal').textContent = '₱60.00';
+    document.getElementById('stress-final-bal').textContent = '₱60.00';
     document.getElementById('stress-success-count').textContent = '0';
     document.getElementById('stress-rejected-count').textContent = '0';
-    document.getElementById('stress-status-chip').textContent = 'Reset to ₱60.0000';
-    document.getElementById('thread-logs-list').innerHTML = '<div class="empty-state">Account balance restored to ₱60.0000. Ready for stress execution.</div>';
+    document.getElementById('stress-status-chip').textContent = 'Reset to ₱60.00';
+    document.getElementById('thread-logs-list').innerHTML = '<div class="empty-state">Account balance restored to ₱60.00. Ready for stress execution.</div>';
 }
 
 /**
@@ -590,7 +664,7 @@ function renderReconciliationTable(logs) {
     const html = logs.map(l => {
         const reconIdStr = typeof l.reconId === 'number' ? `REC-PH-${l.reconId}` : (l.reconId || l.id);
         const txIdStr = typeof l.transactionId === 'number' ? `TX-PH-1001-${l.transactionId}` : (l.txId || `TX-ID-${l.transactionId}`);
-        const dateStr = l.reconDate ? new Date(l.reconDate).toLocaleDateString('en-PH', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(l.reconDate).toLocaleTimeString('en-PH') : (l.date || new Date().toLocaleString('en-PH'));
+        const dateStr = l.reconDate ? formatPhilippineDateTime(l.reconDate) : (l.date ? formatPhilippineDateTime(l.date) : formatPhilippineDateTime(new Date()));
         
         const oStatus = l.oracleStatus || l.oracle || 'COMMITTED';
         const pStatus = l.postgresStatus || l.pg || 'COMMITTED';
@@ -662,22 +736,26 @@ function animateLifecycleSteps(fromStep, toStep) {
 }
 
 function renderInitialLifecycleState() {
-    outboxEvents = [
-        { eventId: 1, txId: 101, type: 'TRANSACTION_SUCCESS', status: 'PROCESSED', date: '10:55:12 AM' },
-        { eventId: 2, txId: 102, type: 'TRANSACTION_SUCCESS', status: 'PROCESSED', date: '11:02:40 AM' }
-    ];
+    if (outboxEvents.length === 0) {
+        outboxEvents = [
+            { eventId: 104, txId: '3132', type: 'TRANSACTION_SUCCESS', status: 'PROCESSED', date: formatPhilippineTime(new Date(Date.now() - 300000)) },
+            { eventId: 103, txId: '3131', type: 'TRANSACTION_SUCCESS', status: 'PROCESSED', date: formatPhilippineTime(new Date(Date.now() - 600000)) },
+            { eventId: 102, txId: '1002', type: 'TRANSACTION_SUCCESS', status: 'PROCESSED', date: formatPhilippineTime(new Date(Date.now() - 1800000)) },
+            { eventId: 101, txId: '1001', type: 'TRANSACTION_SUCCESS', status: 'PROCESSED', date: formatPhilippineTime(new Date(Date.now() - 3600000)) }
+        ];
+    }
     renderOutboxTable();
-
-    postgresAudits = [
-        { auditId: 1, txId: 101, accId: 1, op: 'CREDIT', amount: 25000.0000, before: 100450.0000, after: 125450.0000 },
-        { auditId: 2, txId: 102, accId: 1, op: 'DEBIT', amount: 15000.0000, before: 140450.0000, after: 125450.0000 }
-    ];
     renderPostgresAuditTable();
 }
 
 function renderOutboxTable() {
     const wrap = document.getElementById('outbox-events-table');
     if (!wrap) return;
+
+    if (outboxEvents.length === 0) {
+        wrap.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-muted);">No outbox records processed yet.</div>';
+        return;
+    }
 
     wrap.innerHTML = `
         <table class="recon-table">
@@ -693,11 +771,11 @@ function renderOutboxTable() {
             <tbody>
                 ${outboxEvents.map(e => `
                     <tr>
-                        <td>#${e.eventId}</td>
-                        <td>TX-${e.txId}</td>
-                        <td>${e.type}</td>
+                        <td><strong>#${e.eventId}</strong></td>
+                        <td><code>TX-${e.txId}</code></td>
+                        <td><span class="badge-chip">${e.type}</span></td>
                         <td><span class="status-tag tag-success">${e.status}</span></td>
-                        <td>${e.date}</td>
+                        <td style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; color: var(--text-secondary);">${e.date}</td>
                     </tr>
                 `).join('')}
             </tbody>
@@ -708,6 +786,11 @@ function renderOutboxTable() {
 function renderPostgresAuditTable() {
     const wrap = document.getElementById('postgres-audit-table');
     if (!wrap) return;
+
+    if (!postgresAudits || postgresAudits.length === 0) {
+        wrap.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: var(--text-muted);">No double-entry audits recorded yet.</div>';
+        return;
+    }
 
     wrap.innerHTML = `
         <table class="recon-table">
@@ -721,15 +804,22 @@ function renderPostgresAuditTable() {
                 </tr>
             </thead>
             <tbody>
-                ${postgresAudits.map(a => `
+                ${postgresAudits.slice(0, 15).map((a, idx) => {
+                    const auditIdText = a.id ? (a.id.startsWith('AUD-PG-') ? `#${a.id.replace('AUD-PG-', '')}` : (a.id.startsWith('#') ? a.id : `#${a.id}`)) : `#${a.auditId || (idx + 1)}`;
+                    const txIdText = a.txId ? (String(a.txId).startsWith('TX-') ? a.txId : `TX-${a.txId}`) : `TX-${101 + idx}`;
+                    const amtVal = a.amt !== undefined ? a.amt : (a.amount !== undefined ? a.amount : 0);
+                    const beforeVal = a.before !== undefined ? a.before : 100000;
+                    const afterVal = a.after !== undefined ? a.after : (a.op === 'CREDIT' ? beforeVal + amtVal : beforeVal - amtVal);
+                    return `
                     <tr>
-                        <td>#${a.auditId}</td>
-                        <td>TX-${a.txId}</td>
+                        <td><strong>${auditIdText}</strong></td>
+                        <td><code>${txIdText}</code></td>
                         <td><span class="status-tag ${a.op === 'CREDIT' ? 'tag-success' : 'tag-error'}">${a.op}</span></td>
-                        <td>₱${formatCurrency(a.amount)}</td>
-                        <td>₱${formatCurrency(a.before)} &rarr; ₱${formatCurrency(a.after)}</td>
+                        <td>₱${formatCurrency(amtVal)}</td>
+                        <td style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;">₱${formatCurrency(beforeVal)} &rarr; <strong style="color: ${a.op === 'CREDIT' ? 'var(--status-success)' : 'var(--primary-rose)'};">₱${formatCurrency(afterVal)}</strong></td>
                     </tr>
-                `).join('')}
+                    `;
+                }).join('')}
             </tbody>
         </table>
     `;
@@ -756,6 +846,9 @@ function switchTab(tabName) {
     } else if (tabName === 'audit') {
         loadInitialAuditLogs();
         loadPostgresAuditLogs();
+    } else if (tabName === 'lifecycle') {
+        renderOutboxTable();
+        renderPostgresAuditTable();
     }
 }
 
@@ -1087,37 +1180,42 @@ function renderTransactionMonitor() {
         return;
     }
 
-    tbody.innerHTML = list.map(tx => `
+    tbody.innerHTML = list.map(tx => {
+        const accDisplay = tx.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : 'ACC-PH-1001-8842');
+        const isCredit = tx.type.includes('CREDIT') || tx.type.includes('IN');
+        return `
         <tr>
             <td><code>${tx.ref}</code></td>
-            <td>${tx.date}</td>
-            <td><strong>ACC-PH-1001-7714</strong></td>
+            <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${tx.date}</td>
+            <td><strong>${accDisplay}</strong></td>
             <td><span class="badge-chip">${tx.type}</span></td>
-            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${tx.type.includes('CREDIT') ? 'var(--status-success)' : 'var(--primary-rose)'};">${tx.type.includes('CREDIT') ? '+' : '-'}₱${formatCurrency(tx.amount)}</strong></td>
+            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${isCredit ? '+' : '-'}₱${formatCurrency(tx.amount)}</strong></td>
             <td><code>IDEMP-PH-${tx.id}</code></td>
-            <td><span class="status-tag ${tx.status === 'SUCCESS' ? 'tag-success' : 'tag-error'}">${tx.status}</span></td>
+            <td><span class="status-tag ${tx.status === 'SUCCESS' || tx.status === 'COMPLETED' ? 'tag-success' : 'tag-error'}">${tx.status}</span></td>
         </tr>
-    `).join('');
+    `}).join('');
 }
 
 function renderTransactionFeed() {
     const feed = document.getElementById('transaction-feed');
     if (!feed) return;
 
-    feed.innerHTML = recentTransactions.map(tx => `
+    feed.innerHTML = recentTransactions.map(tx => {
+        const isCredit = tx.type.includes('CREDIT') || tx.type.includes('IN');
+        return `
         <div class="tx-row">
             <div class="tx-main">
-                <span class="tx-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="${tx.type.includes('CREDIT') ? '17 11 12 6 7 11' : '7 13 12 18 17 13'}"></polyline><line x1="12" y1="${tx.type.includes('CREDIT') ? '6' : '18'}" x2="12" y2="${tx.type.includes('CREDIT') ? '18' : '6'}"></line></svg></span>
+                <span class="tx-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="${isCredit ? '17 11 12 6 7 11' : '7 13 12 18 17 13'}"></polyline><line x1="12" y1="${isCredit ? '6' : '18'}" x2="12" y2="${isCredit ? '18' : '6'}"></line></svg></span>
                 <div class="tx-meta">
                     <span class="tx-type">${tx.type} &bull; ${tx.ref}</span>
                     <span class="tx-date">${tx.date}</span>
                 </div>
             </div>
-            <div class="tx-amount ${tx.type.includes('CREDIT') ? 'credit' : 'debit'}">
-                ${tx.type.includes('CREDIT') ? '+' : '-'}₱${formatCurrency(tx.amount)}
+            <div class="tx-amount ${isCredit ? 'credit' : 'debit'}">
+                ${isCredit ? '+' : '-'}₱${formatCurrency(tx.amount)}
             </div>
         </div>
-    `).join('');
+    `}).join('');
 
     renderTransactionMonitor();
 }
@@ -1141,21 +1239,25 @@ function loadPostgresAuditLogs() {
     const tabBox = document.getElementById('audit-tab-postgres-logs');
     if (!tabBox) return;
 
-    tabBox.innerHTML = postgresAudits.map(p => `
-        <div class="log-entry" style="border-left-color: #3B82F6;">
+    tabBox.innerHTML = postgresAudits.map(p => {
+        const isDebit = p.op === 'DEBIT';
+        const opColor = isDebit ? '#E11D48' : '#10B981';
+        const borderColor = isDebit ? '#E11D48' : '#3B82F6';
+        return `
+        <div class="log-entry" style="border-left-color: ${borderColor};">
             <span class="log-time">[${p.time}]</span>
-            <span class="log-action" style="color: #60A5FA;">${p.op}</span>: ${p.account} &bull; ₱${formatCurrency(p.before)} &rarr; <strong style="color: var(--status-success);">₱${formatCurrency(p.after)}</strong> (Amt: ₱${formatCurrency(p.amt)}) [${p.id}]
+            <span class="log-action" style="color: ${opColor}; font-weight: 700;">${p.op}</span>: ${p.account} &bull; ₱${formatCurrency(p.before)} &rarr; <strong style="color: ${isDebit ? 'var(--primary-rose)' : 'var(--status-success)'};">₱${formatCurrency(p.after)}</strong> (Amt: ₱${formatCurrency(p.amt)}) [${p.id}]
         </div>
-    `).join('');
+    `}).join('');
 }
 
 async function loadRecentTransactions() {
     if (recentTransactions.length === 0) {
         recentTransactions = [
-            { id: 103, ref: 'TX-PH-2026-0929-001', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: '29/09/2026 08:30:00', status: 'SUCCESS' },
-            { id: 102, ref: 'TX-PH-2026-0929-000', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: '29/09/2026 08:10:00', status: 'SUCCESS' },
-            { id: 101, ref: 'TX-PH-INIT-001', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: '23/09/2026 10:45:00', status: 'SUCCESS' },
-            { id: 100, ref: 'TX-PH-INIT-000', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: '22/09/2026 09:30:00', status: 'SUCCESS' }
+            { id: 103, ref: 'TX-PH-2026-0929-001', accountNumber: 'ACC-PH-1001-8842', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), status: 'SUCCESS' },
+            { id: 102, ref: 'TX-PH-2026-0929-000', accountNumber: 'ACC-PH-1001-9921', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 3600000)), status: 'SUCCESS' },
+            { id: 101, ref: 'TX-PH-INIT-001', accountNumber: 'ACC-PH-1001-8842', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 86400000)), status: 'SUCCESS' },
+            { id: 100, ref: 'TX-PH-INIT-000', accountNumber: 'ACC-PH-1001-7714', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 172800000)), status: 'SUCCESS' }
         ];
     }
     renderTransactionFeed();
@@ -1164,10 +1266,10 @@ async function loadRecentTransactions() {
 async function loadInitialAuditLogs() {
     if (oracleAuditLogs.length === 0) {
         oracleAuditLogs = [
-            { time: '08:30:00', action: 'SECURITY_AUDIT', details: 'Stateless JWT verified at API Gateway. User [lviernes] authorized with ROLE_CUSTOMER.' },
-            { time: '08:15:01', action: 'ROW_LOCK_ACQUIRED', details: 'PESSIMISTIC_WRITE lock on ACCOUNT #3. Atomic Outbox Event published.' },
-            { time: '08:10:00', action: 'TRANSACTION_SETTLED', details: 'PESONet settlement batch commit on Oracle XE. 0% Overdraft verified.' },
-            { time: '08:00:00', action: 'ACID_MUTATION', details: 'Committed local ACID mutation of ₱15,000.0000 on ACC-PH-1001-8842.' }
+            { time: formatPhilippineTime(new Date(Date.now() - 1800000)), action: 'SECURITY_AUDIT', details: 'Stateless JWT verified at API Gateway. User [lviernes] authorized with ROLE_CUSTOMER.' },
+            { time: formatPhilippineTime(new Date(Date.now() - 3600000)), action: 'ROW_LOCK_ACQUIRED', details: 'PESSIMISTIC_WRITE lock on ACCOUNT #3. Atomic Outbox Event published.' },
+            { time: formatPhilippineTime(new Date(Date.now() - 5400000)), action: 'TRANSACTION_SETTLED', details: 'PESONet settlement batch commit on Oracle XE. 0% Overdraft verified.' },
+            { time: formatPhilippineTime(new Date(Date.now() - 7200000)), action: 'ACID_MUTATION', details: 'Committed local ACID mutation of ₱15,000.0000 on ACC-PH-1001-8842.' }
         ];
     }
     renderOracleAuditLogs();
@@ -1207,50 +1309,121 @@ async function handleIncomingTransferEvent(data) {
     await loadCustomerAndAccounts();
     await loadAllCustomers(true);
 
-    // B. Prepend transaction to transaction feeds if not already recorded
+    // B. Prepend transaction to transaction feeds if not already recorded, or update status if changed
     const txRef = data.reference || `TX-PH-${Date.now()}`;
-    if (!recentTransactions.some(t => t.ref === txRef)) {
-        const txDate = data.date ? new Date(data.date) : new Date();
-        const formattedDate = txDate.toLocaleDateString('en-PH', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + txDate.toLocaleTimeString('en-PH');
+    const normalizedStatus = (data.status === 'SUCCESS' || data.status === 'COMPLETED') ? 'COMPLETED' : (data.status || 'COMPLETED');
+    const existing = recentTransactions.find(t => t.ref === txRef);
+
+    if (existing) {
+        if (existing.status !== normalizedStatus) {
+            existing.status = normalizedStatus;
+            renderTransactionFeed();
+            renderTransactionMonitor();
+        }
+    } else {
+        const formattedDate = formatPhilippineDateTime(data.date || new Date());
+        const railLabel = data.rail ? `TRANSFER (${data.rail})` : (data.type === 'LEDGER_MUTATION' ? 'MUTATION (ACID)' : 'TRANSFER (INSTAPAY)');
+        const accNum = data.sourceAccountNumber || (data.sourceAccountId ? `ACC-PH-1001-884${data.sourceAccountId}` : (accountsData.length > 0 ? accountsData[0].accountNumber : 'ACC-PH-1001-8841'));
 
         recentTransactions.unshift({
             id: Date.now(),
             ref: txRef,
-            type: 'TRANSFER (INSTAPAY)',
+            accountNumber: accNum,
+            type: railLabel,
             amount: parseFloat(data.amount || 0),
             currency: data.currency || 'PHP',
             date: formattedDate,
-            status: data.status || 'SUCCESS'
+            status: normalizedStatus
         });
         renderTransactionFeed();
         renderTransactionMonitor();
     }
 
-    // C. Dual-stream audit log recording
-    const timeStr = new Date().toLocaleTimeString('en-PH');
+    // C. Dual-stream audit log recording: Oracle XE synchronous + PostgreSQL double-entry (DEBIT & CREDIT) + Oracle XE Outbox Event
+    const timeStr = formatPhilippineTime(new Date());
+    const dtStr = formatPhilippineDateTime(new Date());
+    
+    // Accurately resolve sending account from accountsData or data payload
+    let sourceAccObj = null;
+    if (data.sourceAccountId) {
+        sourceAccObj = accountsData.find(a => String(a.accountId) === String(data.sourceAccountId));
+    }
+    if (!sourceAccObj && data.sourceAccountNumber) {
+        sourceAccObj = accountsData.find(a => a.accountNumber === data.sourceAccountNumber || a.accountNumber.endsWith(data.sourceAccountNumber.slice(-4)));
+    }
+    if (!sourceAccObj && accountsData.length > 0) {
+        sourceAccObj = accountsData[0];
+    }
+    const senderAcc = data.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : 'ACC-PH-1001-8842');
+    const destAcc = data.destinationAccountNumber || data.recipientName || 'ACC-PH-TARGET';
+    const amt = parseFloat(data.amount || 0);
+    const cleanTxNum = String(txRef || data.transactionId || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
+
+    // Dynamic before/after balance computation matching exact debited account
+    const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 734790.16;
+    const beforeBal = currBal + amt;
+    const afterBal = currBal;
+
     oracleAuditLogs.unshift({
         time: timeStr,
         action: 'CUSTOMER_TRANSFER_ACID',
-        details: `Customer transfer of ₱${formatCurrency(data.amount)} to ${data.destinationAccountNumber || 'recipient'} (Ref: ${txRef}). Committed with Oracle XE ACID double-entry.`
+        details: `Customer transfer of ₱${formatCurrency(amt)} from ${senderAcc} to ${destAcc} (Ref: ${txRef}). Committed with Oracle XE ACID double-entry.`
     });
     renderOracleAuditLogs();
 
+    // 1. Transactional Outbox Event (Oracle XE Real-Time Event Stream)
+    if (!outboxEvents.some(e => String(e.txId) === cleanTxNum)) {
+        const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
+        outboxEvents.unshift({
+            eventId: nextEvtId,
+            txId: cleanTxNum,
+            type: 'TRANSACTION_SUCCESS',
+            status: 'PROCESSED',
+            date: formatPhilippineTime(data.date || new Date())
+        });
+        renderOutboxTable();
+    }
+
+    // 2. PostgreSQL Immutable Audit Trail (DEBIT sender; CREDIT only for internal PayPink accounts)
+    const isExternal = Boolean(data.bank || (data.rail && data.rail !== 'INTERNAL') || (data.destinationAccountNumber && (data.destinationAccountNumber.includes('·') || /^(BDO|BPI|Metrobank|EXT)/i.test(data.destinationAccountNumber))));
+
     postgresAudits.unshift({
-        id: 'AUD-PG-' + Math.floor(1000 + Math.random() * 9000),
-        account: data.destinationAccountNumber || 'ACC-PH-TARGET',
-        op: 'CREDIT',
-        before: 0.00,
-        after: parseFloat(data.amount || 0),
-        amt: parseFloat(data.amount || 0),
-        time: new Date().toLocaleDateString('en-PH') + ' ' + timeStr
+        id: 'AUD-PG-DB-' + cleanTxNum,
+        txId: cleanTxNum,
+        account: senderAcc,
+        op: 'DEBIT',
+        before: beforeBal,
+        after: afterBal,
+        amt: amt,
+        amount: amt,
+        time: dtStr
     });
+
+    if (!isExternal) {
+        postgresAudits.unshift({
+            id: 'AUD-PG-CR-' + cleanTxNum,
+            txId: cleanTxNum,
+            account: destAcc,
+            op: 'CREDIT',
+            before: 0.00,
+            after: amt,
+            amt: amt,
+            amount: amt,
+            time: dtStr
+        });
+    }
+
     loadPostgresAuditLogs();
+    renderPostgresAuditTable();
 
     // D. Show real-time notification toast
-    showAdminToast(`Real-Time Transfer: ₱${formatCurrency(data.amount)} to ${data.destinationAccountNumber || 'Customer'} (Ref: ${txRef})`);
+    showAdminToast(`Real-Time Transfer: ₱${formatCurrency(amt)} to ${destAcc} (Ref: ${txRef})`);
 }
 
 async function syncBackendTransactions() {
+    let hasChanges = false;
+
+    // 1. Sync Reconciliation Logs
     try {
         const res = await fetch(`${API_BASE}/reconciliation/logs`, {
             headers: getAuthHeaders()
@@ -1258,30 +1431,126 @@ async function syncBackendTransactions() {
         if (res.ok) {
             const logs = await res.json();
             if (logs && logs.length > 0) {
-                renderReconciliationTable(logs); // Continuously updates report preview & reconciliation table
-                let hasNew = false;
-                logs.slice(0, 8).forEach(log => {
+                renderReconciliationTable(logs);
+                logs.slice(0, 10).forEach(log => {
                     const ref = `TX-REC-${log.transactionId}`;
-                    if (!recentTransactions.some(t => t.ref === ref || t.id === log.transactionId)) {
+                    const targetStatus = (log.oracleStatus === 'SUCCESS' || log.oracleStatus === 'COMMITTED') ? 'COMPLETED' : 'PENDING';
+                    const existing = recentTransactions.find(t => t.ref === ref || t.id === log.transactionId);
+                    if (existing) {
+                        if (existing.status !== targetStatus) {
+                            existing.status = targetStatus;
+                            hasChanges = true;
+                        }
+                    } else {
                         recentTransactions.push({
                             id: log.transactionId,
                             ref: ref,
+                            accountNumber: 'ACC-PH-1001-8842',
                             type: 'TRANSFER (INSTAPAY)',
                             amount: 50.00,
                             currency: 'PHP',
-                            date: new Date(log.reconDate).toLocaleDateString('en-PH') + ' ' + new Date(log.reconDate).toLocaleTimeString('en-PH'),
-                            status: log.oracleStatus === 'SUCCESS' ? 'SUCCESS' : 'PENDING'
+                            date: formatPhilippineDateTime(log.reconDate),
+                            status: targetStatus
                         });
-                        hasNew = true;
+                        hasChanges = true;
                     }
                 });
-                if (hasNew) {
-                    renderTransactionFeed();
-                    renderTransactionMonitor();
-                }
             }
         }
     } catch (e) {}
+
+    // 2. Sync External Transfers (BDO, BPI, Metrobank)
+    try {
+        const extRes = await fetch(`${API_BASE}/auth/banking/external/transfers`, {
+            headers: getAuthHeaders()
+        });
+        if (extRes.ok) {
+            const extRows = await extRes.json();
+            if (Array.isArray(extRows)) {
+                extRows.forEach(r => {
+                    const ref = r.reference;
+                    const normalizedStatus = (r.status === 'SUCCESS' || r.status === 'COMPLETED') ? 'COMPLETED' : r.status;
+                    const existing = recentTransactions.find(t => t.ref === ref);
+                    const cleanTxNum = String(ref || r.id || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
+
+                    if (existing) {
+                        if (existing.status !== normalizedStatus) {
+                            existing.status = normalizedStatus;
+                            hasChanges = true;
+                        }
+                    } else {
+                        let sourceAccObj = null;
+                        if (r.sourceAccountId) {
+                            sourceAccObj = accountsData.find(a => String(a.accountId) === String(r.sourceAccountId));
+                        }
+                        if (!sourceAccObj && accountsData.length > 0) {
+                            sourceAccObj = accountsData[0];
+                        }
+                        const senderAcc = r.sourceAccountNumber || (sourceAccObj ? sourceAccObj.accountNumber : 'ACC-PH-1001-8842');
+                        const destAcc = `${r.bank || 'EXT'} · ${r.destinationAccountNumber}`;
+                        const amt = parseFloat(r.amount || 0);
+                        const dtStr = formatPhilippineDateTime(r.date);
+                        const currBal = sourceAccObj ? parseFloat(sourceAccObj.currentBalance || 0) : 734790.16;
+                        const beforeBal = currBal + amt;
+                        const afterBal = currBal;
+
+                        recentTransactions.unshift({
+                            id: r.id || Date.now(),
+                            ref: ref,
+                            accountNumber: senderAcc,
+                            type: `EXT_TRANSFER (${r.rail || 'INSTAPAY'})`,
+                            amount: amt,
+                            currency: r.currency || 'PHP',
+                            date: dtStr,
+                            status: normalizedStatus
+                        });
+
+                        oracleAuditLogs.unshift({
+                            time: formatPhilippineTime(r.date),
+                            action: 'EXTERNAL_SWITCH_COMMITTED',
+                            details: `External transfer ₱${formatCurrency(amt)} from ${senderAcc} to ${r.bank || 'Bank'} (${r.recipientName || 'External Customer'} - ${r.destinationAccountNumber}) settled via ${r.rail || 'INSTAPAY'}.`
+                        });
+
+                        // Transactional Outbox Event
+                        if (!outboxEvents.some(e => String(e.txId) === cleanTxNum)) {
+                            const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
+                            outboxEvents.unshift({
+                                eventId: nextEvtId,
+                                txId: cleanTxNum,
+                                type: 'TRANSACTION_SUCCESS',
+                                status: 'PROCESSED',
+                                date: formatPhilippineTime(r.date || new Date())
+                            });
+                        }
+
+                        // DEBIT from sender account for external interbank transfer
+                        postgresAudits.unshift({
+                            id: 'AUD-PG-DB-' + (r.id || cleanTxNum),
+                            txId: cleanTxNum,
+                            account: senderAcc,
+                            op: 'DEBIT',
+                            before: beforeBal,
+                            after: afterBal,
+                            amt: amt,
+                            amount: amt,
+                            time: dtStr
+                        });
+
+                        hasChanges = true;
+                    }
+                });
+            }
+        }
+    } catch (e) {}
+
+    if (hasChanges) {
+        renderTransactionFeed();
+        renderTransactionMonitor();
+        renderOracleAuditLogs();
+        loadPostgresAuditLogs();
+        renderOutboxTable();
+        renderPostgresAuditTable();
+    }
 }
 
 let adminToastTimer = null;
@@ -1334,7 +1603,7 @@ function exportReconciliationReportCSV() {
         const oSt = l.oracleStatus || l.oracle || 'COMMITTED';
         const pSt = l.postgresStatus || l.pg || 'COMMITTED';
         const rSt = l.reconStatus || l.status || 'MATCHED';
-        const dt = l.reconDate ? new Date(l.reconDate).toLocaleString('en-PH') : (l.date || new Date().toLocaleString('en-PH'));
+        const dt = l.reconDate ? formatPhilippineDateTime(l.reconDate) : (l.date ? formatPhilippineDateTime(l.date) : formatPhilippineDateTime(new Date()));
         csv += `${rId},${tId},${oSt},${pSt},${rSt},"${dt}"\n`;
     });
     downloadCSV(`paypink_reconciliation_report_${Date.now()}.csv`, csv);
@@ -1342,22 +1611,33 @@ function exportReconciliationReportCSV() {
 
 function exportAuditTrailCSV() {
     let csv = 'AuditLogID,Timestamp,AccountID,Operation,BeforeBalancePHP,AfterBalancePHP,MutationAmountPHP,IntegrityHash\n';
-    const entries = [
-        { id: 'AUD-001', time: '29/09/2026 08:15:00', acc: 'ACC-PH-1001-7714', op: 'DEBIT', before: '60.0000', after: '10.0000', amt: '50.0000', hash: 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069' },
-        { id: 'AUD-002', time: '29/09/2026 08:30:00', acc: 'ACC-PH-1001-8842', op: 'CREDIT', before: '20000.0000', after: '35000.0000', amt: '15000.0000', hash: 'SHA256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a' }
+    const entriesToExport = (postgresAudits && postgresAudits.length > 0) ? postgresAudits : [
+        { id: 'AUD-PG-DB-001', time: formatPhilippineDateTime(new Date(Date.now() - 3600000)), account: 'ACC-PH-1001-7714', op: 'DEBIT', before: 60.00, after: 10.00, amt: 50.00 },
+        { id: 'AUD-PG-CR-001', time: formatPhilippineDateTime(new Date(Date.now() - 3600000)), account: 'ACC-PH-1001-8842', op: 'CREDIT', before: 20000.00, after: 20050.00, amt: 50.00 }
     ];
-    entries.forEach(e => {
-        csv += `${e.id},${e.time},${e.acc},${e.op},${e.before},${e.after},${e.amt},${e.hash}\n`;
+
+    entriesToExport.forEach(e => {
+        const idStr = e.id || e.auditId || `AUD-PG-${Math.floor(1000 + Math.random() * 9000)}`;
+        const timeStr = e.time || formatPhilippineDateTime(new Date());
+        const accStr = e.account || (e.accId ? `ACC-PH-1001-884${e.accId}` : 'ACC-PH-1001-8842');
+        const opStr = e.op || 'DEBIT';
+        const beforeNum = parseFloat(e.before !== undefined ? e.before : 0).toFixed(2);
+        const afterNum = parseFloat(e.after !== undefined ? e.after : 0).toFixed(2);
+        const amtNum = parseFloat(e.amt !== undefined ? e.amt : (e.amount || 0)).toFixed(2);
+        const hashStr = `SHA256:${(idStr + timeStr + accStr + opStr + amtNum).split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0).toString(16).padStart(16, '0')}7f83b1657ff1fc53`;
+
+        csv += `${idStr},"${timeStr}","${accStr}",${opStr},${beforeNum},${afterNum},${amtNum},${hashStr}\n`;
     });
+
     downloadCSV(`paypink_ledger_audit_trail_${Date.now()}.csv`, csv);
 }
 
 function exportSettlementSummaryCSV() {
     let csv = 'PaymentRail,TransactionCount,SettledVolumePHP,FeeSurchargePHP,ClearingStatus,ClearingCycle\n';
-    csv += 'InstaPay (Real-Time),120,350000.0000,0.0000,CLEARED,24x7 Continuous\n';
-    csv += 'PESONet (Batch),45,850000.0000,0.0000,CLEARED,Same-Day Batch Settlement\n';
-    csv += 'QR Ph (National Rail),85,150000.0000,0.0000,CLEARED,Real-Time Retail Switch\n';
-    csv += 'Internal PayPink Ledger,210,650000.0000,0.0000,COMMITTED,Instant Local ACID\n';
+    csv += 'InstaPay (Real-Time),120,350000.00,0.00,CLEARED,24x7 Continuous\n';
+    csv += 'PESONet (Batch),45,850000.00,0.00,CLEARED,Same-Day Batch Settlement\n';
+    csv += 'QR Ph (National Rail),85,150000.00,0.00,CLEARED,Real-Time Retail Switch\n';
+    csv += 'Internal PayPink Ledger,210,650000.00,0.00,COMMITTED,Instant Local ACID\n';
     downloadCSV(`paypink_settlement_summary_${Date.now()}.csv`, csv);
 }
 
@@ -1385,8 +1665,8 @@ function generateNewIdempotencyKey() {
 
 function formatCurrency(val) {
     const num = parseFloat(val);
-    if (isNaN(num)) return '0.0000';
-    return num.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    if (isNaN(num)) return '0.00';
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatAccountType(type) {

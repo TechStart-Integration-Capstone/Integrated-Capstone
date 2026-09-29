@@ -476,10 +476,12 @@ async function sendTransfer() {
 
     // Real-time synchronization broadcast across banking and admin tabs
     try {
+      const sourceAcc = (state.profile?.accounts || []).find(a => String(a.accountId) === String(request.sourceAccountId));
       const syncEvent = {
         type: 'CUSTOMER_TRANSFER',
         reference: receipt.reference,
         sourceAccountId: request.sourceAccountId,
+        sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : 'ACC-PH-1001-8842',
         destinationAccountNumber: request.destinationAccountNumber,
         amount: request.amount,
         currency: receipt.currency || 'PHP',

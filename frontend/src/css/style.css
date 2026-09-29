@@ -135,6 +135,24 @@ body {
     box-shadow: 0 0 6px #10B981;
 }
 
+.ph-clock-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: var(--radius-full);
+    background: #FFFFFF;
+    border: 1px solid var(--border-rose-medium);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-primary);
+}
+
+.ph-clock-badge .clock-icon {
+    display: flex;
+    align-items: center;
+    color: var(--primary-rose);
+}
+
 .user-profile-widget {
     display: flex;
     align-items: center;
@@ -1178,4 +1196,43 @@ body {
     box-shadow: 0 0 8px #10B981;
     flex-shrink: 0;
 }
+
+/* Philippine Standard Time Real-Time Clock Badge */
+.ph-clock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-rose-medium, #c69baa);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: var(--font-code, 'JetBrains Mono', monospace);
+    color: var(--primary-rose, #651c3e);
+    box-shadow: 0 1px 4px rgba(101, 28, 62, 0.06);
+    user-select: none;
+}
+
+.ph-clock-badge .clock-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--primary-rose, #651c3e);
+}
+
+.ph-clock-badge .clock-label {
+    font-weight: 700;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    background: var(--bg-card-subtle, #f5eaf0);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--primary-rose, #651c3e);
+}
+
+.ph-clock-badge .clock-time {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-primary, #29242a);
+}
+
 

@@ -38,7 +38,7 @@ function externalTransferPage(accounts) {
   return heading('Send outside PayPink.', 'Choose how you want to transfer.') + `<div class="transfer-layout"><section class="transfer-panel">
     <div class="transfer-tabs"><button type="button" data-action="transfer-mode" data-mode="own">My own account</button><button type="button" data-action="transfer-mode" data-mode="other">Another PayPink account</button><button type="button" class="selected" data-action="transfer-mode" data-mode="external">Outside PayPink</button></div>
 
-    ${state.session.pendingExternal ? `<div class="notice">${f.sending ? 'Submitting transfer…' : 'Your transfer needs confirmation. Retry safely using the same request.'}<button type="button" class="btn btn-secondary" data-action="confirm-transfer" ${f.sending ? 'disabled' : ''}>Check transfer status</button></div>` : ''}${f.error ? `<div class="form-error" role="alert">${escapeHtml(f.error)}</div>` : ''}
+    ${state.session.pendingExternal ? `<div class="notice">${f.sending ? 'Submitting transfer…' : 'Your transfer needs confirmation. Retry safely using the same request.'}<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;"><button type="button" class="btn btn-secondary" data-action="confirm-transfer" ${f.sending ? 'disabled' : ''}>Check transfer status</button><button type="button" class="btn btn-secondary" data-action="dismiss-pending-external" ${f.sending ? 'disabled' : ''}>Start new transfer</button></div></div>` : ''}${f.error ? `<div class="form-error" role="alert">${escapeHtml(f.error)}</div>` : ''}
     <form id="transfer-form"><fieldset ${state.session.pendingTransfer || state.session.pendingExternal || f.sending ? 'disabled' : ''}>
     <div class="form-field"><label for="transfer-source">Transfer from</label><select id="transfer-source" required>${accounts.map(a => `<option value="${a.accountId}" ${String(a.accountId) === f.source ? 'selected' : ''}>${escapeHtml(accountName(a.accountType))} · ${escapeHtml(a.accountNumber.slice(-4))} · ${balance(a.currentBalance)}</option>`).join('')}</select><small>${f.rail === 'PESONET' ? 'The amount will be deducted when your transfer is processed, after approximately 90 seconds.' : 'The amount will be deducted when you confirm.'}</small></div>
     <div class="form-field"><label for="external-rail">Choose how you want to transfer</label><select id="external-rail"><option value="INSTAPAY" ${f.rail === 'INSTAPAY' ? 'selected' : ''}>InstaPay — instant</option><option value="PESONET" ${f.rail === 'PESONET' ? 'selected' : ''}>PESONet — batch processing</option></select><small>${f.rail === 'PESONET' ? 'Processed in batches. Your transfer will remain pending for approximately 90 seconds.' : 'Completed immediately on confirmation. Up to PHP 50,000 per transfer.'}</small></div>
@@ -81,9 +81,41 @@ async function sendExternalTransfer() {
   try {
     const receipt = await api('/external/transfers',{method:'POST',body:request});
     if (generation !== state.generation) return;
-    delete state.session.pendingExternal; saveSession();
-    f.externalReview = null; f.receipt = receipt;
-    await refresh(); await loadExternalHistory();
+    delete state.session.pendingExternal;
+    saveSession();
+    f.receipt = receipt;
+    f.externalReview = null;
+    await refresh();
+    await loadExternalHistory();
+    renderPage();
+    toast('Transfer complete. The external recipient has been credited.');
+
+    // Broadcast external transfer event for instant real-time admin sync
+    try {
+      const sourceAcc = (state.profile?.accounts || []).find(a => String(a.accountId) === String(request.sourceAccountId));
+      const syncEvent = {
+        type: 'CUSTOMER_TRANSFER',
+        rail: receipt.rail || request.rail || 'INSTAPAY',
+        reference: receipt.reference,
+        sourceAccountId: request.sourceAccountId,
+        sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : 'ACC-PH-1001-8842',
+        destinationAccountNumber: `${receipt.bank || 'External'} · ${receipt.destinationAccountNumber}`,
+        amount: receipt.amount,
+        currency: receipt.currency || 'PHP',
+        status: receipt.status || 'COMPLETED',
+        date: receipt.date || new Date().toISOString(),
+        recipientName: receipt.recipientName || 'External Customer',
+        bank: receipt.bank || 'External Bank',
+        timestamp: Date.now()
+      };
+      if (window.BroadcastChannel) {
+        new BroadcastChannel('paypink_ledger_channel').postMessage(syncEvent);
+      }
+      localStorage.setItem('paypink_last_transfer_event', JSON.stringify(syncEvent));
+      localStorage.setItem('paypink_sync_timestamp', String(Date.now()));
+    } catch (broadcastErr) {
+      console.warn('Real-time external broadcast note:', broadcastErr);
+    }
   } catch (error) {
     if (generation !== state.generation) return;
     f.error = error.message;
@@ -102,9 +134,24 @@ document.addEventListener('change', event => {
 });
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-external-receipt]');
-  if (!button) return;
-  const receipt = settleExternal().find(r => r.reference === button.dataset.externalReceipt);
-  if (receipt && state.transfer) { state.transfer.receipt = receipt; renderPage(); }
+  if (button) {
+    const receipt = settleExternal().find(r => r.reference === button.dataset.externalReceipt);
+    if (receipt && state.transfer) { state.transfer.receipt = receipt; renderPage(); }
+    return;
+  }
+  const dismissBtn = event.target.closest('[data-action="dismiss-pending-external"]');
+  if (dismissBtn) {
+    if (state.session) {
+      delete state.session.pendingExternal;
+      saveSession();
+    }
+    if (state.transfer) {
+      state.transfer.sending = false;
+      state.transfer.error = '';
+      state.transfer.externalReview = null;
+    }
+    renderPage();
+  }
 });
 setInterval(() => { if (state.session && state.page === 'transfer') loadExternalHistory(); }, 2000);
 
