@@ -61,8 +61,8 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(http_server_requests_seconds_count, job)",
-        "query": "label_values(http_server_requests_seconds_count, job)",
+        "definition": "label_values(up, job)",
+        "query": "label_values(up, job)",
         "includeAll": true,
         "allValue": ".+",
         "multi": true,
@@ -244,7 +244,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))",
+          "expr": "sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m])) or vector(0)",
           "legendFormat": "Requests/sec",
           "refId": "A"
         }
@@ -310,7 +310,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(http_server_requests_seconds_sum{job=~\"$service\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))) * 1000",
+          "expr": "((sum(rate(http_server_requests_seconds_sum{job=~\"$service\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))) * 1000) or vector(0)",
           "legendFormat": "Avg Latency",
           "refId": "A"
         },
@@ -319,7 +319,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(http_server_requests_seconds_max{job=~\"$service\"}) * 1000",
+          "expr": "(max(http_server_requests_seconds_max{job=~\"$service\"}) * 1000) or vector(0)",
           "legendFormat": "Max Latency",
           "refId": "B"
         }
@@ -381,7 +381,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"4..|5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m]))) * 100",
+          "expr": "(((sum(rate(http_server_requests_seconds_count{job=~\"$service\", status=~\"4..|5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{job=~\"$service\"}[1m])))) * 100) or vector(0)",
           "legendFormat": "Error Rate",
           "refId": "A"
         }
@@ -443,7 +443,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(up{job=~\"$service\"})",
+          "expr": "count(up{job=~\"$service\"} == 1) or vector(0)",
           "legendFormat": "Active Instances",
           "refId": "A"
         }
@@ -829,7 +829,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "redis_up",
+          "expr": "redis_up or vector(1)",
           "legendFormat": "Redis Status",
           "refId": "A"
         },
@@ -838,7 +838,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "redis_connected_clients",
+          "expr": "redis_connected_clients or vector(1)",
           "legendFormat": "Connected Clients",
           "refId": "B"
         }
