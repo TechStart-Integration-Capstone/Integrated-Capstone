@@ -87,23 +87,19 @@ public class NotificationDispatcher {
                     ? "jonlevi.jlv@gmail.com" 
                     : "customer" + customerId + "@paypink.ph";
 
-            // If real mail credentials are configured, send real email
-            if (mailSender != null && mailUsername != null && !mailUsername.isBlank()) {
+            // If real mail credentials are configured, send live email via direct SSL SMTP
+            if (mailUsername != null && !mailUsername.isBlank()) {
                 try {
-                    SimpleMailMessage mailMessage = new SimpleMailMessage();
-                    mailMessage.setFrom(mailUsername);
-                    mailMessage.setTo(recipient);
-                    mailMessage.setSubject("PayPink Banking: Transaction Alert [" + refNo + "]");
-                    mailMessage.setText(
-                        "Dear Customer,\n\n" +
+                    sendLiveEmailViaSslSmtp(recipient, "PayPink Banking: Transaction Alert [" + refNo + "]",
+                        "Dear Levi Viernes,\n\n" +
                         message + "\n\n" +
-                        "Transaction Reference: " + refNo + "\n" +
-                        "Timestamp: " + deliveredAt + " (PHT)\n\n" +
+                        "• Transaction Reference: " + refNo + "\n" +
+                        "• Timestamp: " + deliveredAt + " (PHT)\n" +
+                        "• Primary Account: 001181233469\n\n" +
                         "Thank you for banking with PayPink.\n" +
                         "PayPink Core Banking Engine (BSP Regulated)\n"
                     );
-                    mailSender.send(mailMessage);
-                    log.info("[EMAIL-LIVE] Sent to {} via SMTP  ref={}  msgId={}", recipient, refNo, msgId);
+                    log.info("[EMAIL-LIVE] Dispatched real email to {} via Gmail SSL  ref={}  msgId={}", recipient, refNo, msgId);
                 } catch (Exception mailEx) {
                     log.error("[EMAIL-LIVE-FAIL] Could not send live email to {}: {}", recipient, mailEx.getMessage());
                 }
@@ -117,6 +113,62 @@ public class NotificationDispatcher {
             log.error("[EMAIL]  msgId={}  status=FAILED  reason={}", msgId, ex.getMessage());
             return false;
         }
+    }
+
+    private void sendLiveEmailViaSslSmtp(String to, String subject, String body) throws Exception {
+        javax.net.ssl.TrustManager[] trustAll = new javax.net.ssl.TrustManager[] {
+            new javax.net.ssl.X509TrustManager() {
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
+                public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+            }
+        };
+        javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("TLS");
+        sc.init(null, trustAll, new java.security.SecureRandom());
+        
+        try (javax.net.ssl.SSLSocket socket = (javax.net.ssl.SSLSocket) sc.getSocketFactory().createSocket("smtp.gmail.com", 465);
+             java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(socket.getInputStream()));
+             java.io.BufferedWriter w = new java.io.BufferedWriter(new java.io.OutputStreamWriter(socket.getOutputStream()))) {
+            
+            socket.startHandshake();
+            r.readLine();
+            
+            smtpCommand(w, r, "EHLO localhost");
+            smtpCommand(w, r, "AUTH LOGIN");
+            smtpCommand(w, r, java.util.Base64.getEncoder().encodeToString(mailUsername.trim().getBytes()));
+            smtpCommand(w, r, java.util.Base64.getEncoder().encodeToString("ffaeorqwvupclnrc".getBytes()));
+            smtpCommand(w, r, "MAIL FROM:<" + mailUsername.trim() + ">");
+            smtpCommand(w, r, "RCPT TO:<" + to.trim() + ">");
+            smtpCommand(w, r, "DATA");
+            
+            String content = "From: PayPink Banking <" + mailUsername.trim() + ">\r\n" +
+                             "To: <" + to.trim() + ">\r\n" +
+                             "Subject: " + subject + "\r\n" +
+                             "MIME-Version: 1.0\r\n" +
+                             "Content-Type: text/plain; charset=UTF-8\r\n\r\n" +
+                             body + "\r\n.\r\n";
+            w.write(content);
+            w.flush();
+            readSmtpResponse(r);
+            smtpCommand(w, r, "QUIT");
+        }
+    }
+
+    private void smtpCommand(java.io.BufferedWriter w, java.io.BufferedReader r, String cmd) throws Exception {
+        w.write(cmd + "\r\n");
+        w.flush();
+        readSmtpResponse(r);
+    }
+
+    private String readSmtpResponse(java.io.BufferedReader r) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = r.readLine()) != null) {
+            sb.append(line).append("\n");
+            if (line.length() >= 4 && line.charAt(3) == ' ') break;
+            if (line.length() == 3) break;
+        }
+        return sb.toString().trim();
     }
 
     // ── SMS channel (Semaphore PH / Simulator) ────────────────────────────────
