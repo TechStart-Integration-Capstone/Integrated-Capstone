@@ -1,0 +1,91 @@
+apiVersion: 1
+
+# PayPink - alert when any service logs an ERROR, and when any service returns HTTP 5xx.
+# Uses Prometheus (Spring Boot's logback_events_total counter), so it works even if logs are not shipped to Loki.
+groups:
+  - orgId: 1
+    name: paypink-log-errors
+    folder: PayPink Observability
+    interval: 30s                     # how often Grafana checks
+    rules:
+      - uid: paypink-error-logs
+        title: Error logged in a PayPink service
+        condition: C
+        data:
+          - refId: A                  # Spring Boot counts every log.error(...) in logback_events_total
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (job) (increase(logback_events_total{level="error"}[1m]))'
+          - refId: B                  # take the latest value
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+          - refId: C                  # fire when at least one ERROR was logged in the last minute
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          severity: critical
+          team: paypink
+        annotations:
+          summary: 'ERROR logs in {{ $labels.job }}'
+          description: '{{ $labels.job }} logged {{ $values.B }} error(s) in the last minute.'
+
+      - uid: paypink-http-5xx
+        title: HTTP 5xx responses
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (job) (increase(http_server_requests_seconds_count{status=~"5.."}[1m]))'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          severity: critical
+          team: paypink
+        annotations:
+          summary: '5xx errors from {{ $labels.job }}'
+          description: '{{ $labels.job }} returned server errors in the last minute.'
