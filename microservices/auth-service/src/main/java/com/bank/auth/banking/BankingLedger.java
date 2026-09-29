@@ -24,6 +24,12 @@ public class BankingLedger {
         jdbc.update("INSERT INTO TRANSACTION (from_account_id, to_account_id, amount, source_currency, target_currency, "
                         + "transaction_type, reference_no, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'SUCCESS')",
                 account.id(), counterpartyId, amount, account.currency(), account.currency(), type, reference);
+        post(account, amount, after, operation, type, reference);
+    }
+
+    /** Posts audit/outbox for an existing transaction, within the same balance-update transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void post(Account account, BigDecimal amount, BigDecimal after, String operation, String type, String reference) {
         Long transactionId = jdbc.queryForObject("SELECT transaction_id FROM TRANSACTION WHERE reference_no = ?", Long.class, reference);
         String payload;
         try {

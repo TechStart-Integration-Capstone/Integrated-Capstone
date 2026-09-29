@@ -20,9 +20,10 @@ const brand = () => '<span class="brand"><span class="brand-mark">p</span>PayPin
 const money = (amount, currency = 'PHP') => new Intl.NumberFormat('en-PH', {style:'currency', currency}).format(Number(amount || 0));
 const balance = (amount, currency) => state.hideBalances ? '••••••' : escapeHtml(money(amount, currency));
 const accountName = type => ({SAVINGS_ACCOUNT:'Savings account', EVERYDAY_ACCOUNT:'Everyday account', CHECKING_ACCOUNT:'Checking account', TIME_DEPOSIT:'Time deposit', STRESS_TEST_ACCOUNT:'Everyday account', SAVINGS:'Savings account'}[type] || 'Bank account');
-const accountNumber = account => state.visibleAccounts.has(account.accountId) ? account.accountNumber : `•••• •••• ${account.accountNumber.slice(-4)}`;
+const formattedAccountNumber = number => /^\d{12}$/.test(number) ? number.replace(/^(\d{3})(\d)(\d{7})(\d)$/,'$1 $2 $3 $4') : number;
+const accountNumber = account => state.visibleAccounts.has(account.accountId) ? formattedAccountNumber(account.accountNumber) : `•••• •••• ${account.accountNumber.slice(-4)}`;
 const isSuccess = tx => ['SUCCESS', 'COMPLETED'].includes(tx.status);
-const friendlyType = tx => ({CREDIT:'Money received', DEBIT:'Payment', WELCOME_GIFT:'Welcome gift', TRANSFER_OUT:'Transfer sent', TRANSFER_IN:'Transfer received', TRANSFER:'Account transfer', INSTAPAY:'InstaPay transfer', PESONET:'PESONet transfer', WITHDRAWAL:'Withdrawal', DEPOSIT:'Deposit'}[tx.type] || String(tx.type || 'Transaction').replaceAll('_',' ').toLowerCase().replace(/^./, c => c.toUpperCase()));
+const friendlyType = tx => tx.type?.startsWith('EXT_') ? (tx.type.includes('PESONET') ? 'PESONet transfer' : 'InstaPay transfer') : ({CREDIT:'Money received', DEBIT:'Payment', WELCOME_GIFT:'Welcome gift', TRANSFER_OUT:'Transfer sent', TRANSFER_IN:'Transfer received', TRANSFER:'Account transfer', INSTAPAY:'InstaPay transfer', PESONET:'PESONet transfer', WITHDRAWAL:'Withdrawal', DEPOSIT:'Deposit'}[tx.type] || String(tx.type || 'Transaction').replaceAll('_',' ').toLowerCase().replace(/^./, c => c.toUpperCase()));
 const txDate = tx => new Date(tx.date.endsWith('Z') || /[+-]\d\d:\d\d$/.test(tx.date) ? tx.date : `${tx.date}Z`);
 const shortDate = tx => txDate(tx).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
 const statusPill = status => `<span class="pill ${['ACTIVE','SUCCESS','COMPLETED'].includes(status) ? 'pill-green' : status === 'FAILED' ? 'pill-red' : 'pill-gray'}">${escapeHtml(status === 'SUCCESS' ? 'Completed' : String(status).toLowerCase().replace(/^./, c => c.toUpperCase()))}</span>`;
@@ -108,13 +109,13 @@ function renderShell() {
       <div class="sidebar-bottom"><div class="privacy-note">${icon('shield')}<strong>A little privacy goes a long way.</strong><p>Keep your account details and password just for you.</p></div><button class="logout" data-action="logout">${icon('logout')}<span>Log out</span></button></div>
     </aside>
     <div class="bank-content"><header class="topbar"><div class="breadcrumb"><span>PayPink</span><span>/</span><strong id="breadcrumb-page">Personal banking</strong></div>
-      <div class="topbar-right"><span class="today">${new Date().toLocaleDateString('en-PH',{weekday:'short',month:'long',day:'numeric',year:'numeric'})}</span><button class="profile-button" data-action="profile" aria-label="View your profile"><span class="avatar">${escapeHtml(initials)}</span><span class="profile-label">${escapeHtml(name)}<small>Personal account</small></span></button></div></header>
+      <div class="topbar-right"><button type="button" id="notification-button" class="notification-button" aria-label="Notifications"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="notification-count" hidden></span></button><span class="today">${new Date().toLocaleDateString('en-PH',{weekday:'short',month:'long',day:'numeric',year:'numeric'})}</span><button class="profile-button" data-action="profile" aria-label="View your profile"><span class="avatar">${escapeHtml(initials)}</span><span class="profile-label">${escapeHtml(name)}<small>Personal account</small></span></button></div></header>
       <main class="page" id="main" tabindex="-1"></main></div></div>`;
   renderPage();
 }
 
 function heading(title, subtitle) {
-  return `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="page-heading-actions">${state.page !== 'transfer' && state.profile ? `<button class="btn btn-primary" data-action="navigate" data-page="transfer" aria-label="Transfer money">${icon('arrow')} Transfer money</button>` : ''}<button class="btn btn-secondary" data-action="refresh" aria-label="Refresh balances and transactions" ${state.busy ? 'disabled' : ''}>${icon('refresh')} Refresh</button></div></div>`;
+  return `<div class="page-heading"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="page-heading-actions">${state.profile && ['overview','accounts','activity'].includes(state.page) ? '<button class="btn btn-secondary report-trigger" type="button" data-generate-report>Generate transaction report</button>' : ''}${state.page !== 'transfer' && state.profile ? `<button class="btn btn-primary" data-action="navigate" data-page="transfer" aria-label="Transfer money">${icon('arrow')} Transfer money</button>` : ''}<button class="btn btn-secondary" data-action="refresh" aria-label="Refresh balances and transactions" ${state.busy ? 'disabled' : ''}>${icon('refresh')} Refresh</button></div></div>`;
 }
 
 function renderPage() {
@@ -215,6 +216,7 @@ async function refresh(manual = false) {
     if (generation !== state.generation || !state.session) return;
     state.profile = profile; state.activity = activity; state.updated = new Date(); state.error = '';
     state.recipients = recipients;
+    updateTransferNotifications(activity);
     if (manual) toast('Your accounts are up to date.');
   } catch (error) {
     if (generation === state.generation && state.session) state.error = error.message;
@@ -248,6 +250,7 @@ function scheduleExpiry() {
 }
 
 function logout(message = 'You’ve been logged out. See you again soon.') {
+  dismissTransferPopups();
   clearTimeout(expiryTimer);
   try { sessionStorage.removeItem(SESSION_KEY); } catch { /* No persisted session. */ }
   state.generation++; state.session = null; state.profile = null; state.activity = [];
@@ -344,11 +347,12 @@ document.addEventListener('click', async event => {
     case 'transaction-details': {
       const tx = state.activity.find(item => item.transactionId === id);
       if (!tx) break;
-      const transfer = ['TRANSFER_IN','TRANSFER_OUT'].includes(tx.type);
+      const external = tx.type?.startsWith('EXT_');
+      const transfer = external || ['TRANSFER_IN','TRANSFER_OUT'].includes(tx.type);
       state.dialogReceipt = transfer ? {amount:tx.amount,currency:tx.currency,status:tx.status,date:tx.date,reference:tx.reference,
-        recipientName:tx.type === 'TRANSFER_OUT' ? tx.counterpartyName : state.profile.fullName,
-        destinationAccountNumber:tx.type === 'TRANSFER_OUT' ? tx.counterpartyAccountNumber : tx.accountNumber} : null;
-      showDialog(friendlyType(tx), `<dl class="detail-list">${detail('Amount',balance(tx.amount,tx.currency))}${detail('Status',statusPill(tx.status))}${transfer ? detail(tx.type === 'TRANSFER_OUT' ? 'Recipient' : 'Sender',escapeHtml(tx.counterpartyName || 'PayPink customer')) + detail(tx.type === 'TRANSFER_OUT' ? 'Recipient account' : 'Sender account',escapeHtml(maskedNumber(tx.counterpartyAccountNumber))) : ''}${detail('Your account',escapeHtml(maskedNumber(tx.accountNumber)))}${detail('Date & time',escapeHtml(txDate(tx).toLocaleString('en-PH')))}${detail('Reference number',escapeHtml(tx.reference))}${detail('Movement',escapeHtml(tx.operation === 'CREDIT' ? 'Money in' : tx.operation === 'DEBIT' ? 'Money out' : 'See transaction type'))}</dl>`, transfer ? '<button class="btn btn-secondary" data-action="save-history-receipt">Save receipt</button><button class="btn btn-primary" data-action="close-dialog">Done</button>' : ''); break;
+        recipientName:(external || tx.type === 'TRANSFER_OUT') ? tx.counterpartyName : state.profile.fullName,
+        destinationAccountNumber:(external || tx.type === 'TRANSFER_OUT') ? tx.counterpartyAccountNumber : tx.accountNumber} : null;
+      showDialog(friendlyType(tx), `<dl class="detail-list">${detail('Amount',balance(tx.amount,tx.currency))}${detail('Status',statusPill(tx.status))}${transfer ? detail((external || tx.type === 'TRANSFER_OUT') ? 'Recipient' : 'Sender',escapeHtml(tx.counterpartyName || 'PayPink customer')) + detail((external || tx.type === 'TRANSFER_OUT') ? 'Recipient account' : 'Sender account',escapeHtml(maskedNumber(tx.counterpartyAccountNumber))) : ''}${detail('Your account',escapeHtml(maskedNumber(tx.accountNumber)))}${detail('Date & time',escapeHtml(txDate(tx).toLocaleString('en-PH')))}${detail('Reference number',escapeHtml(tx.reference))}${detail('Movement',escapeHtml(tx.operation === 'CREDIT' ? 'Money in' : tx.operation === 'DEBIT' ? 'Money out' : 'See transaction type'))}</dl>`, transfer ? '<button class="btn btn-secondary" data-action="save-history-receipt">Save receipt</button><button class="btn btn-primary" data-action="close-dialog">Done</button>' : ''); break;
     }
     case 'profile':
       if (!state.profile) break;
@@ -361,7 +365,7 @@ document.addEventListener('click', async event => {
 app.addEventListener('input', event => {
   if (event.target.id === 'transfer-amount') state.transfer.amount = event.target.value;
   if (event.target.id === 'recipient-number') {
-    state.transfer.number = event.target.value; state.transfer.recipient = null; state.transfer.lookupError = ''; state.transfer.lookupPending = false;
+    event.target.value = event.target.value.replace(/\s/g,''); state.transfer.number = event.target.value; state.transfer.recipient = null; state.transfer.lookupError = ''; state.transfer.lookupPending = false;
     clearTimeout(recipientTimer); renderRecipientStatus();
     if (event.target.value.trim()) recipientTimer = setTimeout(lookupRecipient,450);
   }
@@ -392,7 +396,7 @@ try {
   if (saved?.token && typeof saved.expiresAt === 'number' && saved.expiresAt > Date.now()) state.session = saved;
   else sessionStorage.removeItem(SESSION_KEY);
 } catch { /* A missing or invalid session always starts at login. */ }
-if (state.session) { if (state.session.pendingTransfer) state.page = 'transfer'; scheduleExpiry(); renderShell(); refresh(); } else renderAuth();
+if (state.session) { if (state.session.pendingTransfer || state.session.pendingExternal) state.page = 'transfer'; scheduleExpiry(); renderShell(); refresh(); } else renderAuth();
 
 function saveSession() {
   try { sessionStorage.setItem(SESSION_KEY,JSON.stringify(state.session)); } catch { /* Session remains usable in this tab. */ }
@@ -403,10 +407,11 @@ function transferPage() {
   if (!state.transfer) {
     const preferred = accounts.find(a => a.accountType === 'EVERYDAY_ACCOUNT')
       || accounts.find(a => a.accountType === 'STRESS_TEST_ACCOUNT') || accounts[0];
-    state.transfer = {source:String(preferred?.accountId || ''),mode:'own',destination:'',number:'',amount:'',error:'',sending:false,receipt:null,recipient:null,lookupError:'',lookupPending:false};
+    state.transfer = {source:String(preferred?.accountId || ''),mode:state.session.pendingExternal ? 'external' : 'own',destination:'',number:'',amount:'',error:'',sending:false,receipt:null,recipient:null,lookupError:'',lookupPending:false};
   }
   const form = state.transfer;
-  if (form.receipt) return transferReceipt(form.receipt);
+  if (form.receipt) return form.receipt.mock ? mockReceipt(form.receipt) : transferReceipt(form.receipt);
+  if (form.mode === 'external') return externalTransferPage(accounts);
   const source = accounts.find(a => String(a.accountId) === form.source);
   const destinations = accounts.filter(a => a.accountId !== source?.accountId);
   if (!destinations.some(a => String(a.accountId) === form.destination)) form.destination = String(destinations[0]?.accountId || '');
@@ -417,7 +422,7 @@ function transferPage() {
       ${pending ? `<div class="notice" role="status">${form.sending ? 'Your transfer is being processed. Please wait.' : 'Your last transfer is awaiting confirmation. Check its status safely before making another transfer.'}<dl class="pending-details"><dt>Amount</dt><dd>${escapeHtml(money(pending.amount))}</dd><dt>To account</dt><dd>${escapeHtml(pending.destinationAccountNumber)}</dd></dl>${!form.sending ? '<button class="btn btn-primary" data-action="retry-transfer">Check transfer status</button>' : ''}</div>` : ''}
       ${form.error ? `<div class="form-error" role="alert">${escapeHtml(form.error)}</div>` : ''}
       <form id="transfer-form"><fieldset ${pending || form.sending ? 'disabled' : ''}><div class="form-field"><label for="transfer-source">Transfer from</label><select id="transfer-source" required>${accounts.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.source ? 'selected' : ''}>${escapeHtml(label(a))}</option>`).join('')}</select><small>${source ? `Available balance: ${balance(source.currentBalance)}.${['EVERYDAY_ACCOUNT','STRESS_TEST_ACCOUNT'].includes(source.accountType) ? ' Your default Everyday account.' : ''}` : 'No active PHP accounts are available.'}</small></div>
-      <div class="transfer-tabs" role="group" aria-label="Recipient type"><button type="button" data-action="transfer-mode" data-mode="own" class="${form.mode === 'own' ? 'selected' : ''}" aria-pressed="${form.mode === 'own'}">My own account</button><button type="button" data-action="transfer-mode" data-mode="other" class="${form.mode === 'other' ? 'selected' : ''}" aria-pressed="${form.mode === 'other'}">Another PayPink account</button></div>
+      <div class="transfer-tabs" role="group" aria-label="Recipient type"><button type="button" data-action="transfer-mode" data-mode="own" class="${form.mode === 'own' ? 'selected' : ''}" aria-pressed="${form.mode === 'own'}">My own account</button><button type="button" data-action="transfer-mode" data-mode="other" class="${form.mode === 'other' ? 'selected' : ''}" aria-pressed="${form.mode === 'other'}">Another PayPink account</button><button type="button" data-action="transfer-mode" data-mode="external">Outside PayPink</button></div>
       ${form.mode === 'own' ? `<div class="form-field"><label for="transfer-destination">Transfer to</label><select id="transfer-destination" required ${!destinations.length ? 'disabled' : ''}>${destinations.length ? destinations.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.destination ? 'selected' : ''}>${escapeHtml(label(a))}</option>`).join('') : '<option value="">No other accounts available</option>'}</select></div>` : `${recipientPicker()}<div class="form-field"><label for="recipient-number">Recipient account number</label><input id="recipient-number" value="${escapeHtml(form.number)}" maxlength="30" pattern="[A-Za-z0-9\\-]{3,30}" autocomplete="off" spellcheck="false" required placeholder="Enter the full PayPink account number"><small>Enter the full number to look up the account holder.</small></div><div id="recipient-status" aria-live="polite">${recipientStatus()}</div>`}
       <div class="form-field"><label for="transfer-amount">Amount</label><div class="amount-input"><span>PHP</span><input id="transfer-amount" type="number" inputmode="decimal" min="0.01" step="0.01" max="99999999999999.99" value="${escapeHtml(form.amount)}" required placeholder="0.00"></div></div>
       <div class="transfer-fee"><span>Transfer fee</span><strong>₱0.00</strong></div><button class="btn btn-primary transfer-submit" type="submit" ${!source || (form.mode === 'own' && !destinations.length) ? 'disabled' : ''}>Review transfer ${icon('arrow')}</button></fieldset></form></section>
@@ -425,11 +430,12 @@ function transferPage() {
 }
 
 async function reviewTransfer() {
+  if (state.transfer?.mode === 'external') return reviewExternalTransfer();
   const form = state.transfer;
   if (form.sending || state.session.pendingTransfer) return;
   const source = state.profile.accounts.find(a => String(a.accountId) === form.source);
   const target = state.profile.accounts.find(a => String(a.accountId) === form.destination);
-  const destination = form.mode === 'own' ? target?.accountNumber : form.number.trim().toUpperCase();
+  let destination = form.mode === 'own' ? target?.accountNumber : form.number.trim().toUpperCase();
   const amount = Number(form.amount);
   form.error = '';
   if (!source || !destination) form.error = 'Choose both the sending and receiving accounts.';
@@ -438,16 +444,19 @@ async function reviewTransfer() {
   else if (amount > Number(source.currentBalance)) form.error = 'Not enough money in this account. Choose another account or a smaller amount.';
   if (form.error) { renderPage(); return; }
   if (form.mode === 'other') {
-    if (form.recipient?.accountNumber !== destination) await lookupRecipient();
+    if ((form.recipient?.lookupNumber || form.recipient?.accountNumber) !== destination) await lookupRecipient();
     if (state.transfer !== form || !state.session || form.mode !== 'other' || form.number.trim().toUpperCase() !== destination) return;
     if (String(source.accountId) !== form.source || Number(form.amount) !== amount) return;
-    if (form.recipient?.accountNumber !== destination) { form.error = 'Confirm a valid recipient account before continuing.'; renderPage(); return; }
+    if ((form.recipient?.lookupNumber || form.recipient?.accountNumber) !== destination) { form.error = 'Confirm a valid recipient account before continuing.'; renderPage(); return; }
+    destination = form.recipient.accountNumber;
+    if (destination === source.accountNumber) { form.error = 'Choose a different receiving account.'; renderPage(); return; }
   }
   form.review = {sourceAccountId:source.accountId,destinationAccountNumber:destination,amount:form.amount,idempotencyKey:crypto.randomUUID()};
   showDialog('Review your transfer', `<p class="muted">Please check these details before sending.</p><dl class="detail-list">${detail('From',`${escapeHtml(accountName(source.accountType))} · ${escapeHtml(source.accountNumber.slice(-4))}`)}${detail('Recipient',escapeHtml(form.mode === 'own' ? state.profile.fullName : form.recipient.fullName))}${detail('Recipient account',escapeHtml(maskedNumber(destination)))}${detail('Amount',escapeHtml(money(amount)))}${detail('Transfer fee','₱0.00')}${detail('Total to deduct',`<strong>${escapeHtml(money(amount))}</strong>`)}</dl>`, '<button class="btn btn-secondary" data-action="close-dialog">Go back</button><button class="btn btn-primary" data-action="confirm-transfer">Confirm transfer</button>');
 }
 
 async function sendTransfer() {
+  if (state.transfer?.mode === 'external') return sendExternalTransfer();
   const form = state.transfer;
   if (!form || form.sending) return;
   const request = state.session.pendingTransfer || form.review;
@@ -536,7 +545,7 @@ async function lookupRecipient() {
     && form.number.trim().toUpperCase() === number && form.lookupSequence === sequence;
   try {
     const recipient = await api(`/recipients/lookup?accountNumber=${encodeURIComponent(number)}`);
-    if (current()) form.recipient = recipient;
+    if (current()) form.recipient = {...recipient,lookupNumber:number};
   } catch (error) { if (current()) form.lookupError = error.message; }
   finally { if (current()) { form.lookupPending = false; renderRecipientStatus(); } }
 }
