@@ -60,7 +60,7 @@
             <!-- User Profile & Token Modal Trigger -->
             <div class="user-profile-widget">
                 <button id="btn-jwt-info" class="btn-token-badge" title="Inspect Stateless JWT Claims">
-                    <span class="badge-icon">🔐</span>
+                    <span class="badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
                     <span class="badge-text">JWT: ROLE_CUSTOMER</span>
                 </button>
                 <div class="user-avatar-block">
@@ -78,32 +78,44 @@
             <!-- Navigation Tabs -->
             <nav id="app-tabs" class="tab-bar">
                 <button id="tab-btn-dashboard" class="tab-item active" onclick="switchTab('dashboard')">
-                    <span class="tab-icon">💳</span>
-                    <span>Retail Banking &amp; Transfers</span>
-                </button>
-                <button id="tab-btn-concurrency" class="tab-item" onclick="switchTab('concurrency')">
-                    <span class="tab-icon">⚡</span>
-                    <span>Double-Spend Concurrency Tester</span>
-                </button>
-                <button id="tab-btn-lifecycle" class="tab-item" onclick="switchTab('lifecycle')">
-                    <span class="tab-icon">🔄</span>
-                    <span>11-Step Event Lifecycle Visualizer</span>
-                </button>
-                <button id="tab-btn-mutation" class="tab-item" onclick="switchTab('mutation')">
-                    <span class="tab-icon">🛡️</span>
-                    <span>JSR-380 &amp; RFC-7807 Inspector</span>
-                </button>
-                <button id="tab-btn-reconciliation" class="tab-item" onclick="switchTab('reconciliation')">
-                    <span class="tab-icon">⚖️</span>
-                    <span>@Scheduled Reconciliation</span>
-                </button>
-                <button id="tab-btn-telemetry" class="tab-item" onclick="switchTab('telemetry')">
-                    <span class="tab-icon">📊</span>
-                    <span>Telemetry &amp; Observability</span>
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></span>
+                    <span>Overview</span>
                 </button>
                 <button id="tab-btn-customers" class="tab-item" onclick="switchTab('customers')">
-                    <span class="tab-icon">👥</span>
-                    <span>User Management</span>
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
+                    <span>Manage Users &amp; Roles</span>
+                </button>
+                <button id="tab-btn-transactions" class="tab-item" onclick="switchTab('transactions')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"></path></svg></span>
+                    <span>Monitor Transactions</span>
+                </button>
+                <button id="tab-btn-audit" class="tab-item" onclick="switchTab('audit')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
+                    <span>View Audit Logs</span>
+                </button>
+                <button id="tab-btn-reports" class="tab-item" onclick="switchTab('reports')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>
+                    <span>Generate Reports</span>
+                </button>
+                <button id="tab-btn-concurrency" class="tab-item" onclick="switchTab('concurrency')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></span>
+                    <span>Concurrency Tester</span>
+                </button>
+                <button id="tab-btn-lifecycle" class="tab-item" onclick="switchTab('lifecycle')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></span>
+                    <span>Event Lifecycle</span>
+                </button>
+                <button id="tab-btn-mutation" class="tab-item" onclick="switchTab('mutation')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg></span>
+                    <span>Perimeter Validation</span>
+                </button>
+                <button id="tab-btn-reconciliation" class="tab-item" onclick="switchTab('reconciliation')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="M7 21h10"></path><path d="M12 3v18"></path><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"></path></svg></span>
+                    <span>Reconciliation</span>
+                </button>
+                <button id="tab-btn-telemetry" class="tab-item" onclick="switchTab('telemetry')">
+                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span>
+                    <span>Telemetry</span>
                 </button>
             </nav>
 
@@ -161,7 +173,7 @@
                                         <label for="input-idempotency-key">Idempotency Key (Redis &le;5ms)</label>
                                         <div class="input-action-group">
                                             <input type="text" id="input-idempotency-key" class="form-control code-font" readonly>
-                                            <button type="button" class="btn-secondary" onclick="generateNewIdempotencyKey()" title="Generate Unique Key">🔄</button>
+                                            <button type="button" class="btn-secondary" onclick="generateNewIdempotencyKey()" title="Generate Unique Key"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
                                         </div>
                                     </div>
                                 </div>
@@ -243,10 +255,10 @@
                             </div>
                             <div class="form-actions">
                                 <button id="btn-run-stress-test" class="btn-primary btn-stress" onclick="runStressSimulation()">
-                                    🚀 Launch Concurrent Race Condition Test
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 6px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Launch Concurrent Race Condition Test
                                 </button>
                                 <button class="btn-secondary" onclick="resetStressAccount()">
-                                    ↺ Reset Account to ₱60.0000
+                                    Reset Account to ₱60.0000
                                 </button>
                             </div>
                         </div>
@@ -401,22 +413,22 @@
                     <div class="problem-details-grid">
                         <div class="scenario-buttons">
                             <button class="scenario-btn active" onclick="testScenario('valid')">
-                                <span class="scenario-icon">✅</span>
+                                <span class="scenario-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
                                 <span class="scenario-title">Valid Payload</span>
                                 <span class="scenario-desc">₱250.5000 DEBIT (Valid 4 Decimals)</span>
                             </button>
                             <button class="scenario-btn" onclick="testScenario('fraction')">
-                                <span class="scenario-icon">❌</span>
+                                <span class="scenario-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span>
                                 <span class="scenario-title">Invalid Decimals (5 Fractions)</span>
                                 <span class="scenario-desc">₱250.12345 (Violates @Digits fraction=4)</span>
                             </button>
                             <button class="scenario-btn" onclick="testScenario('negative')">
-                                <span class="scenario-icon">❌</span>
+                                <span class="scenario-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span>
                                 <span class="scenario-title">Negative Amount</span>
                                 <span class="scenario-desc">-₱100.0000 (Violates @Positive)</span>
                             </button>
                             <button class="scenario-btn" onclick="testScenario('malformed')">
-                                <span class="scenario-icon">⚠️</span>
+                                <span class="scenario-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span>
                                 <span class="scenario-title">Malformed JSON Schema</span>
                                 <span class="scenario-desc">Unparseable String in numeric field</span>
                             </button>
@@ -448,7 +460,7 @@
                     <div class="card-header">
                         <h2 class="card-title">@Scheduled Cross-Database Reconciliation Service</h2>
                         <button class="btn-primary" onclick="triggerScheduledReconciliation()">
-                            ⚡ Run Scheduled Sweep Now (@Scheduled 15-Min)
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 6px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Run Scheduled Sweep Now (@Scheduled 15-Min)
                         </button>
                     </div>
                     <p class="section-subtitle">
@@ -486,28 +498,28 @@
                     <!-- SLA Summary Cards -->
                     <div class="sla-metrics-grid">
                         <div class="sla-card">
-                            <div class="sla-icon">🚀</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
                             <div class="sla-metric" id="metric-tps">&ge;800 TPS</div>
                             <div class="sla-label">Throughput Target</div>
                             <div class="sla-badge status-good">SLA Met (Peak Concurrent)</div>
                         </div>
 
                         <div class="sla-card">
-                            <div class="sla-icon">⏱️</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
                             <div class="sla-metric" id="metric-p95">&le;12.8 ms</div>
                             <div class="sla-label">P95 Latency (&le;50ms SLA)</div>
                             <div class="sla-badge status-good">95% &le; 50ms</div>
                         </div>
 
                         <div class="sla-card">
-                            <div class="sla-icon">⚡</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg></div>
                             <div class="sla-metric" id="metric-redis">0.42 ms</div>
                             <div class="sla-label">Redis In-Memory (&le;5ms SLA)</div>
                             <div class="sla-badge status-good">Turnaround &le; 5ms</div>
                         </div>
 
                         <div class="sla-card">
-                            <div class="sla-icon">🏊</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg></div>
                             <div class="sla-metric" id="metric-hikari">30 / 5</div>
                             <div class="sla-label">HikariCP Max / Min-Idle</div>
                             <div class="sla-badge">Pool Isolated</div>
@@ -559,31 +571,31 @@
                 </div>
             </section>
 
-            <!-- TAB 7: USER & CUSTOMER MANAGEMENT -->
+            <!-- TAB: MANAGE USERS & ROLES -->
             <section id="tab-customers" class="tab-panel">
                 <div class="concurrency-container">
                     <!-- Executive Operations KPIs -->
                     <div class="sla-metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 1.5rem;">
                         <div class="sla-card">
-                            <div class="sla-icon">🏦</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"></line><line x1="3" y1="10" x2="21" y2="10"></line><polyline points="3" 10 12 3 21 10"></polyline><line x1="6" y1="10" x2="6" y2="21"></line><line x1="10" y1="10" x2="10" y2="21"></line><line x1="14" y1="10" x2="14" y2="21"></line><line x1="18" y1="10" x2="18" y2="21"></line></svg></div>
                             <div class="sla-metric" id="kpi-total-liquidity">₱0.00</div>
                             <div class="sla-label">Total System Deposits (PHP)</div>
                             <div class="sla-badge status-good">Oracle Master State</div>
                         </div>
                         <div class="sla-card">
-                            <div class="sla-icon">👥</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
                             <div class="sla-metric" id="kpi-total-customers">0</div>
                             <div class="sla-label">Registered Customers</div>
                             <div class="sla-badge">Identity Store</div>
                         </div>
                         <div class="sla-card">
-                            <div class="sla-icon">💳</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></div>
                             <div class="sla-metric" id="kpi-total-accounts">0</div>
                             <div class="sla-label">Active Bank Accounts</div>
                             <div class="sla-badge status-good">Checked (>= 0)</div>
                         </div>
                         <div class="sla-card">
-                            <div class="sla-icon">🛡️</div>
+                            <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
                             <div class="sla-metric">8 / 8 UP</div>
                             <div class="sla-label">Microservices Mesh</div>
                             <div class="sla-badge status-good">100% Operational</div>
@@ -592,13 +604,14 @@
 
                     <!-- Customer Directory Card -->
                     <div class="section-card">
-                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                             <div>
-                                <h3 class="card-title">Customer & Account Directory</h3>
-                                <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">Real-time view of customer profiles, accounts, balances, and operational status in Oracle XE 21c.</p>
+                                <h3 class="card-title">User Management, Roles &amp; Account Controls</h3>
+                                <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">Manage users, assign RBAC security roles, configure transaction limits, and freeze/unfreeze accounts.</p>
                             </div>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <button class="btn-primary" onclick="loadAllCustomers()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">🔄 Refresh Directory</button>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <input type="text" id="cust-search-input" class="form-control" placeholder="Search user, name, email..." oninput="filterCustomerTable()" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; max-width: 220px;">
+                                <button class="btn-primary" onclick="loadAllCustomers()" style="padding: 0.5rem 1rem; font-size: 0.85rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Refresh Directory</button>
                             </div>
                         </div>
 
@@ -607,19 +620,183 @@
                                 <thead>
                                     <tr>
                                         <th>Cust ID</th>
-                                        <th>Customer Name</th>
-                                        <th>Username / Email</th>
-                                        <th>Contact No.</th>
-                                        <th>Accounts &amp; Types</th>
-                                        <th>Total Balance (PHP)</th>
-                                        <th>Status</th>
-                                        <th>Admin Actions</th>
+                                        <th>Customer Details</th>
+                                        <th>Assigned Roles</th>
+                                        <th>Accounts &amp; Status</th>
+                                        <th>Configured Limits</th>
+                                        <th>Account Status</th>
+                                        <th>Admin Controls</th>
                                     </tr>
                                 </thead>
                                 <tbody id="customer-table-body">
                                     <tr>
-                                        <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading customer directory from Oracle XE...</td>
+                                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading customer directory from Oracle XE...</td>
                                     </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: MONITOR TRANSACTIONS -->
+            <section id="tab-transactions" class="tab-panel">
+                <div class="section-card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                        <div>
+                            <h2 class="card-title">Real-Time Ledger Transaction Monitor</h2>
+                            <p class="section-subtitle" style="margin-top: 0.2rem;">Live monitoring of incoming mutations, digital rails (InstaPay, PESONet, QR Ph), and transaction statuses across all accounts.</p>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <select id="monitor-status-filter" class="form-control" onchange="renderTransactionMonitor()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+                                <option value="ALL">All Statuses</option>
+                                <option value="SUCCESS">Committed (SUCCESS)</option>
+                                <option value="FAILED">Blocked / Insufficient Funds</option>
+                            </select>
+                            <select id="monitor-type-filter" class="form-control" onchange="renderTransactionMonitor()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+                                <option value="ALL">All Mutation Types</option>
+                                <option value="TRANSFER">Fund Transfers</option>
+                                <option value="CREDIT">Credits &amp; Deposits</option>
+                                <option value="DEBIT">Debits &amp; Payments</option>
+                            </select>
+                            <button class="btn-primary" onclick="loadRecentTransactions()" style="padding: 0.5rem 1rem; font-size: 0.85rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Refresh Monitor</button>
+                        </div>
+                    </div>
+
+                    <div class="telemetry-table-wrap" style="margin-top: 1.25rem;">
+                        <table class="recon-table" id="monitor-transactions-table">
+                            <thead>
+                                <tr>
+                                    <th>Ref Number</th>
+                                    <th>Timestamp (DD/MM/YYYY)</th>
+                                    <th>Account Number</th>
+                                    <th>Transaction Type &amp; Rail</th>
+                                    <th>Amount (PHP)</th>
+                                    <th>Idempotency Token</th>
+                                    <th>Ledger Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monitor-transactions-body">
+                                <!-- Dynamically populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: VIEW AUDIT LOGS -->
+            <section id="tab-audit" class="tab-panel">
+                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                    <!-- Synchronous Oracle XE Audit -->
+                    <div class="section-card">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3 class="card-title">Oracle XE Synchronous Security Audit</h3>
+                                <span class="badge-chip pill-oracle">Local ACID Non-Repudiation</span>
+                            </div>
+                            <button class="btn-secondary" onclick="loadInitialAuditLogs()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Refresh</button>
+                        </div>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem;">Committed synchronously in the same transaction as balance mutations on Oracle XE.</p>
+                        <div class="log-stream-box" id="audit-tab-oracle-logs" style="max-height: 480px; overflow-y: auto;">
+                            <!-- Dynamically populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- PostgreSQL Double-Entry Immutable Ledger Audit -->
+                    <div class="section-card">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3 class="card-title">PostgreSQL Double-Entry Audit Trail</h3>
+                                <span class="badge-chip pill-postgres">Append-Only Kafka Stream</span>
+                            </div>
+                            <button class="btn-secondary" onclick="loadPostgresAuditLogs()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Refresh</button>
+                        </div>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem;">Consumed asynchronously from Kafka topic <code>ledger.transaction.events</code> and stored with before/after balances.</p>
+                        <div class="log-stream-box" id="audit-tab-postgres-logs" style="max-height: 480px; overflow-y: auto;">
+                            <!-- Dynamically populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: GENERATE REPORTS -->
+            <section id="tab-reports" class="tab-panel">
+                <div class="section-card">
+                    <div class="card-header">
+                        <h2 class="card-title">Audit, Settlement &amp; Reconciliation Report Generator</h2>
+                        <span class="badge-chip">Banking Compliance Standards</span>
+                    </div>
+                    <p class="section-subtitle">
+                        Generate and download production-grade compliance reports, cross-database drift audits, and settlement summaries.
+                    </p>
+
+                    <div class="sla-metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin: 1.5rem 0;">
+                        <div class="sla-card">
+                            <div class="sla-metric" id="report-stat-reconciled">100%</div>
+                            <div class="sla-label">Reconciliation Rate</div>
+                            <div class="sla-badge status-good">0 Drift Detected</div>
+                        </div>
+                        <div class="sla-card">
+                            <div class="sla-metric" id="report-stat-txcount">1,240</div>
+                            <div class="sla-label">Total Verified Mutations</div>
+                            <div class="sla-badge status-good">Oracle &bull; Postgres Aligned</div>
+                        </div>
+                        <div class="sla-card">
+                            <div class="sla-metric" id="report-stat-fees">₱0.00</div>
+                            <div class="sla-label">Total Fees Surcharged</div>
+                            <div class="sla-badge">Free Digital Rails</div>
+                        </div>
+                        <div class="sla-card">
+                            <div class="sla-metric" id="report-stat-security">100%</div>
+                            <div class="sla-label">Audit Non-Repudiation</div>
+                            <div class="sla-badge status-good">OWASP Compliant</div>
+                        </div>
+                    </div>
+
+                    <!-- Report Actions Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 1.5rem;">
+                        <div class="section-card" style="background: var(--bg-card-highlight); border: 1px solid var(--border-rose-medium); padding: 1.25rem;">
+                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Cross-Database Reconciliation Report</h4>
+                            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Compares master state in Oracle XE vs audit logs in PostgreSQL to certify balance integrity.</p>
+                            <button class="btn-primary" onclick="exportReconciliationReportCSV()" style="width: 100%; justify-content: center; font-size: 0.85rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download Reconciliation CSV
+                            </button>
+                        </div>
+
+                        <div class="section-card" style="background: var(--bg-card-highlight); border: 1px solid var(--border-rose-medium); padding: 1.25rem;">
+                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Immutable Ledger Audit Trail</h4>
+                            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Complete double-entry export with before/after balance snapshots, customer IDs, and hashes.</p>
+                            <button class="btn-primary" onclick="exportAuditTrailCSV()" style="width: 100%; justify-content: center; font-size: 0.85rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download Audit Trail CSV
+                            </button>
+                        </div>
+
+                        <div class="section-card" style="background: var(--bg-card-highlight); border: 1px solid var(--border-rose-medium); padding: 1.25rem;">
+                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Daily Rail Settlement Summary</h4>
+                            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Aggregated turnover, transaction count, and clearing status for InstaPay, PESONet &amp; Internal.</p>
+                            <button class="btn-primary" onclick="exportSettlementSummaryCSV()" style="width: 100%; justify-content: center; font-size: 0.85rem;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download Settlement CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Report Preview Container -->
+                    <div style="margin-top: 2rem;">
+                        <h3 class="card-title" style="margin-bottom: 0.75rem;">Report Preview &amp; Reconciliation Table</h3>
+                        <div class="recon-table-wrap">
+                            <table class="recon-table">
+                                <thead>
+                                    <tr>
+                                        <th>Recon Record</th>
+                                        <th>Transaction Ref</th>
+                                        <th>Oracle XE Ledger Status</th>
+                                        <th>PostgreSQL Audit Status</th>
+                                        <th>Drift Audit Outcome</th>
+                                        <th>Timestamp</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-preview-tbody">
+                                    <!-- Populated dynamically -->
                                 </tbody>
                             </table>
                         </div>
@@ -630,28 +807,87 @@
     </div>
 
     <!-- Modals -->
-    <!-- Balance Adjustment Modal -->
-    <div id="modal-balance-adjust" class="modal-backdrop">
+    <!-- Manage Roles Modal -->
+    <div id="modal-manage-roles" class="modal-backdrop">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>Adjust Account Balance (Admin Override)</h3>
-                <button class="btn-close" onclick="closeModal('modal-balance-adjust')">&times;</button>
+                <h3>Manage User Security Roles</h3>
+                <button class="btn-close" onclick="closeModal('modal-manage-roles')">&times;</button>
             </div>
             <div class="modal-body">
-                <p>Set a new balance for testing concurrency or balance limits:</p>
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label>Account Number:</label>
-                    <input type="text" id="adjust-acc-num" class="input-field" readonly style="background: rgba(0,0,0,0.05);">
+                <p>Configure role-based access control (RBAC) permissions for <strong id="role-user-name">User</strong>:</p>
+                <div style="display: flex; flex-direction: column; gap: 0.85rem; margin-top: 1.25rem;">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem; background: var(--bg-card-subtle); border-radius: var(--radius-sm); cursor: pointer;">
+                        <input type="checkbox" id="role-check-customer" value="ROLE_CUSTOMER">
+                        <div>
+                            <strong>ROLE_CUSTOMER</strong>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Standard retail banking user, account holder, and transfer permissions.</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem; background: var(--bg-card-subtle); border-radius: var(--radius-sm); cursor: pointer;">
+                        <input type="checkbox" id="role-check-admin" value="ROLE_ADMIN">
+                        <div>
+                            <strong>ROLE_ADMIN</strong>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Operations officer, role management, limits configuration, and account freeze control.</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem; background: var(--bg-card-subtle); border-radius: var(--radius-sm); cursor: pointer;">
+                        <input type="checkbox" id="role-check-auditor" value="ROLE_AUDITOR">
+                        <div>
+                            <strong>ROLE_AUDITOR</strong>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Compliance officer, read-only audit log inspection, and report generation.</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem; background: var(--bg-card-subtle); border-radius: var(--radius-sm); cursor: pointer;">
+                        <input type="checkbox" id="role-check-teller" value="ROLE_TELLER">
+                        <div>
+                            <strong>ROLE_TELLER</strong>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Branch teller, customer profile lookup, and counter service operations.</div>
+                        </div>
+                    </label>
                 </div>
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label>New Target Balance (PHP):</label>
-                    <input type="number" step="0.0001" min="0" id="adjust-target-balance" class="input-field" placeholder="e.g. 50000.0000">
-                </div>
-                <input type="hidden" id="adjust-acc-id">
+                <input type="hidden" id="role-cust-id">
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" onclick="closeModal('modal-balance-adjust')">Cancel</button>
-                <button class="btn-primary" onclick="submitBalanceAdjustment()">Save Balance</button>
+                <button class="btn-secondary" onclick="closeModal('modal-manage-roles')">Cancel</button>
+                <button class="btn-primary" onclick="saveUserRoles()">Save Roles</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configure Limits Modal -->
+    <div id="modal-configure-limits" class="modal-backdrop">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Configure Transaction &amp; Transfer Limits</h3>
+                <button class="btn-close" onclick="closeModal('modal-configure-limits')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Set financial velocity and anti-fraud transfer limits for <strong id="limit-cust-name">Customer</strong>:</p>
+                <div class="form-group" style="margin-top: 1.25rem;">
+                    <label>Daily Cumulative Transfer Limit (PHP / ₱):</label>
+                    <input type="number" step="1000" min="1000" id="limit-daily-transfer" class="form-control" placeholder="50000.00">
+                    <small style="color: var(--text-muted); font-size: 0.72rem;">Maximum transfer total allowed across all channels in 24 hours.</small>
+                </div>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Per-Transaction Transfer Limit (PHP / ₱):</label>
+                    <input type="number" step="500" min="100" id="limit-per-transaction" class="form-control" placeholder="25000.00">
+                    <small style="color: var(--text-muted); font-size: 0.72rem;">Maximum amount allowed per single outgoing transaction.</small>
+                </div>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Digital Rail Channel Restrictions:</label>
+                    <select id="limit-rail-channel" class="form-control">
+                        <option value="ALL">All Rails Active (InstaPay + PESONet + QR Ph)</option>
+                        <option value="INSTAPAY_ONLY">InstaPay Real-Time Only (Max ₱50k)</option>
+                        <option value="PESONET_ONLY">PESONet Batch Only (High Volume)</option>
+                        <option value="INTERNAL_ONLY">Internal PayPink Accounts Only</option>
+                    </select>
+                </div>
+                <input type="hidden" id="limit-cust-id">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('modal-configure-limits')">Cancel</button>
+                <button class="btn-primary" onclick="saveUserLimits()">Save Limits</button>
             </div>
         </div>
     </div>
@@ -678,7 +914,7 @@
     <div id="modal-receipt" class="modal-backdrop">
         <div class="modal-card receipt-card">
             <div class="receipt-header">
-                <div class="receipt-icon">🎉</div>
+                <div class="receipt-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
                 <h3>Ledger Mutation Successful</h3>
                 <div class="receipt-ref" id="receipt-ref-no">TX-PH-1700000000000</div>
             </div>
@@ -691,8 +927,11 @@
         </div>
     </div>
 
+    <!-- Admin Real-Time Toast Notification -->
+    <div id="admin-toast" class="admin-toast" hidden></div>
+
     <!-- Script -->
-    <script src="src/js/app.js?v=20260928-admin-1"></script>
-    <script src="admin/admin.js?v=20260928-admin-1"></script>
+    <script src="src/js/app.js?v=20260929-admin-sync"></script>
+    <script src="admin/admin.js?v=20260929-admin-sync"></script>
 </body>
 </html>

@@ -464,6 +464,29 @@ async function sendTransfer() {
     form.receipt = receipt; form.review = null;
     await refresh();
     toast('Transfer complete. The receiving account has been credited.');
+
+    // Real-time synchronization broadcast across banking and admin tabs
+    try {
+      const syncEvent = {
+        type: 'CUSTOMER_TRANSFER',
+        reference: receipt.reference,
+        sourceAccountId: request.sourceAccountId,
+        destinationAccountNumber: request.destinationAccountNumber,
+        amount: request.amount,
+        currency: receipt.currency || 'PHP',
+        status: receipt.status || 'SUCCESS',
+        date: receipt.date || new Date().toISOString(),
+        recipientName: receipt.recipientName || 'PayPink customer',
+        timestamp: Date.now()
+      };
+      if (window.BroadcastChannel) {
+        new BroadcastChannel('paypink_ledger_channel').postMessage(syncEvent);
+      }
+      localStorage.setItem('paypink_last_transfer_event', JSON.stringify(syncEvent));
+      localStorage.setItem('paypink_sync_timestamp', String(Date.now()));
+    } catch (broadcastErr) {
+      console.warn('Real-time sync broadcast notice:', broadcastErr);
+    }
   } catch (error) {
     if (generation !== state.generation || !state.session) return;
     form.error = error.message;
@@ -481,7 +504,7 @@ function transferReceipt(receipt) {
 
 function recipientPicker() {
   const directory = state.recipients;
-  const list = (items, title) => `<div class="recipient-list"><h3>${title}</h3>${items.length ? items.map(recipient => `<div class="recipient-option"><button type="button" data-action="choose-recipient" data-number="${escapeHtml(recipient.accountNumber)}"><span class="avatar">${escapeHtml(recipient.fullName.slice(0,1))}</span><span><strong>${escapeHtml(recipient.fullName)}</strong><small>${escapeHtml(maskedNumber(recipient.accountNumber))}</small></span></button><button type="button" class="favorite-toggle ${recipient.favorite ? 'saved' : ''}" data-action="favorite-recipient" data-number="${escapeHtml(recipient.accountNumber)}" data-saved="${recipient.favorite}" aria-label="${recipient.favorite ? 'Remove favorite' : 'Save favorite'} ${escapeHtml(recipient.fullName)} ${escapeHtml(recipient.accountNumber.slice(-4))}" aria-pressed="${recipient.favorite}">${recipient.favorite ? '★' : '☆'}</button></div>`).join('') : `<p class="recipient-empty">${title === 'Favorites' ? 'Save an account with the star to find it here.' : 'Accounts you transfer with will appear here.'}</p>`}</div>`;
+  const list = (items, title) => `<div class="recipient-list"><h3>${title}</h3>${items.length ? items.map(recipient => `<div class="recipient-option"><button type="button" data-action="choose-recipient" data-number="${escapeHtml(recipient.accountNumber)}"><span class="avatar">${escapeHtml(recipient.fullName.slice(0,1))}</span><span><strong>${escapeHtml(recipient.fullName)}</strong><small>${escapeHtml(maskedNumber(recipient.accountNumber))}</small></span></button><button type="button" class="favorite-toggle ${recipient.favorite ? 'saved' : ''}" data-action="favorite-recipient" data-number="${escapeHtml(recipient.accountNumber)}" data-saved="${recipient.favorite}" aria-label="${recipient.favorite ? 'Remove favorite' : 'Save favorite'} ${escapeHtml(recipient.fullName)} ${escapeHtml(recipient.accountNumber.slice(-4))}" aria-pressed="${recipient.favorite}">${icon(recipient.favorite ? 'star-filled' : 'star')}</button></div>`).join('') : `<p class="recipient-empty">${title === 'Favorites' ? 'Save an account with the star to find it here.' : 'Accounts you transfer with will appear here.'}</p>`}</div>`;
   return `<details class="recipient-picker"><summary>Choose from favorites or recent recipients</summary>${directory.error ? `<p class="form-error">${escapeHtml(directory.error)} Use Refresh to try again.</p>` : list(directory.favorites,'Favorites') + list(directory.recent,'Recent recipients')}</details>`;
 }
 
@@ -492,7 +515,7 @@ function recipientStatus() {
   if (form.lookupError) return `<p class="form-error" role="alert">${escapeHtml(form.lookupError)}</p>`;
   const recipient = form.recipient;
   if (!recipient) return '';
-  return `<div class="verified-recipient"><div><small>Recipient name</small><strong>${escapeHtml(recipient.fullName)}</strong><span>${icon('check')} Account found · ${escapeHtml(maskedNumber(recipient.accountNumber))}</span></div><button type="button" class="favorite-toggle ${recipient.favorite ? 'saved' : ''}" data-action="favorite-recipient" data-number="${escapeHtml(recipient.accountNumber)}" data-saved="${recipient.favorite}" aria-label="${recipient.favorite ? 'Remove favorite' : 'Save favorite'}" aria-pressed="${recipient.favorite}">${recipient.favorite ? '★' : '☆'}</button></div>`;
+  return `<div class="verified-recipient"><div><small>Recipient name</small><strong>${escapeHtml(recipient.fullName)}</strong><span>${icon('check')} Account found · ${escapeHtml(maskedNumber(recipient.accountNumber))}</span></div><button type="button" class="favorite-toggle ${recipient.favorite ? 'saved' : ''}" data-action="favorite-recipient" data-number="${escapeHtml(recipient.accountNumber)}" data-saved="${recipient.favorite}" aria-label="${recipient.favorite ? 'Remove favorite' : 'Save favorite'}" aria-pressed="${recipient.favorite}">${icon(recipient.favorite ? 'star-filled' : 'star')}</button></div>`;
 }
 function renderRecipientStatus() {
   const node = document.querySelector('#recipient-status');

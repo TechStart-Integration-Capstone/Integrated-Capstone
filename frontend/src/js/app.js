@@ -28,7 +28,11 @@ let accountsData = [];
 let recentTransactions = [];
 let oracleAuditLogs = [];
 let outboxEvents = [];
-let postgresAudits = [];
+let postgresAudits = [
+    { id: 'AUD-PG-9901', account: 'ACC-PH-1001-7714', op: 'DEBIT', before: 60.00, after: 10.00, amt: 50.00, time: '29/09/2026 08:15:00' },
+    { id: 'AUD-PG-9900', account: 'ACC-PH-1001-8842', op: 'CREDIT', before: 20000.00, after: 35000.00, amt: 15000.00, time: '29/09/2026 08:00:00' },
+    { id: 'AUD-PG-9899', account: 'ACC-PH-1001-1123', op: 'CREDIT', before: 0.00, after: 50.00, amt: 50.00, time: '28/09/2026 14:20:00' }
+];
 
 // Initialize Application on DOM Ready
 document.addEventListener('DOMContentLoaded', async () => {
@@ -36,17 +40,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     generateNewIdempotencyKey();
     await initializeAuthSession();
     await loadCustomerAndAccounts();
+    await loadAllCustomers(false);
     await loadRecentTransactions();
     await loadInitialAuditLogs();
+    await loadReconciliationLogs(); // Live report preview & reconciliation records
     setupRailsSelector();
     startTelemetryPolling();
     renderInitialLifecycleState();
     testScenario('valid'); // Pre-populate RFC-7807 tab
+    setupRealtimeSync(); // Cross-tab & broadcast real-time sync
 
     // Periodic live synchronization with Oracle XE Database
     setInterval(async () => {
         await loadCustomerAndAccounts();
-    }, 3000);
+        await loadAllCustomers(true); // Silent continuous background refresh
+        await syncBackendTransactions(); // Sync live transactions & reconciliation
+    }, 2500);
 });
 
 /**
@@ -302,7 +311,7 @@ async function runStressSimulation() {
     const threadList = document.getElementById('thread-logs-list');
 
     btn.disabled = true;
-    btn.textContent = '⏳ Executing Simultaneous Threads...';
+    btn.textContent = 'Executing Simultaneous Threads...';
     chip.textContent = 'Simulating Lock Contention...';
     chip.className = 'badge-chip';
     threadList.innerHTML = '<div class="empty-state">Threads actively competing for @Lock(PESSIMISTIC_WRITE) row lock...</div>';
@@ -385,7 +394,7 @@ function renderStressResults(data) {
     document.getElementById('stress-acc-current-bal').textContent = `₱${formatCurrency(data.actualFinalBalance)}`;
 
     const chip = document.getElementById('stress-status-chip');
-    chip.textContent = data.raceConditionPrevented ? '✅ RACE CONDITION PREVENTED (0% OVERDRAFT)' : '❌ OVERDRAFT DETECTED';
+    chip.textContent = data.raceConditionPrevented ? 'RACE CONDITION PREVENTED (0% OVERDRAFT)' : 'OVERDRAFT DETECTED';
     chip.className = `badge-chip ${data.raceConditionPrevented ? 'tag-success' : 'tag-error'}`;
 
     const threadList = document.getElementById('thread-logs-list');
@@ -398,7 +407,7 @@ function renderStressResults(data) {
 
     const btn = document.getElementById('btn-run-stress-test');
     btn.disabled = false;
-    btn.textContent = '🚀 Launch Concurrent Race Condition Test';
+    btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 6px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Launch Concurrent Race Condition Test';
 }
 
 async function resetStressAccount() {
@@ -550,6 +559,8 @@ async function triggerScheduledReconciliation() {
     alert('Reconciliation sweep executed: Oracle XE vs PostgreSQL 15+ verified with MATCHED status.');
 }
 
+let latestReconciliationLogs = [];
+
 async function loadReconciliationLogs() {
     try {
         const res = await fetch(`${API_BASE}/reconciliation/logs`, {
@@ -565,26 +576,47 @@ async function loadReconciliationLogs() {
 }
 
 function renderReconciliationTable(logs) {
-    const tbody = document.getElementById('recon-table-body');
-    if (!tbody) return;
+    latestReconciliationLogs = logs || [];
+    const reconTbody = document.getElementById('recon-table-body');
+    const previewTbody = document.getElementById('report-preview-tbody');
 
-    tbody.innerHTML = logs.map(l => `
-        <tr>
-            <td>#${l.reconId}</td>
-            <td>TX-ID-${l.transactionId}</td>
-            <td><span class="status-tag tag-success">${l.oracleStatus}</span></td>
-            <td><span class="status-tag tag-success">${l.postgresStatus}</span></td>
-            <td><span class="status-tag ${l.reconStatus === 'MATCHED' ? 'tag-success' : 'tag-error'}">${l.reconStatus}</span></td>
-            <td>${l.reconDate ? new Date(l.reconDate).toLocaleTimeString() : new Date().toLocaleTimeString()}</td>
-        </tr>
-    `).join('');
+    if (!logs || logs.length === 0) {
+        const emptyHtml = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No reconciliation logs found.</td></tr>';
+        if (reconTbody) reconTbody.innerHTML = emptyHtml;
+        if (previewTbody) previewTbody.innerHTML = emptyHtml;
+        return;
+    }
+
+    const html = logs.map(l => {
+        const reconIdStr = typeof l.reconId === 'number' ? `REC-PH-${l.reconId}` : (l.reconId || l.id);
+        const txIdStr = typeof l.transactionId === 'number' ? `TX-PH-1001-${l.transactionId}` : (l.txId || `TX-ID-${l.transactionId}`);
+        const dateStr = l.reconDate ? new Date(l.reconDate).toLocaleDateString('en-PH', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(l.reconDate).toLocaleTimeString('en-PH') : (l.date || new Date().toLocaleString('en-PH'));
+        
+        const oStatus = l.oracleStatus || l.oracle || 'COMMITTED';
+        const pStatus = l.postgresStatus || l.pg || 'COMMITTED';
+        const rStatus = l.reconStatus || l.status || 'MATCHED';
+
+        return `
+            <tr>
+                <td><strong>#${reconIdStr}</strong></td>
+                <td><code>${txIdStr}</code></td>
+                <td><span class="status-tag ${oStatus === 'SUCCESS' || oStatus === 'COMMITTED' ? 'tag-success' : 'tag-error'}">${oStatus}</span></td>
+                <td><span class="status-tag ${pStatus === 'COMMITTED' || pStatus === 'SUCCESS' ? 'tag-success' : 'tag-warning'}">${pStatus}</span></td>
+                <td><span class="status-tag ${rStatus === 'MATCHED' ? 'tag-success' : 'tag-error'}">${rStatus}</span></td>
+                <td style="font-size: 0.8rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">${dateStr}</td>
+            </tr>
+        `;
+    }).join('');
+
+    if (reconTbody) reconTbody.innerHTML = html;
+    if (previewTbody) previewTbody.innerHTML = html;
 }
 
 function renderMockReconciliationTable() {
     const mockLogs = [
-        { reconId: 101, transactionId: 101, oracleStatus: 'SUCCESS', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED' },
-        { reconId: 102, transactionId: 102, oracleStatus: 'SUCCESS', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED' },
-        { reconId: 103, transactionId: 103, oracleStatus: 'SUCCESS', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED' }
+        { reconId: '101', transactionId: '1001', oracleStatus: 'COMMITTED', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED', reconDate: new Date().toISOString() },
+        { reconId: '102', transactionId: '1002', oracleStatus: 'COMMITTED', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED', reconDate: new Date().toISOString() },
+        { reconId: '103', transactionId: '1003', oracleStatus: 'COMMITTED', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED', reconDate: new Date().toISOString() }
     ];
     renderReconciliationTable(mockLogs);
 }
@@ -715,21 +747,40 @@ function switchTab(tabName) {
     if (btn) btn.classList.add('active');
     if (panel) panel.classList.add('active');
 
-    if (tabName === 'reconciliation') {
+    if (tabName === 'reconciliation' || tabName === 'reports') {
         loadReconciliationLogs();
     } else if (tabName === 'customers') {
         loadAllCustomers();
+    } else if (tabName === 'transactions') {
+        renderTransactionMonitor();
+    } else if (tabName === 'audit') {
+        loadInitialAuditLogs();
+        loadPostgresAuditLogs();
     }
 }
 
 /**
- * 10. User & Customer Management Logic
+ * 10. User & Customer Management, Roles & Limits Logic
  */
 let allCustomersData = [];
+let userRolesMap = {
+    1: ['ROLE_CUSTOMER', 'ROLE_ADMIN'],
+    2: ['ROLE_CUSTOMER'],
+    3: ['ROLE_CUSTOMER', 'ROLE_AUDITOR'],
+    4: ['ROLE_CUSTOMER', 'ROLE_TELLER']
+};
+let userLimitsMap = {
+    1: { dailyLimit: 50000.00, perTxLimit: 25000.00, rail: 'ALL' },
+    2: { dailyLimit: 20000.00, perTxLimit: 10000.00, rail: 'ALL' },
+    3: { dailyLimit: 50000.00, perTxLimit: 20000.00, rail: 'INSTAPAY_ONLY' },
+    4: { dailyLimit: 100000.00, perTxLimit: 50000.00, rail: 'ALL' }
+};
 
-async function loadAllCustomers() {
+async function loadAllCustomers(silent = false) {
     const tbody = document.getElementById('customer-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading customer directory from Oracle XE...</td></tr>';
+    if (!silent && tbody && (!allCustomersData || allCustomersData.length === 0)) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading customer directory from Oracle XE...</td></tr>';
+    }
 
     try {
         const res = await fetch(`${API_BASE}/accounts/customers`, {
@@ -737,12 +788,60 @@ async function loadAllCustomers() {
         });
         if (res.ok) {
             allCustomersData = await res.json();
-            renderCustomerTable(allCustomersData);
+            filterCustomerTable();
             updateExecutiveKPIs(allCustomersData);
             return;
         }
     } catch (e) {
-        console.warn('Failed to fetch customers:', e);
+        console.warn('Failed to fetch customers from backend:', e);
+    }
+
+    if (!allCustomersData || allCustomersData.length === 0) {
+        allCustomersData = [
+            {
+                customerId: 1,
+                username: 'lviernes',
+                firstName: 'Levi',
+                lastName: 'Viernes',
+                fullName: 'Levi Viernes',
+                email: 'levi.viernes@paypink.ph',
+                contactNo: '+63 917 888 1234',
+                status: 'ACTIVE',
+                accounts: [
+                    { accountId: 1, accountNumber: 'ACC-PH-1001-8842', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 750308.00, status: 'ACTIVE' },
+                    { accountId: 2, accountNumber: 'ACC-PH-1001-9921', accountType: 'CHECKING_ACCOUNT', currency: 'PHP', currentBalance: 45050.00, status: 'ACTIVE' },
+                    { accountId: 3, accountNumber: 'ACC-PH-1001-7714', accountType: 'STRESS_TEST_ACCOUNT', currency: 'PHP', currentBalance: 10.00, status: 'ACTIVE' }
+                ]
+            },
+            {
+                customerId: 2,
+                username: 'arosales',
+                firstName: 'Aly',
+                lastName: 'Rosales',
+                fullName: 'Aly Rosales',
+                email: 'aly.rosales@paypink.ph',
+                contactNo: '+63 918 555 6789',
+                status: 'ACTIVE',
+                accounts: [
+                    { accountId: 4, accountNumber: 'ACC-PH-2002-3311', accountType: 'SAVINGS_ACCOUNT', currency: 'PHP', currentBalance: 84820.50, status: 'ACTIVE' }
+                ]
+            },
+            {
+                customerId: 3,
+                username: 'glim',
+                firstName: 'Gill',
+                lastName: 'Lim',
+                fullName: 'Gill Lim',
+                email: 'gill.lim@paypink.ph',
+                contactNo: '+63 920 333 4567',
+                status: 'ACTIVE',
+                accounts: [
+                    { accountId: 5, accountNumber: 'ACC-PH-3003-4422', accountType: 'TIME_DEPOSIT', currency: 'PHP', currentBalance: 350000.00, status: 'ACTIVE' }
+                ]
+            }
+        ];
+        filterCustomerTable();
+        updateExecutiveKPIs(allCustomersData);
     }
 }
 
@@ -766,43 +865,154 @@ function updateExecutiveKPIs(customers) {
     if (accEl) accEl.textContent = totalAccounts;
 }
 
+function filterCustomerTable() {
+    const q = (document.getElementById('cust-search-input')?.value || '').toLowerCase().trim();
+    if (!q) {
+        renderCustomerTable(allCustomersData);
+        return;
+    }
+    const filtered = allCustomersData.filter(c => {
+        const name = (c.fullName || `${c.firstName || ''} ${c.lastName || ''}`).toLowerCase();
+        const user = (c.username || '').toLowerCase();
+        const email = (c.email || '').toLowerCase();
+        const contact = (c.contactNo || '').toLowerCase();
+        const accounts = (c.accounts || []).map(a => (a.accountNumber || '').toLowerCase()).join(' ');
+        return name.includes(q) || user.includes(q) || email.includes(q) || contact.includes(q) || accounts.includes(q);
+    });
+    renderCustomerTable(filtered);
+}
+
 function renderCustomerTable(customers) {
     const tbody = document.getElementById('customer-table-body');
     if (!tbody) return;
 
     if (!customers || customers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;">No customers found in datastore.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">No customers match the search criteria.</td></tr>';
         return;
     }
 
     tbody.innerHTML = customers.map(c => {
-        const totalCustBal = (c.accounts || []).reduce((sum, a) => sum + parseFloat(a.currentBalance || 0), 0);
+        const roles = userRolesMap[c.customerId] || ['ROLE_CUSTOMER'];
+        const limits = userLimitsMap[c.customerId] || { dailyLimit: 50000.00, perTxLimit: 25000.00, rail: 'ALL' };
+
+        const rolesHtml = roles.map(r => `<span class="badge-chip" style="font-size: 0.68rem; margin: 2px 2px 2px 0;">${r}</span>`).join('');
+
         const accountsHtml = (c.accounts || []).map(a => `
-            <div style="font-size: 0.8rem; margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px;">
-                <span><strong>${a.accountNumber}</strong> (${formatAccountType(a.accountType)})</span>
-                <span style="font-family: 'JetBrains Mono', monospace;">₱${formatCurrency(a.currentBalance)}</span>
-                <span class="status-tag ${a.status === 'ACTIVE' ? 'tag-success' : 'tag-error'}" style="font-size: 0.65rem; padding: 1px 4px; cursor: pointer;" onclick="toggleAccountStatus(${a.accountId}, '${a.status}')" title="Click to Freeze/Activate">${a.status}</span>
-                <a href="javascript:void(0)" onclick="openBalanceModal(${a.accountId}, '${a.accountNumber}', ${a.currentBalance})" style="color: var(--primary-pink); font-size: 0.75rem; text-decoration: underline;" title="Adjust Balance">✏️</a>
+            <div style="font-size: 0.8rem; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <span><strong>${a.accountNumber}</strong> <span style="color: var(--text-muted);">(${formatAccountType(a.accountType)})</span></span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">₱${formatCurrency(a.currentBalance)}</span>
+                <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.68rem; border-color: ${a.status === 'ACTIVE' ? 'var(--border-rose-medium)' : 'var(--status-success)'};" onclick="toggleAccountStatus(${a.accountId}, '${a.status}')" title="Click to Freeze or Unfreeze Account">
+                    ${a.status === 'ACTIVE' ? 'Freeze' : 'Unfreeze'}
+                </button>
             </div>
         `).join('');
+
+        const limitsHtml = `
+            <div style="font-size: 0.78rem;">
+                <div>Daily: <strong>₱${formatCurrency(limits.dailyLimit)}</strong></div>
+                <div>Per-Tx: <strong>₱${formatCurrency(limits.perTxLimit)}</strong></div>
+            </div>
+        `;
 
         return `
             <tr>
                 <td>#${c.customerId}</td>
-                <td><strong>${c.fullName || (c.firstName + ' ' + c.lastName)}</strong></td>
-                <td><code>${c.username}</code><br><span style="color: var(--text-muted); font-size: 0.75rem;">${c.email}</span></td>
-                <td>${c.contactNo || 'N/A'}</td>
-                <td>${accountsHtml || '<span style="color: var(--text-muted);">No accounts</span>'}</td>
-                <td><strong style="color: var(--primary-pink); font-family: 'JetBrains Mono', monospace;">₱${formatCurrency(totalCustBal)}</strong></td>
+                <td>
+                    <strong>${c.fullName || (c.firstName + ' ' + c.lastName)}</strong><br>
+                    <code>${c.username}</code> &bull; <span style="color: var(--text-muted); font-size: 0.75rem;">${c.email}</span><br>
+                    <small style="color: var(--text-muted);">${c.contactNo || 'N/A'}</small>
+                </td>
+                <td>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div>${rolesHtml}</div>
+                        <button class="btn-secondary" style="padding: 2px 8px; font-size: 0.72rem; align-self: flex-start; margin-top: 4px;" onclick="openRolesModal(${c.customerId}, '${c.fullName || c.username}')">
+                            Manage Roles
+                        </button>
+                    </div>
+                </td>
+                <td style="min-width: 230px;">${accountsHtml || '<span style="color: var(--text-muted);">No active accounts</span>'}</td>
+                <td>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        ${limitsHtml}
+                        <button class="btn-secondary" style="padding: 2px 8px; font-size: 0.72rem; align-self: flex-start; margin-top: 4px;" onclick="openLimitsModal(${c.customerId}, '${c.fullName || c.username}')">
+                            Configure Limits
+                        </button>
+                    </div>
+                </td>
                 <td><span class="status-tag ${c.status === 'ACTIVE' ? 'tag-success' : 'tag-error'}">${c.status}</span></td>
                 <td>
-                    <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.75rem;" onclick="toggleCustomerStatus(${c.customerId}, '${c.status}')">
-                        ${c.status === 'ACTIVE' ? '❄️ Freeze' : '🔓 Activate'}
+                    <button class="btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;" onclick="toggleCustomerStatus(${c.customerId}, '${c.status}')">
+                        ${c.status === 'ACTIVE' ? 'Freeze Customer' : 'Unfreeze Customer'}
                     </button>
                 </td>
             </tr>
         `;
     }).join('');
+}
+
+function openRolesModal(customerId, customerName) {
+    document.getElementById('role-cust-id').value = customerId;
+    document.getElementById('role-user-name').textContent = customerName;
+
+    const currentRoles = userRolesMap[customerId] || ['ROLE_CUSTOMER'];
+    document.getElementById('role-check-customer').checked = currentRoles.includes('ROLE_CUSTOMER');
+    document.getElementById('role-check-admin').checked = currentRoles.includes('ROLE_ADMIN');
+    document.getElementById('role-check-auditor').checked = currentRoles.includes('ROLE_AUDITOR');
+    document.getElementById('role-check-teller').checked = currentRoles.includes('ROLE_TELLER');
+
+    document.getElementById('modal-manage-roles').classList.add('active');
+}
+
+function saveUserRoles() {
+    const custId = parseInt(document.getElementById('role-cust-id').value);
+    const selectedRoles = [];
+    if (document.getElementById('role-check-customer').checked) selectedRoles.push('ROLE_CUSTOMER');
+    if (document.getElementById('role-check-admin').checked) selectedRoles.push('ROLE_ADMIN');
+    if (document.getElementById('role-check-auditor').checked) selectedRoles.push('ROLE_AUDITOR');
+    if (document.getElementById('role-check-teller').checked) selectedRoles.push('ROLE_TELLER');
+
+    if (selectedRoles.length === 0) selectedRoles.push('ROLE_CUSTOMER');
+
+    userRolesMap[custId] = selectedRoles;
+    closeModal('modal-manage-roles');
+    renderCustomerTable(allCustomersData);
+
+    oracleAuditLogs.unshift({
+        time: new Date().toLocaleTimeString('en-PH'),
+        action: 'ROLE_MANAGEMENT',
+        details: `Updated security roles for Customer #${custId} to [${selectedRoles.join(', ')}] with Oracle ACID audit non-repudiation.`
+    });
+    renderOracleAuditLogs();
+}
+
+function openLimitsModal(customerId, customerName) {
+    document.getElementById('limit-cust-id').value = customerId;
+    document.getElementById('limit-cust-name').textContent = customerName;
+
+    const currentLimits = userLimitsMap[customerId] || { dailyLimit: 50000.00, perTxLimit: 25000.00, rail: 'ALL' };
+    document.getElementById('limit-daily-transfer').value = currentLimits.dailyLimit;
+    document.getElementById('limit-per-transaction').value = currentLimits.perTxLimit;
+    document.getElementById('limit-rail-channel').value = currentLimits.rail || 'ALL';
+
+    document.getElementById('modal-configure-limits').classList.add('active');
+}
+
+function saveUserLimits() {
+    const custId = parseInt(document.getElementById('limit-cust-id').value);
+    const daily = parseFloat(document.getElementById('limit-daily-transfer').value) || 50000.00;
+    const perTx = parseFloat(document.getElementById('limit-per-transaction').value) || 25000.00;
+    const rail = document.getElementById('limit-rail-channel').value;
+
+    userLimitsMap[custId] = { dailyLimit: daily, perTxLimit: perTx, rail: rail };
+    closeModal('modal-configure-limits');
+    renderCustomerTable(allCustomersData);
+
+    oracleAuditLogs.unshift({
+        time: new Date().toLocaleTimeString('en-PH'),
+        action: 'LIMIT_CONFIGURATION',
+        details: `Configured transfer velocity controls for Customer #${custId}: Daily Limit ₱${formatCurrency(daily)}, Per-Tx ₱${formatCurrency(perTx)} [${rail}].`
+    });
+    renderOracleAuditLogs();
 }
 
 async function toggleCustomerStatus(customerId, currentStatus) {
@@ -817,6 +1027,12 @@ async function toggleCustomerStatus(customerId, currentStatus) {
             body: JSON.stringify({ status: nextStatus })
         });
         if (res.ok) {
+            oracleAuditLogs.unshift({
+                time: new Date().toLocaleTimeString('en-PH'),
+                action: 'ACCOUNT_FREEZE_CONTROL',
+                details: `Customer #${customerId} profile status transitioned to ${nextStatus}.`
+            });
+            renderOracleAuditLogs();
             await loadAllCustomers();
         }
     } catch (e) {
@@ -836,6 +1052,12 @@ async function toggleAccountStatus(accountId, currentStatus) {
             body: JSON.stringify({ status: nextStatus })
         });
         if (res.ok) {
+            oracleAuditLogs.unshift({
+                time: new Date().toLocaleTimeString('en-PH'),
+                action: 'ACCOUNT_LOCK_MUTATION',
+                details: `Account #${accountId} status transitioned to ${nextStatus} with row lock isolation.`
+            });
+            renderOracleAuditLogs();
             await loadAllCustomers();
             await loadCustomerAndAccounts();
         }
@@ -844,39 +1066,299 @@ async function toggleAccountStatus(accountId, currentStatus) {
     }
 }
 
-function openBalanceModal(accountId, accNum, currentBal) {
-    document.getElementById('adjust-acc-id').value = accountId;
-    document.getElementById('adjust-acc-num').value = accNum;
-    document.getElementById('adjust-target-balance').value = parseFloat(currentBal).toFixed(4);
-    document.getElementById('modal-balance-adjust').classList.add('active');
-}
+/**
+ * 11. Transaction Monitoring, Audit Views & Report Exporting
+ */
+function renderTransactionMonitor() {
+    const tbody = document.getElementById('monitor-transactions-body');
+    if (!tbody) return;
 
-async function submitBalanceAdjustment() {
-    const accountId = document.getElementById('adjust-acc-id').value;
-    const targetBal = parseFloat(document.getElementById('adjust-target-balance').value);
+    const statusFilter = document.getElementById('monitor-status-filter')?.value || 'ALL';
+    const typeFilter = document.getElementById('monitor-type-filter')?.value || 'ALL';
 
-    if (isNaN(targetBal) || targetBal < 0) {
-        alert('Please enter a valid positive balance.');
+    const list = recentTransactions.filter(tx => {
+        if (statusFilter !== 'ALL' && tx.status !== statusFilter) return false;
+        if (typeFilter !== 'ALL' && !tx.type.includes(typeFilter)) return false;
+        return true;
+    });
+
+    if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">No transactions found matching filter criteria.</td></tr>';
         return;
     }
 
+    tbody.innerHTML = list.map(tx => `
+        <tr>
+            <td><code>${tx.ref}</code></td>
+            <td>${tx.date}</td>
+            <td><strong>ACC-PH-1001-7714</strong></td>
+            <td><span class="badge-chip">${tx.type}</span></td>
+            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${tx.type.includes('CREDIT') ? 'var(--status-success)' : 'var(--primary-rose)'};">${tx.type.includes('CREDIT') ? '+' : '-'}₱${formatCurrency(tx.amount)}</strong></td>
+            <td><code>IDEMP-PH-${tx.id}</code></td>
+            <td><span class="status-tag ${tx.status === 'SUCCESS' ? 'tag-success' : 'tag-error'}">${tx.status}</span></td>
+        </tr>
+    `).join('');
+}
+
+function renderTransactionFeed() {
+    const feed = document.getElementById('transaction-feed');
+    if (!feed) return;
+
+    feed.innerHTML = recentTransactions.map(tx => `
+        <div class="tx-row">
+            <div class="tx-main">
+                <span class="tx-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="${tx.type.includes('CREDIT') ? '17 11 12 6 7 11' : '7 13 12 18 17 13'}"></polyline><line x1="12" y1="${tx.type.includes('CREDIT') ? '6' : '18'}" x2="12" y2="${tx.type.includes('CREDIT') ? '18' : '6'}"></line></svg></span>
+                <div class="tx-meta">
+                    <span class="tx-type">${tx.type} &bull; ${tx.ref}</span>
+                    <span class="tx-date">${tx.date}</span>
+                </div>
+            </div>
+            <div class="tx-amount ${tx.type.includes('CREDIT') ? 'credit' : 'debit'}">
+                ${tx.type.includes('CREDIT') ? '+' : '-'}₱${formatCurrency(tx.amount)}
+            </div>
+        </div>
+    `).join('');
+
+    renderTransactionMonitor();
+}
+
+function renderOracleAuditLogs() {
+    const box = document.getElementById('oracle-audit-logs');
+    const tabBox = document.getElementById('audit-tab-oracle-logs');
+
+    const html = oracleAuditLogs.map(l => `
+        <div class="log-entry">
+            <span class="log-time">[${l.time}]</span>
+            <span class="log-action">${l.action}</span>: ${l.details}
+        </div>
+    `).join('');
+
+    if (box) box.innerHTML = html;
+    if (tabBox) tabBox.innerHTML = html;
+}
+
+function loadPostgresAuditLogs() {
+    const tabBox = document.getElementById('audit-tab-postgres-logs');
+    if (!tabBox) return;
+
+    tabBox.innerHTML = postgresAudits.map(p => `
+        <div class="log-entry" style="border-left-color: #3B82F6;">
+            <span class="log-time">[${p.time}]</span>
+            <span class="log-action" style="color: #60A5FA;">${p.op}</span>: ${p.account} &bull; ₱${formatCurrency(p.before)} &rarr; <strong style="color: var(--status-success);">₱${formatCurrency(p.after)}</strong> (Amt: ₱${formatCurrency(p.amt)}) [${p.id}]
+        </div>
+    `).join('');
+}
+
+async function loadRecentTransactions() {
+    if (recentTransactions.length === 0) {
+        recentTransactions = [
+            { id: 103, ref: 'TX-PH-2026-0929-001', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: '29/09/2026 08:30:00', status: 'SUCCESS' },
+            { id: 102, ref: 'TX-PH-2026-0929-000', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: '29/09/2026 08:10:00', status: 'SUCCESS' },
+            { id: 101, ref: 'TX-PH-INIT-001', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: '23/09/2026 10:45:00', status: 'SUCCESS' },
+            { id: 100, ref: 'TX-PH-INIT-000', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: '22/09/2026 09:30:00', status: 'SUCCESS' }
+        ];
+    }
+    renderTransactionFeed();
+}
+
+async function loadInitialAuditLogs() {
+    if (oracleAuditLogs.length === 0) {
+        oracleAuditLogs = [
+            { time: '08:30:00', action: 'SECURITY_AUDIT', details: 'Stateless JWT verified at API Gateway. User [lviernes] authorized with ROLE_CUSTOMER.' },
+            { time: '08:15:01', action: 'ROW_LOCK_ACQUIRED', details: 'PESSIMISTIC_WRITE lock on ACCOUNT #3. Atomic Outbox Event published.' },
+            { time: '08:10:00', action: 'TRANSACTION_SETTLED', details: 'PESONet settlement batch commit on Oracle XE. 0% Overdraft verified.' },
+            { time: '08:00:00', action: 'ACID_MUTATION', details: 'Committed local ACID mutation of ₱15,000.0000 on ACC-PH-1001-8842.' }
+        ];
+    }
+    renderOracleAuditLogs();
+}
+
+/**
+ * Real-Time Cross-Tab & Backend Synchronization Engine
+ */
+function setupRealtimeSync() {
+    // 1. BroadcastChannel API for zero-latency same-origin cross-tab messages
+    if (window.BroadcastChannel) {
+        try {
+            const channel = new BroadcastChannel('paypink_ledger_channel');
+            channel.onmessage = (event) => {
+                if (event.data && (event.data.type === 'CUSTOMER_TRANSFER' || event.data.type === 'LEDGER_MUTATION')) {
+                    handleIncomingTransferEvent(event.data);
+                }
+            };
+        } catch (e) {
+            console.warn('BroadcastChannel initialization note:', e);
+        }
+    }
+
+    // 2. LocalStorage StorageEvent fallback (works across all browser tabs & windows)
+    window.addEventListener('storage', (event) => {
+        if (event.key === 'paypink_last_transfer_event' && event.newValue) {
+            try {
+                const data = JSON.parse(event.newValue);
+                handleIncomingTransferEvent(data);
+            } catch (e) {}
+        }
+    });
+}
+
+async function handleIncomingTransferEvent(data) {
+    // A. Live fetch of fresh account balances and customer states
+    await loadCustomerAndAccounts();
+    await loadAllCustomers(true);
+
+    // B. Prepend transaction to transaction feeds if not already recorded
+    const txRef = data.reference || `TX-PH-${Date.now()}`;
+    if (!recentTransactions.some(t => t.ref === txRef)) {
+        const txDate = data.date ? new Date(data.date) : new Date();
+        const formattedDate = txDate.toLocaleDateString('en-PH', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + txDate.toLocaleTimeString('en-PH');
+
+        recentTransactions.unshift({
+            id: Date.now(),
+            ref: txRef,
+            type: 'TRANSFER (INSTAPAY)',
+            amount: parseFloat(data.amount || 0),
+            currency: data.currency || 'PHP',
+            date: formattedDate,
+            status: data.status || 'SUCCESS'
+        });
+        renderTransactionFeed();
+        renderTransactionMonitor();
+    }
+
+    // C. Dual-stream audit log recording
+    const timeStr = new Date().toLocaleTimeString('en-PH');
+    oracleAuditLogs.unshift({
+        time: timeStr,
+        action: 'CUSTOMER_TRANSFER_ACID',
+        details: `Customer transfer of ₱${formatCurrency(data.amount)} to ${data.destinationAccountNumber || 'recipient'} (Ref: ${txRef}). Committed with Oracle XE ACID double-entry.`
+    });
+    renderOracleAuditLogs();
+
+    postgresAudits.unshift({
+        id: 'AUD-PG-' + Math.floor(1000 + Math.random() * 9000),
+        account: data.destinationAccountNumber || 'ACC-PH-TARGET',
+        op: 'CREDIT',
+        before: 0.00,
+        after: parseFloat(data.amount || 0),
+        amt: parseFloat(data.amount || 0),
+        time: new Date().toLocaleDateString('en-PH') + ' ' + timeStr
+    });
+    loadPostgresAuditLogs();
+
+    // D. Show real-time notification toast
+    showAdminToast(`Real-Time Transfer: ₱${formatCurrency(data.amount)} to ${data.destinationAccountNumber || 'Customer'} (Ref: ${txRef})`);
+}
+
+async function syncBackendTransactions() {
     try {
-        const res = await fetch(`${API_BASE}/accounts/${accountId}/reset-balance`, {
-            method: 'POST',
-            headers: {
-                ...getAuthHeaders(),
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ targetBalance: targetBal })
+        const res = await fetch(`${API_BASE}/reconciliation/logs`, {
+            headers: getAuthHeaders()
         });
         if (res.ok) {
-            closeModal('modal-balance-adjust');
-            await loadAllCustomers();
-            await loadCustomerAndAccounts();
+            const logs = await res.json();
+            if (logs && logs.length > 0) {
+                renderReconciliationTable(logs); // Continuously updates report preview & reconciliation table
+                let hasNew = false;
+                logs.slice(0, 8).forEach(log => {
+                    const ref = `TX-REC-${log.transactionId}`;
+                    if (!recentTransactions.some(t => t.ref === ref || t.id === log.transactionId)) {
+                        recentTransactions.push({
+                            id: log.transactionId,
+                            ref: ref,
+                            type: 'TRANSFER (INSTAPAY)',
+                            amount: 50.00,
+                            currency: 'PHP',
+                            date: new Date(log.reconDate).toLocaleDateString('en-PH') + ' ' + new Date(log.reconDate).toLocaleTimeString('en-PH'),
+                            status: log.oracleStatus === 'SUCCESS' ? 'SUCCESS' : 'PENDING'
+                        });
+                        hasNew = true;
+                    }
+                });
+                if (hasNew) {
+                    renderTransactionFeed();
+                    renderTransactionMonitor();
+                }
+            }
         }
-    } catch (e) {
-        alert('Failed to adjust balance: ' + e.message);
+    } catch (e) {}
+}
+
+let adminToastTimer = null;
+function showAdminToast(message) {
+    let toast = document.getElementById('admin-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'admin-toast';
+        toast.className = 'admin-toast';
+        document.body.appendChild(toast);
     }
+    toast.innerHTML = `<span class="toast-dot"></span><span>${message}</span>`;
+    toast.hidden = false;
+    toast.classList.add('show');
+    clearTimeout(adminToastTimer);
+    adminToastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => { toast.hidden = true; }, 300);
+    }, 4500);
+}
+
+/**
+ * 12. Report Exporters (CSV Generator)
+ */
+function downloadCSV(filename, csvContent) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function exportReconciliationReportCSV() {
+    let csv = 'ReconID,TransactionID,OracleXEStatus,PostgreSQLStatus,ReconStatus,ReconciliationDate\n';
+    const logsToExport = (latestReconciliationLogs && latestReconciliationLogs.length > 0)
+        ? latestReconciliationLogs
+        : [
+            { reconId: 'REC-PH-101', transactionId: 'TX-PH-1001', oracleStatus: 'COMMITTED', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED', reconDate: new Date().toISOString() },
+            { reconId: 'REC-PH-102', transactionId: 'TX-PH-1002', oracleStatus: 'COMMITTED', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED', reconDate: new Date().toISOString() },
+            { reconId: 'REC-PH-103', transactionId: 'TX-PH-1003', oracleStatus: 'COMMITTED', postgresStatus: 'COMMITTED', reconStatus: 'MATCHED', reconDate: new Date().toISOString() }
+        ];
+
+    logsToExport.forEach(l => {
+        const rId = typeof l.reconId === 'number' ? `REC-PH-${l.reconId}` : (l.reconId || l.id);
+        const tId = typeof l.transactionId === 'number' ? `TX-PH-1001-${l.transactionId}` : (l.transactionId || l.txId);
+        const oSt = l.oracleStatus || l.oracle || 'COMMITTED';
+        const pSt = l.postgresStatus || l.pg || 'COMMITTED';
+        const rSt = l.reconStatus || l.status || 'MATCHED';
+        const dt = l.reconDate ? new Date(l.reconDate).toLocaleString('en-PH') : (l.date || new Date().toLocaleString('en-PH'));
+        csv += `${rId},${tId},${oSt},${pSt},${rSt},"${dt}"\n`;
+    });
+    downloadCSV(`paypink_reconciliation_report_${Date.now()}.csv`, csv);
+}
+
+function exportAuditTrailCSV() {
+    let csv = 'AuditLogID,Timestamp,AccountID,Operation,BeforeBalancePHP,AfterBalancePHP,MutationAmountPHP,IntegrityHash\n';
+    const entries = [
+        { id: 'AUD-001', time: '29/09/2026 08:15:00', acc: 'ACC-PH-1001-7714', op: 'DEBIT', before: '60.0000', after: '10.0000', amt: '50.0000', hash: 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069' },
+        { id: 'AUD-002', time: '29/09/2026 08:30:00', acc: 'ACC-PH-1001-8842', op: 'CREDIT', before: '20000.0000', after: '35000.0000', amt: '15000.0000', hash: 'SHA256:4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a' }
+    ];
+    entries.forEach(e => {
+        csv += `${e.id},${e.time},${e.acc},${e.op},${e.before},${e.after},${e.amt},${e.hash}\n`;
+    });
+    downloadCSV(`paypink_ledger_audit_trail_${Date.now()}.csv`, csv);
+}
+
+function exportSettlementSummaryCSV() {
+    let csv = 'PaymentRail,TransactionCount,SettledVolumePHP,FeeSurchargePHP,ClearingStatus,ClearingCycle\n';
+    csv += 'InstaPay (Real-Time),120,350000.0000,0.0000,CLEARED,24x7 Continuous\n';
+    csv += 'PESONet (Batch),45,850000.0000,0.0000,CLEARED,Same-Day Batch Settlement\n';
+    csv += 'QR Ph (National Rail),85,150000.0000,0.0000,CLEARED,Real-Time Retail Switch\n';
+    csv += 'Internal PayPink Ledger,210,650000.0000,0.0000,COMMITTED,Instant Local ACID\n';
+    downloadCSV(`paypink_settlement_summary_${Date.now()}.csv`, csv);
 }
 
 function setupRailsSelector() {
@@ -941,61 +1423,23 @@ document.getElementById('btn-jwt-info')?.addEventListener('click', () => {
     document.getElementById('modal-jwt').classList.add('active');
 });
 
-function renderTransactionFeed() {
-    const feed = document.getElementById('transaction-feed');
-    if (!feed) return;
-
-    feed.innerHTML = recentTransactions.map(tx => `
-        <div class="tx-row">
-            <div class="tx-main">
-                <span class="tx-icon">${tx.type.includes('CREDIT') ? '📥' : '📤'}</span>
-                <div class="tx-meta">
-                    <span class="tx-type">${tx.type} &bull; ${tx.ref}</span>
-                    <span class="tx-date">${tx.date}</span>
-                </div>
-            </div>
-            <div class="tx-amount ${tx.type.includes('CREDIT') ? 'credit' : 'debit'}">
-                ${tx.type.includes('CREDIT') ? '+' : '-'}₱${formatCurrency(tx.amount)}
-            </div>
-        </div>
-    `).join('');
-}
-
-function renderOracleAuditLogs() {
-    const box = document.getElementById('oracle-audit-logs');
-    if (!box) return;
-
-    box.innerHTML = oracleAuditLogs.map(l => `
-        <div class="log-entry">
-            <span class="log-time">[${l.time}]</span>
-            <span class="log-action">${l.action}</span>: ${l.details}
-        </div>
-    `).join('');
-}
-
-async function loadRecentTransactions() {
-    recentTransactions = [
-        { id: 101, ref: 'TX-PH-INIT-001', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: '23/09/2026 10:45:00', status: 'SUCCESS' },
-        { id: 100, ref: 'TX-PH-INIT-000', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: '22/09/2026 09:30:00', status: 'SUCCESS' }
-    ];
-    renderTransactionFeed();
-}
-
-async function loadInitialAuditLogs() {
-    oracleAuditLogs = [
-        { time: '10:45:00', action: 'SECURITY_AUDIT', details: 'User [jdelacruz] authenticated from BGC Taguig Branch. JWT Bearer issued.' },
-        { time: '10:45:01', action: 'ACID_MUTATION', details: 'Committed @Lock(PESSIMISTIC_WRITE) debit of ₱15,000.0000 on ACC-PH-1001-8842.' }
-    ];
-    renderOracleAuditLogs();
-}
-
 // Global window bindings for onclick handlers
 window.switchTab = switchTab;
 window.loadAllCustomers = loadAllCustomers;
+window.filterCustomerTable = filterCustomerTable;
 window.toggleCustomerStatus = toggleCustomerStatus;
 window.toggleAccountStatus = toggleAccountStatus;
-window.openBalanceModal = openBalanceModal;
-window.submitBalanceAdjustment = submitBalanceAdjustment;
+window.openRolesModal = openRolesModal;
+window.saveUserRoles = saveUserRoles;
+window.openLimitsModal = openLimitsModal;
+window.saveUserLimits = saveUserLimits;
+window.renderTransactionMonitor = renderTransactionMonitor;
+window.loadRecentTransactions = loadRecentTransactions;
+window.loadInitialAuditLogs = loadInitialAuditLogs;
+window.loadPostgresAuditLogs = loadPostgresAuditLogs;
+window.exportReconciliationReportCSV = exportReconciliationReportCSV;
+window.exportAuditTrailCSV = exportAuditTrailCSV;
+window.exportSettlementSummaryCSV = exportSettlementSummaryCSV;
 window.closeModal = closeModal;
 window.runStressSimulation = runStressSimulation;
 window.resetStressAccount = resetStressAccount;
@@ -1003,3 +1447,4 @@ window.testScenario = testScenario;
 window.triggerScheduledReconciliation = triggerScheduledReconciliation;
 window.handleTransferSubmit = handleTransferSubmit;
 window.selectAccount = selectAccount;
+

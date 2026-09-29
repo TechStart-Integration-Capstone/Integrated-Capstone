@@ -526,8 +526,16 @@ body {
 }
 
 .tx-icon {
-    font-size: 1.1rem;
-    margin-right: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--bg-card-subtle);
+    color: var(--primary-rose);
+    margin-right: 0.65rem;
+    flex-shrink: 0;
 }
 
 .tx-main {
@@ -882,8 +890,10 @@ body {
 }
 
 .scenario-icon {
-    font-size: 1.25rem;
-    margin-bottom: 0.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.35rem;
 }
 
 .scenario-title {
@@ -967,7 +977,10 @@ body {
 }
 
 .sla-icon {
-    font-size: 1.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-rose);
     margin-bottom: 0.35rem;
 }
 
@@ -1085,8 +1098,15 @@ body {
 }
 
 .receipt-icon {
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #ECFDF5;
+    color: #059669;
+    margin: 0 auto 0.75rem;
 }
 
 .receipt-ref {
@@ -1121,3 +1141,41 @@ body {
         grid-template-columns: 1fr 1fr;
     }
 }
+
+/* Admin Live Event Toast */
+.admin-toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: #0F172A;
+    color: #FFFFFF;
+    padding: 14px 22px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(225, 29, 72, 0.3);
+    z-index: 9999;
+    font-size: 0.85rem;
+    font-family: var(--font-body);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+}
+
+.admin-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.admin-toast .toast-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #10B981;
+    box-shadow: 0 0 8px #10B981;
+    flex-shrink: 0;
+}
+
