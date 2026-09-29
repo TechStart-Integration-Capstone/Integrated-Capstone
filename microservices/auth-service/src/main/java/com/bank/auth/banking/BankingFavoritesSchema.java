@@ -1,26 +1,47 @@
 package com.bank.auth.banking;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import java.sql.SQLException;
 
 /** Additive, restart-safe migration for existing local Oracle installations. */
 @Component
 public class BankingFavoritesSchema implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(BankingFavoritesSchema.class);
+
     private final JdbcTemplate jdbc;
-    public BankingFavoritesSchema(JdbcTemplate jdbc) { this.jdbc = jdbc; }
-    @Override public void run(ApplicationArguments arguments) {
-        try {
-            jdbc.execute("CREATE TABLE BANKING_FAVORITE (customer_id NUMBER(19) NOT NULL, account_id NUMBER(19) NOT NULL, "
-                    + "created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
-                    + "CONSTRAINT pk_banking_favorite PRIMARY KEY (customer_id, account_id), "
-                    + "CONSTRAINT fk_favorite_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER(customer_id), "
-                    + "CONSTRAINT fk_favorite_account FOREIGN KEY (account_id) REFERENCES ACCOUNT(account_id))");
-        } catch (DataAccessException ex) {
-            for (Throwable cause = ex; cause != null; cause = cause.getCause()) { if (cause instanceof SQLException sql && sql.getErrorCode() == 955) return; } throw ex;
+
+    public BankingFavoritesSchema(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Override
+    public void run(ApplicationArguments arguments) {
+        // Check if table already exists in Oracle's data dictionary before creating
+        Integer count = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM user_tables WHERE table_name = 'BANKING_FAVORITE'",
+            Integer.class
+        );
+
+        if (count != null && count > 0) {
+            log.info("[auth-service] BANKING_FAVORITE table already exists, skipping creation.");
+            return;
         }
+
+        jdbc.execute(
+            "CREATE TABLE BANKING_FAVORITE (" +
+            "  customer_id  NUMBER(19) NOT NULL, " +
+            "  account_id   NUMBER(19) NOT NULL, " +
+            "  created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, " +
+            "  CONSTRAINT pk_banking_favorite PRIMARY KEY (customer_id, account_id), " +
+            "  CONSTRAINT fk_favorite_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER(customer_id), " +
+            "  CONSTRAINT fk_favorite_account  FOREIGN KEY (account_id)  REFERENCES ACCOUNT(account_id)" +
+            ")"
+        );
+        log.info("[auth-service] BANKING_FAVORITE table created successfully.");
     }
 }

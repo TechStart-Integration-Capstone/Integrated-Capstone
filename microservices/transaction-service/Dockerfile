@@ -1,16 +1,7 @@
-# Stage 1: Build
-FROM maven:3-eclipse-temurin-17 AS build
-WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN mvn clean package -DskipTests -q \
-    -Dhttps.protocols=TLSv1.2 \
-    -Djdk.tls.client.protocols=TLSv1.2
-
-# Stage 2: Run
+# Pre-built: run 'mvn clean package -DskipTests' locally before docker compose build
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
-COPY --from=build /app/target/transaction-service.jar app.jar
+COPY target/transaction-service.jar app.jar
 COPY opentelemetry-javaagent.jar otel-agent.jar
 EXPOSE 8083
 ENTRYPOINT ["java", "-javaagent:/app/otel-agent.jar", "-Dotel.service.name=transaction-service", "-Dotel.exporter.otlp.endpoint=http://otel-collector:4317", "-Dotel.exporter.otlp.protocol=grpc", "-Dotel.metrics.exporter=otlp", "-Dotel.logs.exporter=otlp", "-jar", "app.jar"]
