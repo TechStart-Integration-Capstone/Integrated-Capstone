@@ -481,7 +481,7 @@ async function sendTransfer() {
         type: 'CUSTOMER_TRANSFER',
         reference: receipt.reference,
         sourceAccountId: request.sourceAccountId,
-        sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : 'ACC-PH-1001-8842',
+        sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : '001181233469',
         destinationAccountNumber: request.destinationAccountNumber,
         amount: request.amount,
         currency: receipt.currency || 'PHP',
