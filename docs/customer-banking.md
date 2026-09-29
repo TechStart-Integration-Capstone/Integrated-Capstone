@@ -76,3 +76,37 @@ node tests/customer-transfers.cjs
 It verifies registration, validation, login, masking, live balances, transaction filters, customer isolation, logout, reload persistence, error recovery, session expiry, and desktop/mobile layouts. Screenshots are written to `$env:TEMP/paypink-browser-check/artifacts`.
 
 The transfer browser test creates two isolated customers and transfers only between their accounts. It checks the welcome gifts, default source selection, changing source accounts, internal/external transfers, recipient history, cancellation, ownership checks, concurrent duplicate and overdraft prevention, recovery after a lost response and reload, name lookup, favorites across reloads, removing favorites, recent recipients, stale lookup responses, masked receipts, PNG downloads, and Done buttons. The test customers remain in the local simulation database for inspection.
+
+PESONet queues a PENDING instruction for approximately 90 seconds without deducting funds. The server then locks the account, checks funds, and atomically posts the debit, audit/outbox and SUCCESS status. Insufficient funds or an unavailable account at processing time produces FAILED without a debit. Repeated processing cannot double-debit. InstaPay remains immediate. Existing pending payments with a previously posted outbox debit complete without another deduction. External recipient records remain hardcoded.
+
+## In-app transfer notifications
+
+The bank header includes a notification bell, unread count, individual transfer details, and Mark all as read. Alerts distinguish money sent, money received, and external pending/failed transfers; a pending-to-completed status change becomes a new unread update. Full account numbers are masked in messages. The inbox includes transfers within the API's latest 200 activity records.
+
+The implementation follows NotificationKafkaConsumer/NotificationDispatcher debit and credit semantics. It reads the existing authenticated /api/v1/auth/banking/transactions API (every eight seconds while visible), rather than the notification service's simulated email/SMS/push delivery logs. No new notification API or external messaging provider is required. The existing Kafka notification service continues unchanged. Read state persists per username in this browser's local storage, not across devices. Previously recorded transfers appear in the inbox on login; only newly observed updates trigger a toast.
+
+New transfer updates also appear as clickable six-second popups, with up to three visible at once. Hover or keyboard focus pauses dismissal. Clicking opens transfer details and marks the notification read; dismissing or timing out leaves it unread in the inbox. Popups are cleared on logout and customer changes.
+
+## Transaction report PDF
+
+Use Generate transaction report on Overview, My accounts, or Transactions. Select one owned account and inclusive From/To dates, then Download PDF. Dates use Asia/Manila calendar days (converted to UTC for database filtering). The default is the current month. Maximum period: 366 days, ending today or earlier.
+
+Authenticated endpoint: GET /api/v1/auth/banking/reports/transactions.pdf?accountId=...&from=YYYY-MM-DD&to=YYYY-MM-DD. The service verifies account ownership and queries the selected range independently of the activity feed's 200-row limit. Up to 10,000 rows are supported; larger requests fail with a request to narrow the range rather than silently truncating. PDF responses are attachment downloads with Cache-Control: no-store.
+
+PDFs contain PayPink branding, customer name, masked account, currency, period, generation time, transaction date/reference/status and money-in/out columns. Completed totals exclude pending/failed amounts. Dates represent submission dates; statuses are current at generation time. This is a transaction report, without inferred opening/closing balances. Pages repeat the period, totals, table headings, and page numbers. Empty date ranges produce a valid PDF with a no-transactions message.
+
+Generated server-side with Apache PDFBox 3.0.8. Layout uses standard Helvetica PDF fonts; characters not supported by that font render as a question mark. Amounts are displayed to two decimal places. Banking-flow reference: https://www.bpi.com.ph/online/internet-banking-service-agreement.
+
+Tests: TransactionReportServiceTest covers pagination beyond 200 records, masked numbers, summary exclusion of pending entries, empty output, ownership and date validation. `node tests/transaction-reports.cjs` checks the live authenticated PDF download and mobile date-picker layout with an isolated test customer.
+
+## Consistent banking identifiers
+
+Accounts use 12 numeric digits: `[Branch: 3][Type: 1][Random customer number: 7][Luhn check digit: 1]`. The local branch is `001`; type codes are `1` Savings, `2` Everyday, `3` legacy Checking, `4` Time Deposit, and `9` Stress Test. For example, `001112345671` is displayed as `001 1 1234567 1`. Account numbers are strings so leading zeros are retained. The seven-digit customer number comes from SecureRandom, is shared by the customer's accounts, and is unrelated to their database ID. Allocation excludes current and historical numbers; the database unique constraint and retries also handle simultaneous registration collisions.
+
+The startup migration replaces earlier sequential and legacy account numbers, preserving valid structured numbers on subsequent restarts. It records old values in ACCOUNT_RENUMBERED audit entries, allowing both numeric and older alphanumeric numbers to resolve to the same account. Balances, account IDs, ownership, favorites, transaction references, and transaction relationships remain unchanged. No schema columns or tables are added. External bank fixture numbers are unchanged. This format supports one account per type code per customer; migration rejects duplicate type codes or unsupported types before changing any numbers.
+
+Customer-visible transaction references are PP-YYYYMMDD-NNNNNNNNNNNN, using the submission date in Philippine time and the transaction ID padded to 12 digits. History, receipts, notifications, and PDF reports use this same reference. Internal reference_no values and historic audit/outbox payloads are deliberately preserved for idempotency and traceability; the public reference's numeric suffix identifies the transaction_id. No schema column changes are required: account_number remains VARCHAR2(30), reference_no remains VARCHAR2(64).
+
+Verification includes checksum corruption, collision retries, leading zeros, migration restart stability, preserved balances/favorites, and transfer retries with both earlier account-number formats. `tests/account-number-migration.cjs prepare` creates isolated fixtures before deployment; `verify` checks the same accounts after migration, including legacy-number browser review and PDF generation. The customer-transfer browser suite also checks type prefixes, shared customer numbers and Luhn checksums. Tests leave their fixtures in the local database.
+
+Verified locally on 2026-09-29: all 32 backend tests and the migration, transfer, and PDF browser checks passed. All 63 stored accounts passed branch/type, checksum, uniqueness and shared-customer-number checks. A service restart preserved their numbers, balances, ownership, statuses and migration audit count. Extracted PDF text for both migrated and newly registered accounts matched the receipt reference and masked account ending.

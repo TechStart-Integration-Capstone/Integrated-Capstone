@@ -34,6 +34,7 @@ class BankingTransferIntegrationTest {
         @Bean JdbcTemplate jdbc(DataSource source) { return new JdbcTemplate(source); }
         @Bean PlatformTransactionManager transactionManager(DataSource source) { return new DataSourceTransactionManager(source); }
         @Bean BankingService banking() { return mock(BankingService.class); }
+        @Bean ExternalTransferService external(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) { return new ExternalTransferService(banking,jdbc,ledger); }
         @Bean BankingLedger ledger(JdbcTemplate jdbc) { return new BankingLedger(jdbc, new ObjectMapper()); }
         @Bean BankingRecipientService recipients(BankingService banking, JdbcTemplate jdbc) { return new BankingRecipientService(banking,jdbc); }
         @Bean BankingTransferService transfers(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) {
@@ -44,6 +45,78 @@ class BankingTransferIntegrationTest {
     @Autowired BankingService banking;
     @Autowired BankingTransferService transfers;
     @Autowired BankingRecipientService recipients;
+    @Autowired ExternalTransferService external;
+
+    @Test void accountNumberMigrationPreservesAccountsBalancesAndFavorites() {
+        jdbc.update("INSERT INTO BANKING_FAVORITE(customer_id,account_id) VALUES(42,3)");
+        jdbc.update("INSERT INTO AUDIT_LOG(customer_id,action,entity,details) VALUES(99,'ACCOUNT_RENUMBERED','ACCOUNT:3','PP-RECIPIENT')");
+        jdbc.update("UPDATE ACCOUNT SET account_number='100000000003' WHERE account_id=3");
+        var receipt=transfers.transfer("owner",request(1,"100000000003","1","number_format_test_01"));
+        var migration=new BankingAccountNumberMigration(jdbc);
+        migration.run(null);
+        var numbers=jdbc.queryForList("SELECT account_number FROM ACCOUNT ORDER BY account_id",String.class);
+        int audits=count("AUDIT_LOG");
+        migration.run(null);
+        assertThat(jdbc.queryForList("SELECT account_number FROM ACCOUNT ORDER BY account_id",String.class)).isEqualTo(numbers);
+        assertThat(count("AUDIT_LOG")).isEqualTo(audits);
+        assertThat(numbers).allMatch(BankingIdentifiers::isAccount).doesNotHaveDuplicates();
+        assertThat(numbers.get(0)).startsWith("0012");
+        assertThat(numbers.get(1)).startsWith("0011");
+        assertThat(numbers.get(0).substring(4,11)).isEqualTo(numbers.get(1).substring(4,11));
+        assertThat(numbers.get(2).substring(4,11)).isNotEqualTo(numbers.get(0).substring(4,11));
+        assertThat(balance(1)).isEqualByComparingTo("49");
+        assertThat(count("ACCOUNT")).isEqualTo(5);
+        assertThat(count("BANKING_FAVORITE")).isEqualTo(1);
+        assertThat(receipt.reference()).matches("PP-[0-9]{8}-[0-9]{12}");
+        assertThat(transfers.transfer("owner",request(1,numbers.get(2),"1","number_format_test_01")).reference()).isEqualTo(receipt.reference());
+        assertThat(transfers.transfer("owner",request(1,"100000000003","1","number_format_test_01")).reference()).isEqualTo(receipt.reference());
+        assertThat(transfers.transfer("owner",request(1,"PP-RECIPIENT","1","number_format_test_01")).reference()).isEqualTo(receipt.reference());
+        assertThat(recipients.lookup("owner","100000000003").accountNumber()).isEqualTo(numbers.get(2));
+        assertThat(balance(1)).isEqualByComparingTo("49");
+    }
+
+    @Test void migrationPreservesAnAlreadyStructuredCustomerNumber() {
+        String existing=BankingIdentifiers.account("EVERYDAY_ACCOUNT","0000123");
+        jdbc.update("UPDATE ACCOUNT SET account_number=? WHERE account_id=1",existing);
+        new BankingAccountNumberMigration(jdbc).run(null);
+        assertThat(jdbc.queryForObject("SELECT account_number FROM ACCOUNT WHERE account_id=1",String.class)).isEqualTo(existing);
+        assertThat(jdbc.queryForObject("SELECT account_number FROM ACCOUNT WHERE account_id=2",String.class))
+                .isEqualTo(BankingIdentifiers.account("SAVINGS_ACCOUNT","0000123"));
+    }
+
+    @Test void duplicateAccountTypesFailBeforeChangingAnyNumbers() {
+        jdbc.update("UPDATE ACCOUNT SET account_type='EVERYDAY_ACCOUNT' WHERE account_id=2");
+        assertThatThrownBy(()->new BankingAccountNumberMigration(jdbc).run(null)).isInstanceOf(IllegalStateException.class);
+        assertThat(jdbc.queryForObject("SELECT account_number FROM ACCOUNT WHERE account_id=1",String.class)).isEqualTo("PP-EVERYDAY");
+        assertThat(count("AUDIT_LOG")).isZero();
+    }
+
+    @Test void pesonetWaitsBeforeDebitingAndPostsOnlyOnce() {
+        var request=new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("20"),"PESONET","delayed_payment_001");
+        assertThat(external.transfer("owner",request).status()).isEqualTo("PENDING");
+        assertThat(external.transfer("owner",request).status()).isEqualTo("PENDING");
+        external.settleBatch();
+        assertThat(balance(1)).isEqualByComparingTo("50");
+        assertThat(count("OUTBOX_EVENT")).isZero();
+        assertThat(count("AUDIT_LOG")).isZero();
+        jdbc.update("UPDATE TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
+        external.settleBatch(); external.settleBatch();
+        assertThat(balance(1)).isEqualByComparingTo("30");
+        assertThat(external.history("owner").get(0).status()).isEqualTo("COMPLETED");
+        assertThat(count("TRANSACTION")).isEqualTo(1);
+        assertThat(count("OUTBOX_EVENT")).isEqualTo(1);
+        assertThat(count("AUDIT_LOG")).isEqualTo(1);
+    }
+
+    @Test void competingPendingPaymentsCannotOverdraw() {
+        external.transfer("owner",new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("40"),"PESONET","delayed_payment_001"));
+        external.transfer("owner",new ExternalTransferService.Request(1L,"009876543210",new BigDecimal("40"),"PESONET","delayed_payment_002"));
+        jdbc.update("UPDATE TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
+        external.settleBatch();
+        assertThat(balance(1)).isEqualByComparingTo("10");
+        assertThat(external.history("owner")).extracting(ExternalTransferService.Receipt::status).containsExactlyInAnyOrder("COMPLETED","FAILED");
+        assertThat(count("OUTBOX_EVENT")).isEqualTo(1);
+    }
 
     @BeforeEach void prepare() {
         reset(banking);
@@ -54,7 +127,7 @@ class BankingTransferIntegrationTest {
         jdbc.execute("DROP ALL OBJECTS");
         jdbc.execute("CREATE TABLE CUSTOMER (customer_id BIGINT PRIMARY KEY, status VARCHAR(20), first_name VARCHAR(100), last_name VARCHAR(100))");
         jdbc.execute("CREATE TABLE ACCOUNT (account_id BIGINT PRIMARY KEY, customer_id BIGINT, account_number VARCHAR(30) UNIQUE, "
-                + "currency VARCHAR(10), current_balance DECIMAL(18,4) CHECK(current_balance >= 0), status VARCHAR(20))");
+                + "currency VARCHAR(10), current_balance DECIMAL(18,4) CHECK(current_balance >= 0), status VARCHAR(20), account_type VARCHAR(30))");
         jdbc.execute("CREATE TABLE TRANSACTION (transaction_id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, "
                 + "from_account_id BIGINT, to_account_id BIGINT, amount DECIMAL(18,4) CHECK(amount > 0), source_currency VARCHAR(10), "
                 + "target_currency VARCHAR(10), transaction_type VARCHAR(30), reference_no VARCHAR(64) UNIQUE, status VARCHAR(20), "
@@ -64,8 +137,8 @@ class BankingTransferIntegrationTest {
         jdbc.execute("CREATE TABLE AUDIT_LOG (customer_id BIGINT, action VARCHAR(100), entity VARCHAR(50), details VARCHAR(4000))");
         jdbc.execute("CREATE TABLE BANKING_FAVORITE (customer_id BIGINT, account_id BIGINT, created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(customer_id,account_id))");
         jdbc.update("INSERT INTO CUSTOMER VALUES (42, 'ACTIVE', 'Jamie', 'Rivera'), (99, 'ACTIVE', 'Alex', 'Cruz')");
-        jdbc.update("INSERT INTO ACCOUNT VALUES (1,42,'PP-EVERYDAY','PHP',50,'ACTIVE'), (2,42,'PP-SAVINGS','PHP',0,'ACTIVE'), "
-                + "(3,99,'PP-RECIPIENT','PHP',50,'ACTIVE'), (4,99,'PP-USD','USD',0,'ACTIVE'), (5,99,'PP-CLOSED','PHP',0,'CLOSED')");
+        jdbc.update("INSERT INTO ACCOUNT VALUES (1,42,'PP-EVERYDAY','PHP',50,'ACTIVE','EVERYDAY_ACCOUNT'), (2,42,'PP-SAVINGS','PHP',0,'ACTIVE','SAVINGS_ACCOUNT'), "
+                + "(3,99,'PP-RECIPIENT','PHP',50,'ACTIVE','EVERYDAY_ACCOUNT'), (4,99,'PP-USD','USD',0,'ACTIVE','SAVINGS_ACCOUNT'), (5,99,'PP-CLOSED','PHP',0,'CLOSED','CHECKING_ACCOUNT')");
     }
     private BankingTransferService.Request request(long source, String destination, String amount, String key) {
         return new BankingTransferService.Request(source,destination,new BigDecimal(amount),key);

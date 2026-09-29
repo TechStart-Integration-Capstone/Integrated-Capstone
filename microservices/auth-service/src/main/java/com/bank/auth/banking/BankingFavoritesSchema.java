@@ -20,7 +20,7 @@ public class BankingFavoritesSchema implements ApplicationRunner {
                     + "CONSTRAINT fk_favorite_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER(customer_id), "
                     + "CONSTRAINT fk_favorite_account FOREIGN KEY (account_id) REFERENCES ACCOUNT(account_id))");
         } catch (DataAccessException ex) {
-            if (!(ex.getMostSpecificCause() instanceof SQLException sql) || sql.getErrorCode() != 955) throw ex;
+            for (Throwable cause = ex; cause != null; cause = cause.getCause()) { if (cause instanceof SQLException sql && sql.getErrorCode() == 955) return; } throw ex;
         }
     }
 }

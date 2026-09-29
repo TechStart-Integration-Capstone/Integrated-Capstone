@@ -72,6 +72,6 @@ public class BankingRecipientService {
     private String normalize(String number) {
         if (number == null || !number.strip().matches("[A-Za-z0-9-]{3,30}"))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Enter the full PayPink account number.");
-        return number.strip().toUpperCase(Locale.ROOT);
+        return BankingIdentifiers.resolveAccount(jdbc,number);
     }
 }

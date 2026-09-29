@@ -26,6 +26,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const customer={username,password,headers};
     const profile=await me(customer);
     assert.equal(profile.accounts.length,2);
+    for (const account of profile.accounts) {
+      assert.match(account.accountNumber,account.accountType==='SAVINGS_ACCOUNT'?/^0011\d{8}$/:/^0012\d{8}$/);
+      const checksum=[...account.accountNumber].reverse().reduce((sum,char,index)=>{
+        const digit=Number(char)*(index%2?2:1);return sum+(digit>9?digit-9:digit);
+      },0);
+      assert.equal(checksum%10,0,'Account number must pass Luhn');
+    }
+    assert.equal(profile.accounts[0].accountNumber.slice(4,11),profile.accounts[1].accountNumber.slice(4,11));
     customer.savings=profile.accounts.find(a=>a.accountType==='SAVINGS_ACCOUNT');
     customer.everyday=profile.accounts.find(a=>a.accountType==='EVERYDAY_ACCOUNT');
     assert.equal(customer.savings.currentBalance,0);
@@ -44,6 +52,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   try {
     const sender=await register('sender');
     const recipient=await register('recipient');
+    assert.notEqual(sender.everyday.accountNumber.slice(4,11),recipient.everyday.accountNumber.slice(4,11));
     await page.goto(`${base}/bank/`);
     await page.getByLabel('Username',{exact:true}).fill(sender.username);
     await page.getByLabel('Password',{exact:true}).fill(sender.password);
@@ -61,6 +70,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByRole('button',{name:'Review transfer'}).click();
     await page.getByRole('button',{name:'Confirm transfer'}).click();
     await page.getByRole('heading',{name:'Transfer successful'}).waitFor();
+    assert.match(await page.locator('.transfer-receipt').innerText(),/PP-\d{8}-\d{12}/);
     let profile=await me(sender);
     assert.equal(profile.accounts.find(a=>a.accountId===sender.everyday.accountId).currentBalance,30);
     assert.equal(profile.accounts.find(a=>a.accountId===sender.savings.accountId).currentBalance,20);

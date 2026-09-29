@@ -32,7 +32,7 @@ public class BankingTransferService {
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Receipt transfer(String authorization, Request request) {
         long customerId = banking.authenticatedCustomer(authorization).getCustomerId();
-        String destination = request.destinationAccountNumber().toUpperCase(Locale.ROOT);
+        String destination = BankingIdentifiers.resolveAccount(jdbc,request.destinationAccountNumber());
         String reference = reference(customerId, request.idempotencyKey());
         // A committed receipt is authoritative even if balances/statuses changed after the first request.
         Receipt replay = replay(reference, request, destination);
@@ -81,9 +81,9 @@ public class BankingTransferService {
     }
 
     private Receipt replay(String reference, Request request, String destination) {
-        List<Receipt> receipts = jdbc.query("SELECT t.from_account_id, a.account_number, t.amount, t.source_currency, t.transaction_date, c.first_name || ' ' || c.last_name "
+        List<Receipt> receipts = jdbc.query("SELECT t.from_account_id, a.account_number, t.amount, t.source_currency, t.transaction_date, c.first_name || ' ' || c.last_name, t.transaction_id "
                         + "FROM TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id JOIN CUSTOMER c ON c.customer_id = a.customer_id WHERE t.reference_no = ? AND t.status = 'SUCCESS'",
-                (rs, row) -> new Receipt(reference, rs.getLong(1), rs.getString(2), rs.getBigDecimal(3), rs.getString(4),
+                (rs, row) -> new Receipt(BankingIdentifiers.reference(rs.getLong(7),rs.getTimestamp(5).toLocalDateTime()), rs.getLong(1), rs.getString(2), rs.getBigDecimal(3), rs.getString(4),
                         "SUCCESS", rs.getTimestamp(5).toLocalDateTime(), rs.getString(6)), reference + "-D");
         if (receipts.isEmpty()) return null;
         Receipt receipt = receipts.get(0);

@@ -52,8 +52,14 @@ class BankingServiceTest {
         assertThat(stored.getValue().getUsername()).isEqualTo("new_customer");
         assertThat(stored.getValue().getEmail()).isEqualTo("new@example.com");
         assertThat(passwords.matches("different-password", stored.getValue().getPasswordHash())).isTrue();
-        verify(jdbc).update(contains("'PHP', ?, 'ACTIVE'"), eq(42L), matches("PP-[A-F0-9]{20}"), eq("SAVINGS_ACCOUNT"), eq(java.math.BigDecimal.ZERO));
-        verify(jdbc).update(contains("'PHP', ?, 'ACTIVE'"), eq(42L), matches("PP-[A-F0-9]{20}"), eq("EVERYDAY_ACCOUNT"), eq(new java.math.BigDecimal("50.00")));
+        ArgumentCaptor<String> savings=ArgumentCaptor.forClass(String.class), everyday=ArgumentCaptor.forClass(String.class);
+        verify(jdbc).update(contains("'PHP', ?, 'ACTIVE'"), eq(42L), savings.capture(), eq("SAVINGS_ACCOUNT"), eq(java.math.BigDecimal.ZERO));
+        verify(jdbc).update(contains("'PHP', ?, 'ACTIVE'"), eq(42L), everyday.capture(), eq("EVERYDAY_ACCOUNT"), eq(new java.math.BigDecimal("50.00")));
+        assertThat(BankingIdentifiers.isAccount(savings.getValue())).isTrue();
+        assertThat(BankingIdentifiers.isAccount(everyday.getValue())).isTrue();
+        assertThat(savings.getValue().substring(4,11)).isEqualTo(everyday.getValue().substring(4,11));
+        assertThat(savings.getValue()).startsWith("0011");
+        assertThat(everyday.getValue()).startsWith("0012");
         verify(ledger).record(any(), isNull(), eq(new java.math.BigDecimal("50.00")), eq(new java.math.BigDecimal("50.00")), eq("CREDIT"), eq("WELCOME_GIFT"), eq("WELCOME-42"));
         assertThat(tokens.customerId("Bearer " + response.getToken())).isEqualTo(42L);
     }
@@ -64,6 +70,17 @@ class BankingServiceTest {
                 ex -> assertThat(ex.getStatusCode().value()).isEqualTo(409));
         verify(customers, never()).saveAndFlush(any());
         verify(jdbc, never()).update(anyString(), any(), any());
+    }
+
+    @Test void concurrentAccountNumberCollisionRetriesBeforeCreatingEverydayAccount() {
+        when(customers.saveAndFlush(any())).thenReturn(customer);
+        when(jdbc.queryForObject(contains("SELECT account_id"), eq(Long.class), any())).thenReturn(77L);
+        when(jdbc.update(contains("INSERT INTO ACCOUNT"),eq(42L),anyString(),eq("SAVINGS_ACCOUNT"),any()))
+                .thenThrow(new org.springframework.dao.DuplicateKeyException("account_number collision")).thenReturn(1);
+        service.register(registration());
+        verify(jdbc,times(2)).update(contains("INSERT INTO ACCOUNT"),eq(42L),anyString(),eq("SAVINGS_ACCOUNT"),any());
+        verify(jdbc,times(1)).update(contains("INSERT INTO ACCOUNT"),eq(42L),anyString(),eq("EVERYDAY_ACCOUNT"),any());
+        verify(ledger,times(1)).record(any(),isNull(),any(),any(),eq("CREDIT"),eq("WELCOME_GIFT"),eq("WELCOME-42"));
     }
 
     @Test void readsScopeAccountsAndTransactionsToVerifiedCustomer() {
