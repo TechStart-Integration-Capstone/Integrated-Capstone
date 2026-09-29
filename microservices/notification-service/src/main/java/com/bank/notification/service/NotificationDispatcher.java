@@ -82,7 +82,7 @@ public class NotificationDispatcher {
                 if (res.getStatusCode().is2xxSuccessful() && res.getBody() != null) {
                     return (Map<String, Object>) res.getBody();
                 }
-            } catch (Exception ignored) {}
+            } catch (org.springframework.web.client.RestClientException | IllegalStateException | IllegalArgumentException ignored) {}
         }
         return null;
     }
@@ -126,7 +126,7 @@ public class NotificationDispatcher {
                             sent = true;
                             break;
                         }
-                    } catch (Exception relayEx) {
+                    } catch (org.springframework.web.client.RestClientException | IllegalStateException | IllegalArgumentException relayEx) {
                         // try next
                     }
                 }
@@ -250,7 +250,7 @@ public class NotificationDispatcher {
                     HttpEntity<Map<String, String>> request = new HttpEntity<>(payload, headers);
                     ResponseEntity<String> response = restTemplate.postForEntity(SEMAPHORE_API_URL, request, String.class);
                     log.info("[SMS-SEMAPHORE-LIVE] Dispatched to {}  code={}  response={}", rawNumber, response.getStatusCode(), response.getBody());
-                } catch (Exception smsEx) {
+                } catch (org.springframework.web.client.RestClientException | IllegalStateException | IllegalArgumentException smsEx) {
                     log.error("[SMS-SEMAPHORE-FAIL] Semaphore API error for {}: {}", rawNumber, smsEx.getMessage());
                 }
             }

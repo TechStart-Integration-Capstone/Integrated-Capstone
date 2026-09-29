@@ -112,7 +112,7 @@ public class StressTestController {
                             "Safely rejected: Insufficient balance after serialised previous commit.",
                             latency));
 
-                } catch (Exception ex) {
+                } catch (AccountNotFoundException | org.springframework.dao.DataAccessException | RuntimeException ex) {
                     long latency = System.currentTimeMillis() - startTime;
                     threadLogs.add(new StressTestResult.ThreadExecutionDetail(
                             idx, "Thread-" + idx,
