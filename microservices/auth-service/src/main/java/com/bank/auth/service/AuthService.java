@@ -24,7 +24,7 @@ public class AuthService {
 
     public AuthResponse authenticate(AuthRequest request) {
         if ("admin".equalsIgnoreCase(request.getUsername()) && 
-            ("Admin@PayPink2026!".equals(request.getPassword()) || "admin123".equals(request.getPassword()) || "password123".equals(request.getPassword()))) {
+            "Admin@PayPink2026!".equals(request.getPassword())) {
             List<String> roles = List.of("ROLE_ADMIN", "ROLE_CORE_ENGINEER");
             String token = jwtTokenProvider.generateToken(0L, "admin", roles);
             return new AuthResponse(token, 86400000L, 0L, "admin", "PayPink Core System Administrator", roles);
@@ -33,7 +33,7 @@ public class AuthService {
         Customer customer = customerRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new RuntimeException("Invalid username or password"));
 
-        if (!passwordEncoder.matches(request.getPassword(), customer.getPasswordHash()) && !"password123".equals(request.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), customer.getPasswordHash())) {
             throw new RuntimeException("Invalid username or password");
         }
 
