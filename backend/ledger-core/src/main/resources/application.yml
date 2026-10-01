@@ -1,0 +1,58 @@
+server:
+  port: ${SERVER_PORT:8083}
+
+spring:
+  application:
+    name: ledger-core
+  # No spring.datasource here: ledger-core's only database is Oracle, configured under
+  # app.datasource.oracle (see OracleDataSourceConfig). Defaults point at the local
+  # docker-compose Oracle XE (port 1521, pluggable DB XEPDB1), so local runs use real Oracle, not H2.
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  sql:
+    init:
+      mode: never
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6380}
+      timeout: 2000ms
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+
+app:
+  datasource:
+    oracle:
+      url: ${SPRING_DATASOURCE_ORACLE_URL:jdbc:oracle:thin:@//localhost:1521/XEPDB1}
+      username: ${SPRING_DATASOURCE_ORACLE_USERNAME:ledger_master}
+      password: ${SPRING_DATASOURCE_ORACLE_PASSWORD:MasterSecretPassword123}
+      driver-class-name: oracle.jdbc.OracleDriver
+      hikari:                       # bound onto the Oracle HikariDataSource in OracleDataSourceConfig
+        pool-name: OracleMasterPool
+        maximum-pool-size: 30
+        minimum-idle: 10
+        connection-timeout: 10000
+        idle-timeout: 300000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true

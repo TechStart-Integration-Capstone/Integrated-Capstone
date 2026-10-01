@@ -1,0 +1,45 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: auth-service
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6380}
+      timeout: 2000ms
+
+app:
+  datasource:
+    oracle:
+      url: ${SPRING_DATASOURCE_ORACLE_URL:jdbc:oracle:thin:@//localhost:1521/XEPDB1}
+      username: ${SPRING_DATASOURCE_ORACLE_USERNAME:ledger_master}
+      password: ${SPRING_DATASOURCE_ORACLE_PASSWORD:MasterSecretPassword123}
+      driver-class-name: oracle.jdbc.OracleDriver
+      hikari:
+        pool-name: AuthOraclePool
+        maximum-pool-size: 15
+        minimum-idle: 5
+        connection-timeout: 10000
+        idle-timeout: 300000
+  security:
+    jwt-secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+    jwt-expiration-ms: 86400000 # 24 Hours
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
