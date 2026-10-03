@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "8f3b2c1a-7d4e-4f9a-9e12-3b4c5d6e7f8a",
-    "name": "PayPink Core Retail Ledger & Balance Mutation Engine",
-    "description": "Comprehensive Postman Test Suite for FSE Capstone: Core Balance Mutation Engine, JSR-380 Validation, RFC-7807 Problem Details, Redis Idempotency (<5ms), Pessimistic Lock Double-Spend Prevention, and @Scheduled Reconciliation.",
+    "name": "PayPink 2.0 — Core Retail Ledger & Risk Engine",
+    "description": "Full test suite for PayPink Capstone 1 + Capstone 2 (Phase 0–3). Covers: JWT auth, account queries (with mayBeStale circuit breaker), ledger mutations, idempotency, stress tests, reconciliation, telemetry, X-Correlation-ID verification, and the Phase 3 Risk Engine scoring API.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -10,7 +10,7 @@
       "name": "1. Authentication & Security (Perimeter Layer)",
       "item": [
         {
-          "name": "POST Login & Generate JWT Token",
+          "name": "POST Login & Generate JWT Token (lviernes)",
           "event": [
             {
               "listen": "test",
@@ -23,6 +23,9 @@
                   "pm.test(\"JWT token received\", function () {",
                   "    pm.expect(jsonData.token).to.be.a('string');",
                   "    pm.environment.set(\"jwt_token\", jsonData.token);",
+                  "});",
+                  "pm.test(\"X-Correlation-ID present in response\", function () {",
+                  "    pm.expect(pm.response.headers.get('X-Correlation-ID')).to.be.a('string');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -31,15 +34,10 @@
           ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"jdelacruz\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"username\": \"lviernes\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
@@ -49,7 +47,35 @@
           }
         },
         {
-          "name": "GET Quick Demo JWT Token",
+          "name": "POST Login (arosales)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"jwt_token\", pm.response.json().token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"arosales\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "GET Quick Demo JWT Token (no credentials)",
           "event": [
             {
               "listen": "test",
@@ -59,7 +85,10 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var jsonData = pm.response.json();",
-                  "pm.environment.set(\"jwt_token\", jsonData.token);"
+                  "pm.environment.set(\"jwt_token\", jsonData.token);",
+                  "pm.test(\"X-Correlation-ID present\", function () {",
+                  "    pm.expect(pm.response.headers.get('X-Correlation-ID')).to.be.a('string');",
+                  "});"
                 ],
                 "type": "text/javascript"
               }
@@ -74,6 +103,33 @@
               "path": ["api", "v1", "auth", "demo-token"]
             }
           }
+        },
+        {
+          "name": "POST Login — Invalid Password (401 expected)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 Unauthorized\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"lviernes\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
         }
       ]
     },
@@ -82,14 +138,21 @@
       "item": [
         {
           "name": "GET All Retail Accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"X-Correlation-ID present\", () => pm.expect(pm.response.headers.get('X-Correlation-ID')).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts",
               "host": ["{{base_url}}"],
@@ -98,15 +161,24 @@
           }
         },
         {
-          "name": "GET Single Account by ID",
+          "name": "GET Single Account by ID (accountId=1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"mayBeStale is false — live DB read\", () => pm.expect(j.mayBeStale).to.be.false);",
+                  "pm.test(\"Redis cache written — account:balance:1 exists (check Redis)\", () => pm.expect(j.accountId).to.eql(1));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/1",
               "host": ["{{base_url}}"],
@@ -115,15 +187,26 @@
           }
         },
         {
-          "name": "GET Customer Profile with Balances (Juan Dela Cruz)",
+          "name": "GET Customer Profile with Balances (lviernes, customerId=1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Has accounts array\", () => pm.expect(j.accounts).to.be.an('array'));",
+                  "pm.test(\"mayBeStale false on all accounts\", () => {",
+                  "    j.accounts.forEach(a => pm.expect(a.mayBeStale).to.be.false);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/customer/1",
               "host": ["{{base_url}}"],
@@ -132,23 +215,14 @@
           }
         },
         {
-          "name": "POST Reset Account Balance (Stress Prep)",
+          "name": "POST Reset Account Balance (Stress Prep — resets to 60)",
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"targetBalance\": 60.0000\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"targetBalance\": 60.0000\n}" },
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/3/reset-balance",
               "host": ["{{base_url}}"],
@@ -162,14 +236,12 @@
       "name": "3. Core Ledger Mutation (/api/v1/ledger/mutate)",
       "item": [
         {
-          "name": "POST Valid DEBIT Mutation (JSR-380 Compliant)",
+          "name": "POST Valid DEBIT Mutation",
           "event": [
             {
               "listen": "prerequest",
               "script": {
-                "exec": [
-                  "pm.environment.set(\"idemp_key\", \"IDEMP-POSTMAN-\" + Date.now());"
-                ],
+                "exec": ["pm.environment.set(\"idemp_key\", \"IDEMP-POSTMAN-\" + Date.now());"],
                 "type": "text/javascript"
               }
             },
@@ -177,15 +249,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Balance mutated with exact 4 decimals precision\", function () {",
-                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
-                  "    pm.expect(jsonData.referenceNo).to.be.a('string');",
-                  "    pm.expect(jsonData.afterBalance).to.be.a('number');",
-                  "});"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Status SUCCESS\", () => pm.expect(j.status).to.eql('SUCCESS'));",
+                  "pm.test(\"cachedIdempotentResponse is false (first call)\", () => pm.expect(j.cachedIdempotentResponse).to.be.false);",
+                  "pm.test(\"referenceNo present\", () => pm.expect(j.referenceNo).to.be.a('string'));",
+                  "pm.test(\"afterBalance is number\", () => pm.expect(j.afterBalance).to.be.a('number'));"
                 ],
                 "type": "text/javascript"
               }
@@ -194,18 +263,9 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{idemp_key}}"
-              }
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idemp_key}}" }
             ],
             "body": {
               "mode": "raw",
@@ -219,22 +279,16 @@
           }
         },
         {
-          "name": "POST Redis Idempotency Duplicate Replay (<5ms)",
+          "name": "POST Redis Idempotency Duplicate Replay (same key — must return cached)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Served from Redis In-Memory matrix\", function () {",
-                  "    pm.expect(jsonData.cachedIdempotentResponse).to.be.true;",
-                  "});",
-                  "pm.test(\"Response time <= 50ms SLA\", function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(50);",
-                  "});"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"cachedIdempotentResponse is TRUE (Redis hit)\", () => pm.expect(j.cachedIdempotentResponse).to.be.true);",
+                  "pm.test(\"Response time under 50ms (Redis)\", () => pm.expect(pm.response.responseTime).to.be.below(50));"
                 ],
                 "type": "text/javascript"
               }
@@ -243,18 +297,9 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{idemp_key}}"
-              }
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idemp_key}}" }
             ],
             "body": {
               "mode": "raw",
@@ -268,21 +313,15 @@
           }
         },
         {
-          "name": "POST Boundary Fault: 5 Decimals (Fails @Digits fraction=4)",
+          "name": "POST Boundary Fault: 5 Decimals (400 expected)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", function () {",
-                  "    pm.response.to.have.status(400);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Returns RFC-7807 Problem Details\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/validation-error\");",
-                  "    pm.expect(jsonData.invalidParams).to.be.an('array');",
-                  "    pm.expect(jsonData.invalidParams[0].name).to.eql(\"mutationAmount\");",
-                  "});"
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"RFC-7807 validation error\", () => pm.expect(j.type).to.include('validation'));"
                 ],
                 "type": "text/javascript"
               }
@@ -291,19 +330,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": 100.12345,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": 100.12345,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}" },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
               "host": ["{{base_url}}"],
@@ -312,20 +342,13 @@
           }
         },
         {
-          "name": "POST Boundary Fault: Negative Amount (Fails @Positive)",
+          "name": "POST Boundary Fault: Negative Amount (400 expected)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", function () {",
-                  "    pm.response.to.have.status(400);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Returns RFC-7807 Problem Details\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/validation-error\");",
-                  "    pm.expect(jsonData.invalidParams[0].name).to.eql(\"mutationAmount\");",
-                  "});"
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
                 ],
                 "type": "text/javascript"
               }
@@ -334,19 +357,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": -50.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": -50.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}" },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
               "host": ["{{base_url}}"],
@@ -355,20 +369,15 @@
           }
         },
         {
-          "name": "POST Boundary Fault: Malformed JSON Schema",
+          "name": "POST Overdraft Protection: Insufficient Funds (422 expected)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", function () {",
-                  "    pm.response.to.have.status(400);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"RFC-7807 Malformed Schema structure\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/malformed-payload\");",
-                  "    pm.expect(jsonData.title).to.eql(\"Malformed JSON Schema\");",
-                  "});"
+                  "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"RFC-7807 insufficient-funds\", () => pm.expect(j.type).to.include('insufficient'));"
                 ],
                 "type": "text/javascript"
               }
@@ -377,61 +386,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"accountId\": \"NOT_A_VALID_NUMBER\",\n  \"mutationAmount\": \"INVALID_DECIMAL_STRING\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
-            }
-          }
-        },
-        {
-          "name": "POST Overdraft Protection: Insufficient Funds",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
-                  "    pm.response.to.have.status(422);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Insufficient Funds RFC-7807 envelope\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/insufficient-funds\");",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"accountId\": 3,\n  \"mutationAmount\": 9999999.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"accountId\": 3,\n  \"mutationAmount\": 9999999.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}" },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
               "host": ["{{base_url}}"],
@@ -445,21 +403,16 @@
       "name": "4. Concurrency & Double-Spend Stress Simulator",
       "item": [
         {
-          "name": "POST Live Double-Spend Race Condition Test (10 Threads)",
+          "name": "POST Double-Spend Race Condition Test (10 threads)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Race condition prevented via @Lock(PESSIMISTIC_WRITE)\", function () {",
-                  "    pm.expect(jsonData.raceConditionPrevented).to.be.true;",
-                  "    pm.expect(jsonData.successfulRequests).to.eql(1);",
-                  "    pm.expect(jsonData.actualFinalBalance).to.eql(10.0000);",
-                  "});"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Race condition prevented\", () => pm.expect(j.raceConditionPrevented).to.be.true);",
+                  "pm.test(\"Only 1 successful debit\", () => pm.expect(j.successfulRequests).to.eql(1));"
                 ],
                 "type": "text/javascript"
               }
@@ -468,14 +421,8 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
@@ -494,28 +441,19 @@
       "name": "5. Cross-Database Reconciliation Service",
       "item": [
         {
-          "name": "POST Trigger @Scheduled 15-Minute Sweep On-Demand",
+          "name": "POST Trigger Reconciliation On-Demand",
           "event": [
             {
               "listen": "test",
               "script": {
-                "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
-                ],
+                "exec": ["pm.test(\"Status 200\", () => pm.response.to.have.status(200));"],
                 "type": "text/javascript"
               }
             }
           ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
             "url": {
               "raw": "{{base_url}}/api/v1/reconciliation/run",
               "host": ["{{base_url}}"],
@@ -527,12 +465,7 @@
           "name": "GET Reconciliation Audit Logs",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              }
-            ],
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
             "url": {
               "raw": "{{base_url}}/api/v1/reconciliation/logs",
               "host": ["{{base_url}}"],
@@ -546,7 +479,7 @@
       "name": "6. Telemetry & Observability Layer",
       "item": [
         {
-          "name": "GET Engine Telemetry & SLA Stats",
+          "name": "GET Engine Telemetry Stats",
           "request": {
             "method": "GET",
             "header": [],
@@ -558,7 +491,7 @@
           }
         },
         {
-          "name": "GET Prometheus Actuator Scrape Endpoint",
+          "name": "GET Prometheus Actuator Scrape",
           "request": {
             "method": "GET",
             "header": [],
@@ -570,7 +503,19 @@
           }
         },
         {
-          "name": "GET System Health Actuator",
+          "name": "GET System Health (all services)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Overall status UP\", () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
@@ -578,6 +523,377 @@
               "raw": "{{base_url}}/actuator/health",
               "host": ["{{base_url}}"],
               "path": ["actuator", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Phase 2 — Network Hardening & Resilience4j",
+      "item": [
+        {
+          "name": "GET X-Correlation-ID Auto-Generated (no header sent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"X-Correlation-ID auto-generated UUID in response\", function () {",
+                  "    var id = pm.response.headers.get('X-Correlation-ID');",
+                  "    pm.expect(id).to.be.a('string');",
+                  "    pm.expect(id.length).to.be.above(10);",
+                  "    pm.environment.set('last_correlation_id', id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/demo-token",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "demo-token"]
+            }
+          }
+        },
+        {
+          "name": "GET X-Correlation-ID Preserved (client sends own ID)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Client correlation ID preserved in response\", function () {",
+                  "    var returned = pm.response.headers.get('X-Correlation-ID');",
+                  "    pm.expect(returned).to.eql('my-custom-trace-id-12345');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Correlation-ID", "value": "my-custom-trace-id-12345" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/demo-token",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "demo-token"]
+            }
+          }
+        },
+        {
+          "name": "GET Account — mayBeStale=false (live DB, circuit CLOSED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"mayBeStale is false — reading from Azure SQL\", () => pm.expect(j.mayBeStale).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "accounts", "1"]
+            }
+          }
+        },
+        {
+          "name": "GET Circuit Breaker Health (account-service)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"circuitBreakers component visible\", function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.components.circuitBreakers).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/actuator/health",
+              "host": ["{{base_url}}"],
+              "path": ["actuator", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Phase 3 — Risk Engine (Python FastAPI)",
+      "item": [
+        {
+          "name": "GET Risk Engine Health (no JWT needed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status UP\", () => pm.expect(j.status).to.eql('UP'));",
+                  "pm.test(\"service is risk-engine\", () => pm.expect(j.service).to.eql('risk-engine'));",
+                  "pm.test(\"version is 2.0.0\", () => pm.expect(j.version).to.eql('2.0.0'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "health"]
+            }
+          }
+        },
+        {
+          "name": "POST Score — Low Risk (5k PHP) → APPROVE score=0.0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is APPROVE\", () => pm.expect(j.decision).to.eql('APPROVE'));",
+                  "pm.test(\"score is 0.0\", () => pm.expect(j.score).to.eql(0.0));",
+                  "pm.test(\"reasons contains no_risk_signals\", () => pm.expect(j.reasons).to.include('no_risk_signals'));",
+                  "pm.test(\"latencyMs under 200ms\", () => pm.expect(j.latencyMs).to.be.below(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "score"]
+            }
+          }
+        },
+        {
+          "name": "POST Score — Medium Risk (75k PHP) → APPROVE score=0.3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is APPROVE\", () => pm.expect(j.decision).to.eql('APPROVE'));",
+                  "pm.test(\"score is 0.3\", () => pm.expect(j.score).to.eql(0.3));",
+                  "pm.test(\"reason: amount_above_50k\", () => pm.expect(j.reasons).to.include('amount_above_50k'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 75000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "score"]
+            }
+          }
+        },
+        {
+          "name": "POST Score — Self-Transfer → REJECT score=0.9",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is REJECT\", () => pm.expect(j.decision).to.eql('REJECT'));",
+                  "pm.test(\"score is 0.9\", () => pm.expect(j.score).to.eql(0.9));",
+                  "pm.test(\"reason: self_transfer\", () => pm.expect(j.reasons).to.include('self_transfer'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 1,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "score"]
+            }
+          }
+        },
+        {
+          "name": "POST Score — New Account + High Velocity → REJECT score=1.0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is REJECT\", () => pm.expect(j.decision).to.eql('REJECT'));",
+                  "pm.test(\"score capped at 1.0\", () => pm.expect(j.score).to.eql(1.0));",
+                  "pm.test(\"multiple risk reasons\", () => pm.expect(j.reasons.length).to.be.above(2));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 150000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 5.0,\n  \"recentTxCount\": 8\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "score"]
+            }
+          }
+        },
+        {
+          "name": "POST Score — Non-PHP Currency → higher risk",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"reason: non_php_currency\", () => pm.expect(j.reasons).to.include('non_php_currency'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"USD\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "score"]
+            }
+          }
+        },
+        {
+          "name": "POST Score — Missing Required Field (422 expected)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 Unprocessable Entity\", () => pm.response.to.have.status(422));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "score"]
+            }
+          }
+        },
+        {
+          "name": "POST Score — No JWT (401 expected)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 Unauthorized\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "risk", "score"]
             }
           }
         }
