@@ -73,7 +73,7 @@ public class BankingTransferService {
 
     private BankingLedger.Account lock(long id) {
         List<BankingLedger.Account> accounts = jdbc.query("SELECT account_id, customer_id, account_number, currency, current_balance, status "
-                        + "FROM ACCOUNT WHERE account_id = ? FOR UPDATE",
+                        + "FROM ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id = ?",
                 (rs, row) -> new BankingLedger.Account(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
                         rs.getBigDecimal(5), rs.getString(6)), id);
         if (accounts.isEmpty()) throw error(HttpStatus.NOT_FOUND, "The account could not be found.");
@@ -81,8 +81,8 @@ public class BankingTransferService {
     }
 
     private Receipt replay(String reference, Request request, String destination) {
-        List<Receipt> receipts = jdbc.query("SELECT t.from_account_id, a.account_number, t.amount, t.source_currency, t.transaction_date, c.first_name || ' ' || c.last_name, t.transaction_id "
-                        + "FROM TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id JOIN CUSTOMER c ON c.customer_id = a.customer_id WHERE t.reference_no = ? AND t.status = 'SUCCESS'",
+        List<Receipt> receipts = jdbc.query("SELECT t.from_account_id, a.account_number, t.amount, t.source_currency, t.transaction_date, c.first_name + ' ' + c.last_name, t.transaction_id "
+                        + "FROM LEDGER_TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id JOIN CUSTOMER c ON c.customer_id = a.customer_id WHERE t.reference_no = ? AND t.status = 'SUCCESS'",
                 (rs, row) -> new Receipt(BankingIdentifiers.reference(rs.getLong(7),rs.getTimestamp(5).toLocalDateTime()), rs.getLong(1), rs.getString(2), rs.getBigDecimal(3), rs.getString(4),
                         "SUCCESS", rs.getTimestamp(5).toLocalDateTime(), rs.getString(6)), reference + "-D");
         if (receipts.isEmpty()) return null;

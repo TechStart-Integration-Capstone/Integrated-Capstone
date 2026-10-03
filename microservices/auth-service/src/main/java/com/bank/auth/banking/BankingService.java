@@ -71,8 +71,9 @@ public class BankingService {
     private String createSavingsAccount(long customerId) {
         for(int attempt = 0; attempt < 128; attempt++) {
             String customerNumber = BankingIdentifiers.newCustomerNumber(candidate -> {
-                Integer count = jdbc.queryForObject("SELECT (SELECT COUNT(*) FROM ACCOUNT WHERE SUBSTR(account_number,5,7)=?) "
-                        + "+ (SELECT COUNT(*) FROM AUDIT_LOG WHERE action='ACCOUNT_RENUMBERED' AND SUBSTR(details,5,7)=?) FROM DUAL",
+                Integer count = jdbc.queryForObject(
+                        "SELECT (SELECT COUNT(*) FROM ACCOUNT WHERE SUBSTRING(account_number,5,7)=?) "
+                        + "+ (SELECT COUNT(*) FROM AUDIT_LOG WHERE action='ACCOUNT_RENUMBERED' AND SUBSTRING(details,5,7)=?)",
                         Integer.class, candidate, candidate);
                 return count != null && count > 0;
             });
@@ -119,14 +120,14 @@ public class BankingService {
         // The outbox records the actual debit/credit operation; transaction_type can be a payment rail.
         // Only the mutated account is selected: a target ID alone does not prove a recipient credit.
         return jdbc.query("SELECT t.transaction_id, a.account_id, a.account_number, t.amount, t.source_currency, "
-                        + "t.transaction_type, COALESCE((SELECT JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o "
-                        + "WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id FETCH FIRST 1 ROW ONLY), "
+                        + "t.transaction_type, COALESCE((SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o "
+                        + "WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
                         + "CASE WHEN t.transaction_type IN ('DEBIT','CREDIT') THEN t.transaction_type END), "
-                        + "t.reference_no, t.status, t.transaction_date, c.first_name || ' ' || c.last_name, target.account_number FROM TRANSACTION t "
+                        + "t.reference_no, t.status, t.transaction_date, c.first_name + ' ' + c.last_name, target.account_number FROM LEDGER_TRANSACTION t "
                         + "JOIN ACCOUNT a ON a.account_id = t.from_account_id "
                         + "LEFT JOIN ACCOUNT target ON target.account_id = t.to_account_id AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN') "
                         + "LEFT JOIN CUSTOMER c ON c.customer_id = target.customer_id WHERE a.customer_id = ? "
-                        + "ORDER BY t.transaction_date DESC, t.transaction_id DESC FETCH FIRST 200 ROWS ONLY",
+                        + "ORDER BY t.transaction_date DESC, t.transaction_id DESC OFFSET 0 ROWS FETCH NEXT 200 ROWS ONLY",
                 (rs, row) -> new Activity(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getBigDecimal(4),
                         rs.getString(5), rs.getString(6), rs.getString(7), BankingIdentifiers.reference(rs.getLong(1),rs.getTimestamp(10).toLocalDateTime()), rs.getString(9),
                         rs.getTimestamp(10).toLocalDateTime(), ExternalTransferService.recipientForType(rs.getString(6)) == null ? rs.getString(11) : ExternalTransferService.recipientForType(rs.getString(6)).name(), ExternalTransferService.recipientForType(rs.getString(6)) == null ? rs.getString(12) : ExternalTransferService.recipientForType(rs.getString(6)).number()), customer.getCustomerId());
