@@ -659,12 +659,14 @@
                     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                         <div>
                             <h2 class="card-title">Real-Time Ledger Transaction Monitor</h2>
-                            <p class="section-subtitle" style="margin-top: 0.2rem;">Live monitoring of incoming mutations, digital rails (InstaPay, PESONet, QR Ph), and transaction statuses across all accounts.</p>
+                            <p class="section-subtitle" style="margin-top: 0.2rem;">Today's ledger transactions in Philippine time (UTC+8), newest first. Refreshes every 5 seconds.</p>
                         </div>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
                             <select id="monitor-status-filter" class="form-control" onchange="renderTransactionMonitor()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
                                 <option value="ALL">All Statuses</option>
                                 <option value="SUCCESS">Committed (SUCCESS)</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="COMPLETED">Completed</option>
                                 <option value="FAILED">Blocked / Insufficient Funds</option>
                             </select>
                             <select id="monitor-type-filter" class="form-control" onchange="renderTransactionMonitor()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
@@ -673,7 +675,7 @@
                                 <option value="CREDIT">Credits &amp; Deposits</option>
                                 <option value="DEBIT">Debits &amp; Payments</option>
                             </select>
-                            <button class="btn-primary" onclick="loadRecentTransactions()" style="padding: 0.5rem 1rem; font-size: 0.85rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Refresh Monitor</button>
+                            <button class="btn-primary" onclick="loadRecentTransactions(true)" style="padding: 0.5rem 1rem; font-size: 0.85rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 5px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Refresh Monitor</button>
                         </div>
                     </div>
 
@@ -685,8 +687,8 @@
                                     <th>Timestamp (DD/MM/YYYY)</th>
                                     <th>Account Number</th>
                                     <th>Transaction Type &amp; Rail</th>
-                                    <th>Amount (PHP)</th>
-                                    <th>Idempotency Token</th>
+                                    <th>Amount</th>
+                                    <th>Operation</th>
                                     <th>Ledger Status</th>
                                 </tr>
                             </thead>
@@ -991,7 +993,7 @@
     <div id="admin-toast" class="admin-toast" hidden></div>
 
     <!-- Script -->
-    <script src="src/js/app.js?v=20260929-admin-sync"></script>
+    <script src="src/js/app.js?v=20261003-live-monitor"></script>
     <script src="admin/admin.js?v=20260929-admin-sync"></script>
 </body>
 </html>

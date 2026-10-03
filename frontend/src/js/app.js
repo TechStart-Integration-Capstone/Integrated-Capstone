@@ -91,6 +91,11 @@ let currentCustomerId = 1;
 let selectedSourceAccountId = 1;
 let accountsData = [];
 let recentTransactions = [];
+// This monitor is populated only by the ledger API, never simulation or browser storage.
+let monitorTransactions = [];
+let monitorError = null;
+let monitorLoaded = false;
+let monitorRequest = null;
 let oracleAuditLogs = [];
 let outboxEvents = [];
 let postgresAudits = [
@@ -110,6 +115,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCustomerAndAccounts();
     await loadAllCustomers(false);
     await loadRecentTransactions();
+    setInterval(() => {
+        if (!document.hidden) loadRecentTransactions();
+    }, 5000);
     await loadInitialAuditLogs();
     await loadReconciliationLogs(); // Live report preview & reconciliation records
     setupRailsSelector();
@@ -1011,7 +1019,7 @@ function switchTab(tabName) {
     } else if (tabName === 'customers') {
         loadAllCustomers();
     } else if (tabName === 'transactions') {
-        renderTransactionMonitor();
+        loadRecentTransactions();
     } else if (tabName === 'audit') {
         loadInitialAuditLogs();
         loadPostgresAuditLogs();
@@ -1352,31 +1360,47 @@ function renderTransactionMonitor() {
     const statusFilter = document.getElementById('monitor-status-filter')?.value || 'ALL';
     const typeFilter = document.getElementById('monitor-type-filter')?.value || 'ALL';
 
-    const list = recentTransactions.filter(tx => {
+    const today = monitorDateKey(new Date());
+    const list = monitorTransactions.filter(tx => {
+        if (monitorDateKey(tx.transactionDate) !== today) return false;
         if (statusFilter !== 'ALL' && tx.status !== statusFilter) return false;
-        if (typeFilter !== 'ALL' && !tx.type.includes(typeFilter)) return false;
+        if (typeFilter === 'TRANSFER' && !tx.transactionType?.includes('TRANSFER') && !tx.transactionType?.startsWith('EXT_')) return false;
+        if (['CREDIT', 'DEBIT'].includes(typeFilter) && tx.operation !== typeFilter) return false;
         return true;
-    });
+    }).sort((a, b) => Date.parse(b.transactionDate) - Date.parse(a.transactionDate)
+        || String(b.transactionId).localeCompare(String(a.transactionId), 'en', { numeric: true }));
 
-    if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">No transactions found matching filter criteria.</td></tr>';
+    if (monitorError || !monitorLoaded || list.length === 0) {
+        const message = monitorError || (!monitorLoaded ? "Loading today's transactions..."
+            : "No transactions today match the selected filters (Philippine time).");
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">${escapeMonitorHtml(message)}</td></tr>`;
         return;
     }
 
     tbody.innerHTML = list.map(tx => {
-        const accDisplay = tx.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : '001181233469');
-        const isCredit = tx.type.includes('CREDIT') || tx.type.includes('IN');
+        const sign = tx.operation === 'CREDIT' ? '+' : tx.operation === 'DEBIT' ? '-' : '';
+        const amount = new Intl.NumberFormat('en-PH', { style: 'currency', currency: tx.currency, minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(tx.amount);
+        const color = tx.operation === 'CREDIT' ? 'var(--status-success)' : tx.operation === 'DEBIT' ? 'var(--primary-rose)' : 'var(--text-primary)';
         return `
         <tr>
-            <td><code>${tx.ref}</code></td>
-            <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${tx.date}</td>
-            <td><strong>${formatAccountNumber(accDisplay)}</strong></td>
-            <td><span class="badge-chip">${tx.type}</span></td>
-            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${isCredit ? '+' : '-'}₱${formatCurrency(tx.amount)}</strong></td>
-            <td><code>IDEMP-PH-${tx.id}</code></td>
-            <td><span class="status-tag ${tx.status === 'SUCCESS' || tx.status === 'COMPLETED' ? 'tag-success' : 'tag-error'}">${tx.status}</span></td>
+            <td><code>${escapeMonitorHtml(tx.referenceNo)}</code></td>
+            <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${escapeMonitorHtml(formatPhilippineDateTime(tx.transactionDate))}</td>
+            <td><strong>${escapeMonitorHtml(formatAccountNumber(tx.accountNumber))}</strong></td>
+            <td><span class="badge-chip">${escapeMonitorHtml(tx.transactionType)}</span></td>
+            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${color};">${sign}${escapeMonitorHtml(amount)}</strong></td>
+            <td>${escapeMonitorHtml(tx.operation || 'Not recorded')}</td>
+            <td><span class="status-tag ${['SUCCESS', 'COMPLETED'].includes(tx.status) ? 'tag-success' : tx.status === 'PENDING' ? '' : 'tag-error'}">${escapeMonitorHtml(tx.status)}</span></td>
         </tr>
     `}).join('');
+}
+
+function monitorDateKey(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+}
+
+function escapeMonitorHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
 function renderTransactionFeed() {
@@ -1458,34 +1482,28 @@ function saveAuditsToStorage() {
 }
 
 async function loadRecentTransactions(isManualClick = false) {
-    const saved = localStorage.getItem('paypink_admin_recent_transactions');
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                recentTransactions = parsed;
-            }
-        } catch (e) {}
-    }
-
-    if (recentTransactions.length === 0) {
-        recentTransactions = [
-            { id: 103, ref: 'TX-PH-2026-0929-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), status: 'SUCCESS' },
-            { id: 102, ref: 'TX-PH-2026-0929-000', accountNumber: '001381233467', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 3600000)), status: 'SUCCESS' },
-            { id: 101, ref: 'TX-PH-INIT-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 86400000)), status: 'SUCCESS' },
-            { id: 100, ref: 'TX-PH-INIT-000', accountNumber: '001981233461', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 172800000)), status: 'SUCCESS' }
-        ];
-        saveTransactionsToStorage();
-    }
-
-    renderTransactionFeed();
+    if (monitorRequest) return monitorRequest;
     renderTransactionMonitor();
-
-    await syncBackendTransactions();
-
-    if (isManualClick) {
-        showAdminToast('Refreshed real-time transaction monitor with latest ledger records.');
-    }
+    monitorRequest = (async () => {
+        try {
+            const response = await fetch(`${API_BASE}/auth/admin/transactions/today`, {
+                headers: getAuthHeaders(), cache: 'no-store', signal: AbortSignal.timeout(10000)
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const rows = await response.json();
+            if (!Array.isArray(rows)) throw new Error('Invalid transaction response');
+            monitorTransactions = rows;
+            monitorError = null;
+            monitorLoaded = true;
+            if (isManualClick) showAdminToast("Today's transactions refreshed from the ledger.");
+        } catch (error) {
+            monitorTransactions = [];
+            monitorError = "Unable to load today's transactions. Please refresh or sign in again.";
+        } finally {
+            renderTransactionMonitor();
+        }
+    })();
+    try { await monitorRequest; } finally { monitorRequest = null; }
 }
 
 async function loadInitialAuditLogs() {

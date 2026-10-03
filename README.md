@@ -321,6 +321,9 @@ Authorization: Bearer <your-token-here>
 |---|---|---|---|
 | POST | /api/v1/auth/login | No | Login with username/password, returns JWT |
 | GET | /api/v1/auth/demo-token | No | Returns a demo JWT without credentials |
+| GET | /api/v1/auth/admin/transactions/today | Admin JWT | Reads today's Azure ledger transactions in Philippine time, newest timestamp and ID first |
+
+The admin transaction monitor refreshes this endpoint every five seconds. It uses stored ledger rows without browser-cached simulation data or sample fallbacks. Missing operations are shown as "Not recorded"; idempotency tokens are not fabricated. Empty results and connection failures have separate display states.
 
 ### Account Service — `/api/v1/accounts`
 
