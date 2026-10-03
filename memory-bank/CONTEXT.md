@@ -1,27 +1,78 @@
 # PayPink 2.0 — Project Context
 
-_Last updated: 2026-10-02_
+_Last updated: 2026-10-03_
 
 ## What it is
 Mobile P2P remittance app (domestic, PHP) with real-time fraud screening.
-Built on our Capstone 1 ledger.
+Built on top of the Capstone 1 ledger engine.
 
 ## How a transfer works
-1. App → API Gateway (JWT check, rate limit)
-2. Orchestrator checks for duplicates (Redis)
-3. Risk Engine scores it (Python, ≤ 200 ms). Score > 0.85 → rejected
-4. Account Service validates the account
-5. Ledger + OUTBOX saved in one transaction (Azure SQL)
-6. Outbox → Kafka → audit, notifications, reconciliation, analytics
+1. App → API Gateway (JWT check, rate limit, X-Correlation-ID)
+2. Remittance Orchestrator checks for duplicates (Redis idempotency)
+3. Risk Engine scores it (Python FastAPI, ≤ 200 ms SLA). Score > 0.85 → rejected
+4. T24 Core Adapter posts to T24 OFS first (synchronous). Response codes: 200/503/202/422
+5. Account Service validates account + ownership (Resilience4j circuit breaker → Redis cache fallback)
+6. Ledger balance mutation + OUTBOX row saved in one Azure SQL transaction (UPDLOCK, ROWLOCK)
+7. Outbox Publisher polls PENDING rows → Kafka → Audit, Notification, Reconciliation, Analytics
 
 ## Stack
-Spring Boot · Spring Cloud Gateway · Python FastAPI · Azure SQL (local: SQL Server 2022) · PostgreSQL · Redis · Kafka · Docker Compose · Grafana
+- **Backend:** Spring Boot 3.2.3, Spring Cloud Gateway 2023.0.0, Python FastAPI (Risk Engine)
+- **Database (OLTP):** Azure SQL = SQL Server 2022 local Docker (`mcr.microsoft.com/mssql/server:2022-latest`, port 1433)
+- **Database (Audit):** PostgreSQL 15 (port 5434)
+- **Cache:** Redis 7 (port 6380) — idempotency keys + rate limit buckets + balance cache (display only)
+- **Messaging:** Apache Kafka (port 9092), topic: `ledger.transaction.events`
+- **Observability:** OTel Collector → Prometheus + Loki + Tempo → Grafana + Jaeger
+- **Frontend:** Vanilla JS SPA served by Nginx (port 3001)
 
-## Decisions
-- Risk check runs before the DB transaction (no locks held during the call)
-- Audit goes to PostgreSQL through outbox + Kafka, not a dual commit
-- SQL Server locking: `WITH (UPDLOCK, ROWLOCK)` (no `SELECT … FOR UPDATE`)
-- Still to confirm with trainer: T24 before or after commit; domestic only?
+## Microservices (ports)
+| Service | Port | DB |
+|---|---|---|
+| api-gateway | 8080 | Redis |
+| auth-service | 8081 | Azure SQL |
+| account-service | 8082 | Azure SQL |
+| transaction-service | 8083 | Azure SQL + Redis + Kafka |
+| notification-service | 8084 | PostgreSQL + Kafka |
+| audit-service | 8085 | PostgreSQL + Kafka |
+| reconciliation-service | 8086 | Azure SQL + PostgreSQL |
+| outbox-publisher | 8087 | Azure SQL + Kafka |
+| analytics-service | 8088 | Kafka (in-memory) |
+
+## Azure SQL Schema (as of Phase 1)
+Tables: `CUSTOMER`, `ACCOUNT`, `AUDIT_LOG`, `BANKING_FAVORITE`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT`
+
+> ⚠️ `TRANSACTION` is a reserved word in T-SQL — table is named `LEDGER_TRANSACTION` everywhere.
+
+Key decisions baked in:
+- `DECIMAL(18,4)` for balances (matches Oracle `NUMBER(18,4)` exactly — precision validated)
+- `WITH (UPDLOCK, ROWLOCK)` for pessimistic locking (replaces Oracle `SELECT … FOR UPDATE`)
+- `OFFSET 0 ROWS FETCH NEXT n ROWS ONLY` for pagination (replaces Oracle `FETCH FIRST n ROWS ONLY`)
+- `SUBSTRING()` not `SUBSTR()`, `+` not `||` for string concat, `TOP 1` not `FETCH FIRST 1 ROW ONLY` in subqueries
+- No `FROM DUAL` — removed entirely
+
+## Git
+- **Freeze tag:** `capstone1-freeze` → commit `1e51aea` (Capstone 1 fully working baseline)
+- **Working branch:** `feature/capstone2-paypink-2.0-dom`
+- **Phase 0 commit:** `69f147f` — baseline doc
+- **Phase 1 commit:** `cc992f5` — Oracle XE → Azure SQL complete
+
+## Completed Phases
+- **Phase 0** ✅ — Git freeze tag, baseline document (`docs/PHASE0_BASELINE.md`), all 22 containers confirmed green
+- **Phase 1** ✅ — Oracle XE → Azure SQL migration. All 5 services migrated, all 9 health endpoints UP, precision test passed, login smoke test passed
 
 ## Current focus
-Day 1: API contract + Jira board
+**Phase 2** — Network hardening + Resilience4j circuit breakers
+- Add `spring-cloud-starter-circuitbreaker-resilience4j` to api-gateway and account-service
+- Add balance caching to account-service (Redis, 30s TTL, display-only)
+- Add `@CircuitBreaker` fallback on account-service DB reads → Redis cached balance
+- Add `X-Correlation-ID` injection filter to api-gateway
+
+## Remaining Phases
+| Phase | Description | Risk |
+|---|---|---|
+| 2 | Network + Resilience4j | 🟡 MEDIUM |
+| 3 | Risk Engine (Python FastAPI) | 🟢 LOW |
+| 4 | T24 Core Adapter + Simulator | 🟡 MEDIUM |
+| 5 | Remittance Orchestrator (Hold→Risk→T24→Commit/Release) | 🔴 HIGH |
+| 6 | RISK_DECISION table in PostgreSQL | 🟢 LOW |
+| 7 | Mobile Frontend (PWA) | 🟢 LOW |
+| 8 | Chaos + Load Testing | 🟡 MEDIUM |
