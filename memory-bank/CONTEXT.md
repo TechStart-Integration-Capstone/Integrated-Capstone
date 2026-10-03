@@ -17,65 +17,71 @@ Built on top of the Capstone 1 ledger engine.
 
 ## Stack
 - **Backend:** Spring Boot 3.2.3, Spring Cloud Gateway 2023.0.0, Python FastAPI (Risk Engine)
-- **Database (OLTP):** Azure SQL = SQL Server 2022 local Docker (`mcr.microsoft.com/mssql/server:2022-latest`, port 1433)
-- **Database (Audit):** PostgreSQL 15 (port 5434)
-- **Cache:** Redis 7 (port 6380) — idempotency keys + rate limit buckets + balance cache (display only)
-- **Messaging:** Apache Kafka (port 9092), topic: `ledger.transaction.events`
+- **Database (OLTP):** Azure SQL = SQL Server 2022 local Docker (`mcr.microsoft.com/mssql/server:2022-latest`)
+- **Database (Audit):** PostgreSQL 15
+- **Cache:** Redis 7 — idempotency keys + rate limit buckets + balance cache (display only)
+- **Messaging:** Apache Kafka, topic: `ledger.transaction.events`
 - **Observability:** OTel Collector → Prometheus + Loki + Tempo → Grafana + Jaeger
 - **Frontend:** Vanilla JS SPA served by Nginx (port 3001)
 
-## Microservices (ports)
-| Service | Port | DB |
+## Microservices
+| Service | Internal Port | DB |
 |---|---|---|
-| api-gateway | 8080 | Redis |
-| auth-service | 8081 | Azure SQL |
-| account-service | 8082 | Azure SQL |
-| transaction-service | 8083 | Azure SQL + Redis + Kafka |
-| notification-service | 8084 | PostgreSQL + Kafka |
-| audit-service | 8085 | PostgreSQL + Kafka |
-| reconciliation-service | 8086 | Azure SQL + PostgreSQL |
-| outbox-publisher | 8087 | Azure SQL + Kafka |
-| analytics-service | 8088 | Kafka (in-memory) |
+| api-gateway | 8080 (only exposed host port) | Redis |
+| auth-service | 8081 (internal only) | Azure SQL |
+| account-service | 8082 (internal only) | Azure SQL + Redis |
+| transaction-service | 8083 (internal only) | Azure SQL + Redis + Kafka |
+| notification-service | 8084 (internal only) | PostgreSQL + Kafka |
+| audit-service | 8085 (internal only) | PostgreSQL + Kafka |
+| reconciliation-service | 8086 (internal only) | Azure SQL + PostgreSQL |
+| outbox-publisher | 8087 (internal only) | Azure SQL + Kafka |
+| analytics-service | 8088 (internal only) | Kafka (in-memory) |
+| risk-engine | 8000 (internal only) | None — stateless |
+
+## Risk Engine (Phase 3)
+- Route: `POST /api/v1/risk/score` via gateway (StripPrefix=3 → risk-engine:8000/score)
+- Health: `GET /api/v1/risk/health` (public, no JWT)
+- Threshold: score > 0.85 → REJECT
+- Rules: self-transfer +0.90, >100k +0.50, >50k +0.30, >20k +0.15, new account +0.25, high velocity +0.30, non-PHP +0.20
+- OTel: manual tracing with W3C traceparent propagation (no auto-instrumentation — pkg_resources missing in python:3.12-slim)
 
 ## Azure SQL Schema (as of Phase 1)
 Tables: `CUSTOMER`, `ACCOUNT`, `AUDIT_LOG`, `BANKING_FAVORITE`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT`
 
-> ⚠️ `TRANSACTION` is a reserved word in T-SQL — table is named `LEDGER_TRANSACTION` everywhere.
+> TRANSACTION is a reserved word in T-SQL — table is named LEDGER_TRANSACTION everywhere.
 
-Key decisions baked in:
-- `DECIMAL(18,4)` for balances (matches Oracle `NUMBER(18,4)` exactly — precision validated)
-- `WITH (UPDLOCK, ROWLOCK)` for pessimistic locking (replaces Oracle `SELECT … FOR UPDATE`)
-- `OFFSET 0 ROWS FETCH NEXT n ROWS ONLY` for pagination (replaces Oracle `FETCH FIRST n ROWS ONLY`)
-- `SUBSTRING()` not `SUBSTR()`, `+` not `||` for string concat, `TOP 1` not `FETCH FIRST 1 ROW ONLY` in subqueries
-- No `FROM DUAL` — removed entirely
+Key SQL Server rules:
+- `DECIMAL(18,4)` for balances
+- `WITH (UPDLOCK, ROWLOCK)` for pessimistic locking
+- `OFFSET 0 ROWS FETCH NEXT n ROWS ONLY` for pagination
+- `SUBSTRING()`, `+` concat, `TOP 1` in subqueries, no `FROM DUAL`
+- mssql-jdbc:12.8.1.jre11 (no jre17 on Maven Central)
+- SQL Server Docker does NOT auto-run /docker-entrypoint-initdb.d — run schema via sqlcmd manually
 
 ## Git
-- **Freeze tag:** `capstone1-freeze` → commit `1e51aea` (Capstone 1 fully working baseline)
+- **Freeze tag:** `capstone1-freeze` → commit `1e51aea`
 - **Working branch:** `feature/capstone2-paypink-2.0-dom`
-- **Phase 0 commit:** `69f147f` — baseline doc
-- **Phase 1 commit:** `cc992f5` — Oracle XE → Azure SQL complete
+- **Latest commit:** `4fa948f` — Phase 3 complete
 
 ## Completed Phases
-- **Phase 0** ✅ — Git freeze tag, baseline document (`docs/PHASE0_BASELINE.md`), all 22 containers confirmed green
-- **Phase 1** ✅ — Oracle XE → Azure SQL migration. All 5 services migrated, all 9 health endpoints UP, precision test passed, login smoke test passed
-- **Phase 2** ✅ — Network hardening + Resilience4j. X-Correlation-ID filter (api-gateway), circuit breaker on account-service DB reads with Redis fallback (display-only), CircuitBreaker filter on transaction-service route, global 30s httpclient timeout
+- **Phase 0** ✅ — Git freeze tag, baseline doc, all containers green
+- **Phase 1** ✅ — Oracle XE → Azure SQL. All 5 services migrated, all 9 UP, precision + login tests passed
+- **Phase 2** ✅ — X-Correlation-ID filter, Resilience4j circuit breaker on account-service, FallbackController, port isolation (only 8080+3001 exposed)
+- **Phase 3** ✅ — Risk Engine Python FastAPI. scorer.py rules, /score + /health, manual OTel, routed via gateway
 
 ## Current focus
-**Phase 3** — Risk Engine (Python FastAPI)
-- New Python FastAPI microservice in `microservices/risk-engine/`
-- Rule-based scorer returning 0.00–1.00 score
-- Score > 0.85 → transfer rejected
-- OTel trace context propagation (W3C traceparent header)
-- Health endpoint at /health for Docker health check
-- Add to docker-compose.yml on ledger-net
+**Phase 4** — T24 Core Adapter + Simulator
+- New Spring Boot service: `microservices/t24-adapter/`
+- T24 OFS Simulator (Spring Boot RestController) on same service, configurable response via query param (200/503/202/422)
+- T24CoreAdapter calls simulator, builds OFS string, returns FT reference or reason code
+- Add to docker-compose.yml on ledger-net (internal only)
+- Gateway route: /api/v1/t24/**
 
 ## Remaining Phases
 | Phase | Description | Risk |
 |---|---|---|
-| 2 | Network + Resilience4j | 🟡 MEDIUM |
-| 3 | Risk Engine (Python FastAPI) | 🟢 LOW |
-| 4 | T24 Core Adapter + Simulator | 🟡 MEDIUM |
-| 5 | Remittance Orchestrator (Hold→Risk→T24→Commit/Release) | 🔴 HIGH |
-| 6 | RISK_DECISION table in PostgreSQL | 🟢 LOW |
-| 7 | Mobile Frontend (PWA) | 🟢 LOW |
-| 8 | Chaos + Load Testing | 🟡 MEDIUM |
+| 4 | T24 Core Adapter + Simulator | MEDIUM |
+| 5 | Remittance Orchestrator (Hold→Risk→T24→Commit/Release) | HIGH |
+| 6 | RISK_DECISION table in PostgreSQL | LOW |
+| 7 | Mobile Frontend (PWA) | LOW |
+| 8 | Chaos + Load Testing | MEDIUM |
