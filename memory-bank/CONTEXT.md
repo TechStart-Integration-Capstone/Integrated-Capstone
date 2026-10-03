@@ -58,13 +58,16 @@ Key decisions baked in:
 ## Completed Phases
 - **Phase 0** ✅ — Git freeze tag, baseline document (`docs/PHASE0_BASELINE.md`), all 22 containers confirmed green
 - **Phase 1** ✅ — Oracle XE → Azure SQL migration. All 5 services migrated, all 9 health endpoints UP, precision test passed, login smoke test passed
+- **Phase 2** ✅ — Network hardening + Resilience4j. X-Correlation-ID filter (api-gateway), circuit breaker on account-service DB reads with Redis fallback (display-only), CircuitBreaker filter on transaction-service route, global 30s httpclient timeout
 
 ## Current focus
-**Phase 2** — Network hardening + Resilience4j circuit breakers
-- Add `spring-cloud-starter-circuitbreaker-resilience4j` to api-gateway and account-service
-- Add balance caching to account-service (Redis, 30s TTL, display-only)
-- Add `@CircuitBreaker` fallback on account-service DB reads → Redis cached balance
-- Add `X-Correlation-ID` injection filter to api-gateway
+**Phase 3** — Risk Engine (Python FastAPI)
+- New Python FastAPI microservice in `microservices/risk-engine/`
+- Rule-based scorer returning 0.00–1.00 score
+- Score > 0.85 → transfer rejected
+- OTel trace context propagation (W3C traceparent header)
+- Health endpoint at /health for Docker health check
+- Add to docker-compose.yml on ledger-net
 
 ## Remaining Phases
 | Phase | Description | Risk |
