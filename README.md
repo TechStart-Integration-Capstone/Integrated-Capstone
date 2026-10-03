@@ -164,6 +164,8 @@ The supporting stack runs in Docker. Every microservice must be compiled into a 
 
 The application services connect to the Azure SQL database configured by `AZURE_SQL_JDBC_URL`; this variable must contain an encrypted SQL Server JDBC URL with an authentication mode supported by the runtime identity. In Azure, use `authentication=ActiveDirectoryMSI`; set `AZURE_MANAGED_IDENTITY_CLIENT_ID` only for a user-assigned identity. Do not commit connection details or credentials. Local Compose can connect only when its runtime has an Azure SQL-compatible identity/authentication context.
 
+Use [docker/.env.example](docker/.env.example) as the template for the real local `docker/.env` file. The real `.env` file is ignored by Git.
+
 ### Step 1 — Build all microservice JARs
 
 Run from the workspace root (`FSE-Capstone/` folder). Each service has its own `pom.xml`:
@@ -195,13 +197,16 @@ mvn clean package -DskipTests
 cd ..\..
 cd microservices\analytics-service
 mvn clean package -DskipTests
-cd ..\..```
+cd ..\..
+```
 
 ### Step 2 — Start the full stack
 
 ```powershell
 cd docker
-$env:AZURE_SQL_JDBC_URL = "jdbc:sqlserver://<server>.database.windows.net:1433;databaseName=<database>;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;authentication=ActiveDirectoryMSI"
+Copy-Item .env.example .env
+# Edit docker\.env and replace <server>, <database>, and identity settings.
+..\scripts\verify_azure_sql_connection.ps1
 docker compose up -d
 ```
 
@@ -503,6 +508,7 @@ docker compose up -d --build analytics-service outbox-publisher
 Confirm `AZURE_SQL_JDBC_URL` points to the target database, enables encryption, and specifies an authentication mode supported by the runtime. For Azure-hosted managed identity, ensure that the identity is assigned to the host and granted a database user with the required permissions. For a user-assigned identity, set `AZURE_MANAGED_IDENTITY_CLIENT_ID` and the JDBC `msiClientId` property.
 
 ```powershell
+..\scripts\verify_azure_sql_connection.ps1
 docker compose logs auth-service account-service transaction-service outbox-publisher reconciliation-service
 ```
 
