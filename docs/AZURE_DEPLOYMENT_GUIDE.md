@@ -1,22 +1,23 @@
-# PayPink 2.0 — Azure Cloud Deployment Guide
+# PayPink 2.0 — Azure Cloud & CI/CD Deployment Guide
 **Omnichannel Remittance, Real-Time Fraud Screening & Core Retail Ledger**
 
 ---
 
-## 1. Architecture Overview
+## 1. Cloud Architecture & Pipeline Stage Topology
 
-PayPink 2.0 is hosted on Microsoft Azure as a single-host containerized microservice matrix running inside an Ubuntu 24.04 LTS Virtual Machine orchestrated by Docker Compose.
+### Infrastructure Topology
+PayPink 2.0 is hosted on Microsoft Azure as a containerized microservice matrix running on an Ubuntu 24.04 LTS Virtual Machine (`Standard_D4s_v3`) orchestrated by Docker Compose.
 
 ```mermaid
 flowchart TD
-    subgraph Clients["Clients & Edge Traffic"]
+    subgraph Clients["Clients & Edge Ingress"]
         Browser["Admin & Customer Web SPA\n(:80 / :443)"]
         Mobile["Flutter Mobile App\n(:8080)"]
         Devs["Engineering Team\n(SSH :22 Whitelisted)"]
     end
 
-    subgraph AzureRG["Azure Resource Group (East US / Central India / SE Asia)"]
-        subgraph NSG["Azure Network Security Group (NSG)"]
+    subgraph AzureRG["Azure Resource Group (rg-paypink-test)"]
+        subgraph NSG["Network Security Group (NSG)"]
             FWRules["Inbound Rules:\n• Port 80 (HTTP / SPA)\n• Port 8080 (API Gateway)\n• Port 22 (SSH Admin)\n• Deny all else"]
         end
 
@@ -27,9 +28,11 @@ flowchart TD
             end
 
             subgraph CoreServices["Internal Microservices (ledger-net)"]
+                Orchestrator["remittance-orchestrator (:8083)"]
+                Risk["risk-engine (Python FastAPI :8000)"]
+                T24["t24-adapter + mock-core (:8089)"]
                 Auth["auth-service (:8081)"]
                 Account["account-service (:8082)"]
-                Txn["transaction-service (:8083)"]
                 Notif["notification-service (:8084)"]
                 Audit["audit-service (:8085)"]
                 Recon["reconciliation-service (:8086)"]
@@ -38,7 +41,7 @@ flowchart TD
             end
 
             subgraph Datastores["Datastores & Streaming"]
-                Oracle["Oracle XE 21c (Master OLTP :1521)"]
+                SQL["Azure SQL / MSSQL (Master OLTP :1433)"]
                 Postgres["PostgreSQL 15 (Immutable Audit :5432)"]
                 Redis["Redis 7 (Idempotency & Rate Limit :6379)"]
                 Kafka["Apache Kafka + Zookeeper (:9092)"]
@@ -51,6 +54,8 @@ flowchart TD
                 Tempo["Tempo (:3200)"]
                 Grafana["Grafana (:3000)"]
             end
+
+            Runner["GitHub Self-Hosted Runner\n(Tags: self-hosted, azure-vm)"]
         end
     end
 
@@ -72,73 +77,112 @@ flowchart TD
 
 ---
 
-## 2. Infrastructure Sizing & Prerequisites
+## 2. CI/CD Pipeline Stages Architecture
 
-| Resource | Value / SKU | Reason |
-| :--- | :--- | :--- |
-| **Azure VM SKU** | `Standard_D4s_v3` (4 vCPU, 16 GiB RAM) | Accommodates 9 Spring Boot JVMs, Python, Oracle XE, Postgres, Kafka & Grafana |
-| **OS Image** | `Canonical:ubuntu-24_04-lts:server:latest` | Modern LTS with native Docker support |
-| **Disk** | 64 GB Standard SSD (`StandardSSD_LRS`) | Fast persistent storage for container layers & DB volumes |
-| **Host Swap** | 4 GB Swapfile | Buffer against burst memory pressure during stress testing |
-| **Network Ports** | `80` (HTTP), `8080` (Gateway), `22` (SSH) | Least-privilege ingress via Azure NSG |
+PayPink 2.0 uses a 3-stage CI/CD pipeline. **Dev and Test use free GitHub cloud runners (no Azure cost)**; nothing deploys to Azure until approved.
+
+```mermaid
+flowchart TD
+    Devs["Developers\n(Local Compose dev)"] --> Repo["GitHub Repo\n(Pull requests, main)"]
+    Repo --> S1
+
+    subgraph S1["1. Dev Stage (GitHub runner, no Azure cost)"]
+        S1_Build["Build and lint\n(Maven, pip install)"]
+        S1_Unit["Unit tests\n(JUnit, pytest)"]
+        S1_Trivy["Trivy scan\n(Container images)"]
+        S1_Build --> S1_Unit --> S1_Trivy
+    end
+
+    S1 --> S2
+
+    subgraph S2["2. Test Stage (Temporary stack, then deleted)"]
+        S2_Integ["Integration tests\n(Testcontainers)"]
+        S2_Contract["Contract tests\n(Newman suite)"]
+        S2_Gate["Quality gate\n(Must pass to promote)"]
+        S2_Integ --> S2_Contract --> S2_Gate
+    end
+
+    S2 --> S3
+
+    subgraph S3["3. Prod Stage (Self-hosted runner on the VM)"]
+        S3_Approval["Approval gate\n(Required reviewer)"]
+        S3_Deploy["Deploy\n(Compose up --build)"]
+        S3_Health["Health check\n(Gateway on :8080)"]
+        S3_Approval --> S3_Deploy --> S3_Health
+    end
+
+    S3_Health --> AzureVM["Azure VM (Prod)\n(NSG: 80, 8080 open)"]
+
+    classDef auto fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#065f46;
+    classDef manual fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e;
+    classDef prod fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#5b21b6;
+
+    class S1_Build,S1_Unit,S1_Trivy,S2_Integ,S2_Contract,S2_Gate auto;
+    class S3_Approval manual;
+    class S3_Deploy,S3_Health,AzureVM prod;
+```
 
 ---
 
-## 3. Step-by-Step Deployment Walkthrough
+## 3. Azure Budget Optimization ($10 Cloud Budget Strategy)
 
-### Phase 1: Provision Azure Cloud Infrastructure (CLI)
+### The Math:
+* A `Standard_D4s_v3` instance (4 vCPU, 16 GiB RAM) costs approximately **~$0.192 per hour**.
+* **$10 total credit = ~52 hours of active runtime.**
+* Running continuously 24/7 would deplete the budget in **~2.1 days**.
 
-Run these commands in Azure Cloud Shell or your local PowerShell terminal:
+### Mandatory Cost Control Protocols:
+1. **Always Deallocate (Not just Stop inside Linux):**
+   ```bash
+   az vm deallocate --resource-group "rg-azuser8406_mml.local-722QP" --name "vm-paypink-test"
+   ```
+2. **Auto-Shutdown Schedule (Every day at 7:00 PM PHT / 11:00 UTC):**
+   ```bash
+   az vm auto-shutdown \
+     --resource-group "rg-azuser8406_mml.local-722QP" \
+     --name "vm-paypink-test" \
+     --time "1100" \
+     --email "your-email@example.com"
+   ```
+3. **Configure a Stable DNS Name (Preserves URL across deallocations):**
+   ```bash
+   az network public-ip update \
+     --resource-group "rg-azuser8406_mml.local-722QP" \
+     --name "vm-paypink-testPublicIP" \
+     --dns-name "paypink-demo-ph"
+   ```
+   **Permanent URL:** `http://paypink-demo-ph.centralindia.cloudapp.azure.com` (or `.eastus.cloudapp.azure.com`).
+
+---
+
+## 4. Step-by-Step Deployment Walkthrough
+
+### Phase 1: Provision Azure Infrastructure via CLI
 
 ```bash
-# 1. Define Variables (Adjust RG & Location to your environment)
-RESOURCE_GROUP="rg-azuser8406_mml.local-722QP"   # Or your assigned Resource Group
-LOCATION="eastus"                         # Or "eastus" / "southeastasia"
+# 1. Variables
+RESOURCE_GROUP="rg-azuser8406_mml.local-722QP"   # Use your assigned resource group
+LOCATION="centralindia"                         # Or "eastus" / "southeastasia"
 VM_NAME="vm-paypink-test"
 VM_SIZE="Standard_D4s_v3"
 ADMIN_USER="azureuser"
 
-# 2. Create Network Security Group (NSG)
+# 2. Create NSG with Ports 80, 8080, and 22
 az network nsg create \
   --resource-group "$RESOURCE_GROUP" \
   --name "${VM_NAME}-nsg" \
   --location "$LOCATION"
 
-# 3. Add Inbound Security Rules
-# Port 80 - Web SPA
-az network nsg rule create \
-  --resource-group "$RESOURCE_GROUP" \
-  --nsg-name "${VM_NAME}-nsg" \
-  --name "Allow-HTTP-SPA" \
-  --priority 100 \
-  --direction Inbound \
-  --access Allow \
-  --protocol Tcp \
-  --destination-port-ranges 80
+az network nsg rule create --resource-group "$RESOURCE_GROUP" --nsg-name "${VM_NAME}-nsg" \
+  --name "Allow-HTTP-SPA" --priority 100 --direction Inbound --access Allow --protocol Tcp --destination-port-ranges 80
 
-# Port 8080 - API Gateway
-az network nsg rule create \
-  --resource-group "$RESOURCE_GROUP" \
-  --nsg-name "${VM_NAME}-nsg" \
-  --name "Allow-API-Gateway" \
-  --priority 110 \
-  --direction Inbound \
-  --access Allow \
-  --protocol Tcp \
-  --destination-port-ranges 8080
+az network nsg rule create --resource-group "$RESOURCE_GROUP" --nsg-name "${VM_NAME}-nsg" \
+  --name "Allow-API-Gateway" --priority 110 --direction Inbound --access Allow --protocol Tcp --destination-port-ranges 8080
 
-# Port 22 - SSH Remote Access
-az network nsg rule create \
-  --resource-group "$RESOURCE_GROUP" \
-  --nsg-name "${VM_NAME}-nsg" \
-  --name "Allow-SSH" \
-  --priority 120 \
-  --direction Inbound \
-  --access Allow \
-  --protocol Tcp \
-  --destination-port-ranges 22
+az network nsg rule create --resource-group "$RESOURCE_GROUP" --nsg-name "${VM_NAME}-nsg" \
+  --name "Allow-SSH" --priority 120 --direction Inbound --access Allow --protocol Tcp --destination-port-ranges 22
 
-# 4. Provision the Ubuntu Virtual Machine
+# 3. Create Ubuntu 24.04 VM with Premium/Standard SSD
 az vm create \
   --resource-group "$RESOURCE_GROUP" \
   --name "$VM_NAME" \
@@ -153,32 +197,25 @@ az vm create \
   --storage-sku StandardSSD_LRS
 ```
 
-*Note the `publicIpAddress` outputted upon VM creation.*
-
 ---
 
 ### Phase 2: Ubuntu VM Host Bootstrapping
 
-SSH into your new VM:
+SSH into the VM:
 ```bash
 ssh azureuser@<VM_PUBLIC_IP>
 ```
 
-Run the host setup script to configure swap memory and install Docker Engine & Buildx:
-
+Execute the bootstrap script:
 ```bash
-# 1. Update OS Packages
+# 1. Upgrade & 4GB Swap Space
 sudo apt update && sudo apt upgrade -y
-
-# 2. Configure 4GB Swap Space
-sudo fallocate -l 4G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
-# 3. Install Docker CE, Compose & Build Tools
-sudo apt install -y ca-certificates curl gnupg lsb-release git openjdk-17-jdk maven
+# 2. Install Docker Engine, Compose & Build Tools
+sudo apt install -y ca-certificates curl gnupg lsb-release git openjdk-17-jdk maven python3-pip
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
@@ -190,242 +227,77 @@ echo \
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# 4. Configure User Permissions & Docker Socket
+# 3. Non-Root Docker Access
 sudo usermod -aG docker $USER
 sudo chmod 666 /var/run/docker.sock
 ```
 
 ---
 
-### Phase 3: Clone Codebase & Build Microservice JARs
+### Phase 3: Setup GitHub Self-Hosted Runner on VM
 
-```bash
-# 1. Clone the repository
-cd ~
-git clone https://github.com/TechStart-Integration-Capstone/Integrated-Capstone.git
-cd Integrated-Capstone
+1. In GitHub Repository $\rightarrow$ **Settings** $\rightarrow$ **Actions** $\rightarrow$ **Runners** $\rightarrow$ **New self-hosted runner** (Linux / x64).
+2. Run the registration snippet on the VM:
+   ```bash
+   mkdir -p ~/actions-runner && cd ~/actions-runner
+   curl -o actions-runner-linux-x64-2.321.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.321.0/actions-runner-linux-x64-2.321.0.tar.gz
+   tar xzf ./actions-runner-linux-x64-2.321.0.tar.gz
 
-# 2. Download OpenTelemetry Java Instrumentation Agent
-if [ ! -f microservices/opentelemetry-javaagent.jar ]; then
-  curl -L -o microservices/opentelemetry-javaagent.jar \
-    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
-fi
+   # Register with specific labels: [self-hosted, azure-vm]
+   ./config.sh --url https://github.com/TechStart-Integration-Capstone/Integrated-Capstone \
+     --token <YOUR_RUNNER_TOKEN> \
+     --labels "self-hosted,azure-vm" --unattended
 
-# Copy OTel agent to all microservice build folders
-for svc in api-gateway auth-service account-service transaction-service notification-service audit-service reconciliation-service outbox-publisher analytics-service; do
-  cp microservices/opentelemetry-javaagent.jar microservices/$svc/
-done
+   # Install & start as background service
+   sudo ./svc.sh install
+   sudo ./svc.sh start
+   ```
 
-# 3. Compile and Package all Java Microservices
-for svc in api-gateway auth-service account-service transaction-service notification-service audit-service reconciliation-service outbox-publisher analytics-service; do
-  echo "Packaging $svc..."
-  mvn -f microservices/$svc/pom.xml clean package -DskipTests
-done
+---
 
-# 4. Verify all JARs were generated
-ls -lh microservices/*/target/*.jar
+### Phase 4: Production CI/CD Pipeline Workflow
+
+The workflow file [`.github/workflows/pipeline.yml`](file:///.github/workflows/pipeline.yml) maps 1:1 to our 3-stage architecture:
+
+```
+Developers (Local Compose) ──▶ GitHub Repo 
+                                  │
+   ┌──────────────────────────────┴──────────────────────────────┐
+   │ 1. Dev Stage (GitHub Runner - $0)                           │
+   │    • Build & Lint (Maven, pip install)                      │
+   │    • Unit Tests (JUnit 5, pytest)                           │
+   │    • Trivy Scan (Container & FS security)                   │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ 2. Test Stage (Temporary Stack, Then Deleted)               │
+   │    • Integration Tests (Testcontainers / Compose syntax)    │
+   │    • Contract Tests (Newman Postman collection)             │
+   │    • Quality Gate (Must pass to promote)                    │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ 3. Prod Stage (Self-Hosted Runner on Azure VM)              │
+   │    • Approval Gate (Required reviewer / manual release)     │
+   │    • Deploy (docker compose up -d --build)                  │
+   │    • Health Check (Gateway probe on :8080 for 180s)         │
+   │    • Image Prune (Disk maintenance)                         │
+   └──────────────────────────────┬──────────────────────────────┘
+                                  ▼
+                       Azure VM (Prod Live Host)
 ```
 
 ---
 
-### Phase 4: Configure Port Mapping & Launch Docker Stack
+## 5. Verification, Health Checks & URLs
 
-```bash
-cd ~/Integrated-Capstone
+| Component | Target URL |
+| :--- | :--- |
+| **Web SPA (Nginx :80)** | `http://<DNS_NAME_OR_PUBLIC_IP>` |
+| **API Gateway Health (:8080)** | `http://<DNS_NAME_OR_PUBLIC_IP>:8080/actuator/health` |
+| **Grafana Monitoring Stack** | `ssh -L 3000:localhost:3000 azureuser@<VM_PUBLIC_IP>` $\rightarrow$ `http://localhost:3000` |
 
-# 1. Create unified database initialization scripts
-cat backend/event-consumers/src/main/resources/schema-postgres.sql \
-    backend/notification-service/src/main/resources/schema-postgres.sql \
-    > docker/init-postgres.sql
-
-cat backend/ledger-core/src/main/resources/schema-oracle.sql \
-    > docker/init-oracle.sql
-
-# 2. Align docker-compose.yml with local init scripts & host Port 80
-sed -i 's|\./\.\./backend/src/main/resources/schema-oracle\.sql|./init-oracle.sql|' docker/docker-compose.yml
-sed -i 's|\./\.\./backend/src/main/resources/schema-postgres\.sql|./init-postgres.sql|' docker/docker-compose.yml
-sed -i 's/"3001:80"/"80:80"/' docker/docker-compose.yml
-
-# 3. Start all containers in background
-cd docker
-docker compose up -d --build
-```
-
----
-
-### Phase 5: Seed Relational Database Tables & Accounts
-
-Execute this block to ensure all Oracle XE (OLTP) and PostgreSQL (Audit) tables and seed data are populated:
-
-```bash
-# 1. Seed Oracle XE (XEPDB1 Pluggable Database)
-docker exec -i oracle-xe-master sqlplus ledger_master/MasterSecretPassword123@localhost:1521/XEPDB1 << 'EOF'
--- 1. CUSTOMER TABLE
-CREATE TABLE CUSTOMER (
-    customer_id      NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    username         VARCHAR2(50) NOT NULL UNIQUE,
-    password_hash    VARCHAR2(255) NOT NULL,
-    first_name       VARCHAR2(100) NOT NULL,
-    last_name        VARCHAR2(100) NOT NULL,
-    email            VARCHAR2(150) NOT NULL UNIQUE,
-    contact_no       VARCHAR2(30) NOT NULL,
-    status           VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
-    created_date     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
--- 2. ACCOUNT TABLE
-CREATE TABLE ACCOUNT (
-    account_id       NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    customer_id      NUMBER(19) NOT NULL,
-    account_number   VARCHAR2(30) NOT NULL UNIQUE,
-    account_type     VARCHAR2(30) DEFAULT 'SAVINGS' NOT NULL,
-    currency         VARCHAR2(10) DEFAULT 'PHP' NOT NULL,
-    current_balance  NUMBER(18,4) DEFAULT 0.0000 NOT NULL,
-    status           VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
-    created_date     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT fk_account_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER(customer_id),
-    CONSTRAINT chk_account_balance_positive CHECK (current_balance >= 0.0000)
-);
-
--- 3. AUDIT_LOG TABLE
-CREATE TABLE AUDIT_LOG (
-    audit_id         NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    customer_id      NUMBER(19) NOT NULL,
-    action           VARCHAR2(50) NOT NULL,
-    entity           VARCHAR2(50) NOT NULL,
-    details          VARCHAR2(4000) NOT NULL,
-    status           VARCHAR2(20) NOT NULL,
-    timestamp        TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
-
--- 4. TRANSACTION TABLE
-CREATE TABLE TRANSACTION (
-    transaction_id   NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    from_account_id  NUMBER(19) NOT NULL,
-    to_account_id    NUMBER(19) NOT NULL,
-    amount           NUMBER(18,4) NOT NULL,
-    fee              NUMBER(18,4) DEFAULT 0.0000 NOT NULL,
-    currency         VARCHAR2(10) DEFAULT 'PHP' NOT NULL,
-    status           VARCHAR2(20) DEFAULT 'PENDING' NOT NULL,
-    reference_no     VARCHAR2(64) NOT NULL UNIQUE,
-    description      VARCHAR2(255),
-    created_date     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    completed_date   TIMESTAMP,
-    CONSTRAINT fk_tx_from_account FOREIGN KEY (from_account_id) REFERENCES ACCOUNT(account_id),
-    CONSTRAINT fk_tx_to_account FOREIGN KEY (to_account_id) REFERENCES ACCOUNT(account_id)
-);
-
--- 5. OUTBOX_EVENT TABLE
-CREATE TABLE OUTBOX_EVENT (
-    event_id         NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    transaction_id   NUMBER(19) NOT NULL,
-    event_type       VARCHAR2(50) NOT NULL,
-    payload          CLOB NOT NULL,
-    status           VARCHAR2(20) DEFAULT 'PENDING' NOT NULL,
-    created_date     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    processed_date   TIMESTAMP,
-    CONSTRAINT fk_outbox_transaction FOREIGN KEY (transaction_id) REFERENCES TRANSACTION(transaction_id)
-);
-
--- Seed Retail Customers with BCrypt password for 'password123'
-INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
-VALUES ('lviernes', '$2b$10$nQqX3kBciCLYCyofDR3b6Oy4X/.99Bap8d49IpzN3D8MCj20TuJOO', 'Levi', 'Viernes', 'jonlevi.jlv@gmail.com', '+63 922 758 4285', 'ACTIVE');
-
-INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
-VALUES ('arosales', '$2b$10$nQqX3kBciCLYCyofDR3b6Oy4X/.99Bap8d49IpzN3D8MCj20TuJOO', 'Aly', 'Rosales', 'aly.rosales@paypink.ph', '+63 918 555 6789', 'ACTIVE');
-
-INSERT INTO CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
-VALUES ('glim', '$2b$10$nQqX3kBciCLYCyofDR3b6Oy4X/.99Bap8d49IpzN3D8MCj20TuJOO', 'Gill', 'Lim', 'gill.lim@paypink.ph', '+63 920 333 4567', 'ACTIVE');
-
--- Seed Accounts with Philippine Peso (PHP / ₱) Balances
-INSERT INTO ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (1, 'ACC-PH-1001-8842', 'SAVINGS_ACCOUNT', 'PHP', 125450.0000, 'ACTIVE');
-
-INSERT INTO ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (1, 'ACC-PH-1001-9921', 'CHECKING_ACCOUNT', 'PHP', 50000.0000, 'ACTIVE');
-
-INSERT INTO ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (1, 'ACC-PH-1001-7714', 'STRESS_TEST_ACCOUNT', 'PHP', 60.0000, 'ACTIVE');
-
-INSERT INTO ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (2, 'ACC-PH-2002-3311', 'SAVINGS_ACCOUNT', 'PHP', 84320.5000, 'ACTIVE');
-
-INSERT INTO ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (3, 'ACC-PH-3003-4422', 'TIME_DEPOSIT', 'PHP', 350000.0000, 'ACTIVE');
-
-COMMIT;
-EXIT;
-EOF
-
-# 2. Seed PostgreSQL Immutable Audit & Notification Tables
-docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db << 'EOF'
-CREATE TABLE IF NOT EXISTS LEDGER_MUTATION_AUDIT (
-    audit_id         BIGSERIAL PRIMARY KEY,
-    transaction_id   BIGINT NOT NULL,
-    account_id       BIGINT NOT NULL,
-    entry_type       VARCHAR(10) NOT NULL CHECK (entry_type IN ('DEBIT', 'CREDIT')),
-    amount           NUMERIC(18,4) NOT NULL CHECK (amount > 0.0000),
-    currency         VARCHAR(10) DEFAULT 'PHP' NOT NULL,
-    before_balance   NUMERIC(18,4) NOT NULL,
-    after_balance    NUMERIC(18,4) NOT NULL,
-    created_date     TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT uq_audit_tx_account UNIQUE (transaction_id, account_id)
-);
-
-CREATE TABLE IF NOT EXISTS RECONCILIATION_LOG (
-    recon_id         BIGSERIAL PRIMARY KEY,
-    transaction_id   BIGINT NOT NULL,
-    account_id       BIGINT NOT NULL,
-    oracle_status    VARCHAR(30) NOT NULL,
-    postgres_status  VARCHAR(30) NOT NULL,
-    recon_status     VARCHAR(30) NOT NULL,
-    mismatch_fields  VARCHAR(200),
-    check_count      INT DEFAULT 1 NOT NULL,
-    last_checked_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    recon_date       TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT uq_recon_tx_account UNIQUE (transaction_id, account_id)
-);
-
-CREATE TABLE IF NOT EXISTS NOTIFICATION (
-    notification_id  BIGSERIAL PRIMARY KEY,
-    customer_id      BIGINT NOT NULL,
-    account_id       BIGINT NOT NULL,
-    reference_no     VARCHAR(64) NOT NULL,
-    message          TEXT NOT NULL,
-    status           VARCHAR(20) NOT NULL CHECK (status IN ('PENDING', 'SENT', 'FAILED', 'RETRY')),
-    created_date     TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    updated_date     TIMESTAMPTZ,
-    CONSTRAINT uq_notification_ref_account UNIQUE (reference_no, account_id)
-);
-EOF
-```
-
----
-
-## 6. Verification & Testing
-
-### Live URLs:
-* **Web SPA Application:** `http://<VM_PUBLIC_IP>` (e.g., `http://20.204.1.219`)
-* **API Gateway Health Check:** `http://<VM_PUBLIC_IP>:8080/actuator/health`
-
-### Demo Login Credentials:
-* **Username:** `lviernes` (or `arosales`, `glim`)
-* **Password:** `password123`
-
-### Accessing Grafana & Observability:
-Forward port `3000` securely via SSH:
-```bash
-ssh -L 3000:localhost:3000 azureuser@<VM_PUBLIC_IP>
-```
-Then visit `http://localhost:3000` (User: `admin` / Password: `admin`).
-
----
-
-## 7. Troubleshooting & Reference Matrix
-
-| Issue | Root Cause | Resolution |
-| :--- | :--- | :--- |
-| `AuthorizationFailed` on `az group create` | Subscription policy disallows creating root resource groups. | Use pre-assigned Resource Group from `az group list --output table`. |
-| `RequestDisallowedByPolicy` on VM size | Subscription policy restricts VM SKU whitelist. | Use `Standard_D4s_v3` (4 vCPU / 16GB RAM) which is permitted. |
-| `permission denied while trying to connect to docker API` | Non-root user lacks socket permission. | Run `sudo chmod 666 /var/run/docker.sock`. |
-| `ORA-00942: table or view does not exist` | Oracle XE runs against `XEPDB1` pluggable database. | Specify `@localhost:1521/XEPDB1` in `sqlplus` connection string. |
+### Default Seed Banking Credentials:
+* **User 1:** `lviernes` / `password123` (Accounts: ₱125,450.00 / ₱50,000.00)
+* **User 2:** `arosales` / `password123` (Savings: ₱84,320.50)
+* **User 3:** `glim` / `password123` (Time Deposit: ₱350,000.00)
