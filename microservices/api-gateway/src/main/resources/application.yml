@@ -94,6 +94,14 @@ spring:
           predicates:
             - Path=/api/v1/analytics/**
 
+        # Risk Engine (Phase 3) — internal scoring, also exposed for testing
+        - id: risk-engine
+          uri: http://${RISK_ENGINE_HOST:risk-engine}:8000
+          predicates:
+            - Path=/api/v1/risk/**
+          filters:
+            - StripPrefix=3
+
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:
   security:

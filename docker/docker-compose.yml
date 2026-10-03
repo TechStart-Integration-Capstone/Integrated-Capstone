@@ -137,6 +137,7 @@ services:
       - TRANSACTION_SERVICE_HOST=transaction-service
       - RECONCILIATION_SERVICE_HOST=reconciliation-service
       - ANALYTICS_SERVICE_HOST=analytics-service
+      - RISK_ENGINE_HOST=risk-engine
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
@@ -331,6 +332,29 @@ services:
       - ANALYTICS_SERVICE_HOST=analytics-service
     volumes:
       - ./../microservices/analytics-service/target/analytics-service.jar:/app/app.jar
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Risk Engine (Python FastAPI — Phase 3)
+  # ==========================================
+  risk-engine:
+    build:
+      context: ../microservices/risk-engine
+      dockerfile: Dockerfile
+    container_name: risk-engine
+    # No host port — internal only, called by Remittance Orchestrator via http://risk-engine:8000
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=risk-engine
+    depends_on:
+      - otel-collector
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - ledger-net
 
