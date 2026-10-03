@@ -10,8 +10,7 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=PayPink2.0_StrongPass!
       - MSSQL_PID=Developer
-    ports:
-      - "1433:1433"
+    # No host port — internal only, connect via docker exec or azure-data-studio through docker network
     volumes:
       - azuresql_data:/var/opt/mssql
       - ./../backend/ledger-core/src/main/resources/schema-azuresql.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -31,8 +30,7 @@ services:
       - POSTGRES_DB=ledger_audit_db
       - POSTGRES_USER=audit_user
       - POSTGRES_PASSWORD=AuditSecretPassword123
-    ports:
-      - "5434:5432"
+    # No host port — internal only
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./../backend/event-consumers/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -49,8 +47,7 @@ services:
     image: redis:7-alpine
     container_name: redis-idempotency-matrix
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
-    ports:
-      - "6380:6379"
+    # No host port — internal only
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -159,8 +156,7 @@ services:
     depends_on:
       azure-sql:
         condition: service_healthy
-    ports:
-      - "8081:8081"
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
       - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
       - SPRING_DATASOURCE_USERNAME=sa
@@ -181,8 +177,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "8082:8082"
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
       - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
       - SPRING_DATASOURCE_USERNAME=sa
@@ -206,8 +201,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8083:8083"
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
       - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
       - SPRING_DATASOURCE_USERNAME=sa
@@ -231,8 +225,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8084:8084"
+    # No host port — internal only
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - SPRING_DATASOURCE_USERNAME=audit_user
@@ -262,8 +255,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8085:8085"
+    # No host port — internal only
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - SPRING_DATASOURCE_USERNAME=audit_user
@@ -286,8 +278,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8086:8086"
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
       - ORACLE_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
       - ORACLE_DATASOURCE_USERNAME=sa
@@ -311,8 +302,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8087:8087"
+    # No host port — internal only
     environment:
       - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
       - SPRING_DATASOURCE_USERNAME=sa
@@ -335,8 +325,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    ports:
-      - "8088:8088"
+    # No host port — internal only
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - ANALYTICS_SERVICE_HOST=analytics-service

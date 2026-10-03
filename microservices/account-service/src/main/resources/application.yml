@@ -46,9 +46,9 @@ resilience4j:
           - java.lang.RuntimeException
           - org.springframework.dao.DataAccessException
           - com.microsoft.sqlserver.jdbc.SQLServerException
-        # Ignore not-found — that is a valid business response, not a DB failure
+        # Ignore not-found (EntityNotFoundException) — valid business response, not a DB failure
         ignore-exceptions:
-          - java.lang.RuntimeException
+          - jakarta.persistence.EntityNotFoundException
 
 management:
   endpoints:
