@@ -21,7 +21,7 @@ public class ReconciliationLog {
     private Long accountId = 0L;
 
     @Column(name = "oracle_status", nullable = false, length = 30)
-    private String oracleStatus; // 'SUCCESS', 'FAILED', 'COMMITTED'
+    private String ledgerStatus; // Existing PostgreSQL column retained for stored-row compatibility.
 
     @Column(name = "postgres_status", nullable = false, length = 30)
     private String postgresStatus; // 'COMMITTED', 'PENDING', 'MISSING'
@@ -43,10 +43,10 @@ public class ReconciliationLog {
 
     public ReconciliationLog() {}
 
-    public ReconciliationLog(Long transactionId, String oracleStatus, String postgresStatus, String reconStatus) {
+    public ReconciliationLog(Long transactionId, String ledgerStatus, String postgresStatus, String reconStatus) {
         this.transactionId = transactionId;
         this.accountId = 0L;
-        this.oracleStatus = oracleStatus;
+        this.ledgerStatus = ledgerStatus;
         this.postgresStatus = postgresStatus;
         this.reconStatus = reconStatus;
         this.checkCount = 1;
@@ -54,10 +54,10 @@ public class ReconciliationLog {
         this.reconDate = LocalDateTime.now();
     }
 
-    public ReconciliationLog(Long transactionId, Long accountId, String oracleStatus, String postgresStatus, String reconStatus, String mismatchFields) {
+    public ReconciliationLog(Long transactionId, Long accountId, String ledgerStatus, String postgresStatus, String reconStatus, String mismatchFields) {
         this.transactionId = transactionId;
         this.accountId = accountId != null ? accountId : 0L;
-        this.oracleStatus = oracleStatus;
+        this.ledgerStatus = ledgerStatus;
         this.postgresStatus = postgresStatus;
         this.reconStatus = reconStatus;
         this.mismatchFields = mismatchFields;
@@ -75,8 +75,8 @@ public class ReconciliationLog {
     public Long getAccountId() { return accountId; }
     public void setAccountId(Long accountId) { this.accountId = accountId; }
 
-    public String getOracleStatus() { return oracleStatus; }
-    public void setOracleStatus(String oracleStatus) { this.oracleStatus = oracleStatus; }
+    public String getLedgerStatus() { return ledgerStatus; }
+    public void setLedgerStatus(String ledgerStatus) { this.ledgerStatus = ledgerStatus; }
 
     public String getPostgresStatus() { return postgresStatus; }
     public void setPostgresStatus(String postgresStatus) { this.postgresStatus = postgresStatus; }

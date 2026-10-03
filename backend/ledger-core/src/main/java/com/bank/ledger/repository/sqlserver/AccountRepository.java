@@ -1,6 +1,6 @@
-package com.bank.ledger.repository.oracle;
+package com.bank.ledger.repository.sqlserver;
 
-import com.bank.ledger.model.oracle.Account;
+import com.bank.ledger.model.sqlserver.Account;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -16,7 +16,7 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     /**
      * Critical Concurrency Isolation Method (Day 33 Requirement)
-     * Translates to: SELECT ... FROM ACCOUNT WHERE account_id = ? FOR UPDATE
+     * Acquires a pessimistic write lock for this account row.
      * Forces deterministic thread queueing at database row level.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

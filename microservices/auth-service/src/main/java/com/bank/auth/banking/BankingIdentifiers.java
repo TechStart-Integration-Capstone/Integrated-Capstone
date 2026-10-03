@@ -60,7 +60,7 @@ public final class BankingIdentifiers {
     }
     public static String resolveAccount(org.springframework.jdbc.core.JdbcTemplate jdbc,String number) {
         String normalized=number.replaceAll("\\s","").toUpperCase(Locale.ROOT);
-        var aliases=jdbc.queryForList("SELECT a.account_number FROM ACCOUNT a JOIN AUDIT_LOG l ON l.entity = 'ACCOUNT:' || CAST(a.account_id AS VARCHAR(30)) WHERE l.action='ACCOUNT_RENUMBERED' AND l.details=?",String.class,normalized);
+        var aliases=jdbc.queryForList("SELECT a.account_number FROM ACCOUNT a JOIN AUDIT_LOG l ON l.entity = CONCAT('ACCOUNT:', CAST(a.account_id AS VARCHAR(30))) WHERE l.action='ACCOUNT_RENUMBERED' AND l.details=?",String.class,normalized);
         return aliases.isEmpty()?normalized:aliases.get(0);
     }
 }

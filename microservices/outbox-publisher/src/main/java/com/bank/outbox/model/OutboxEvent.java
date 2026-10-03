@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * JPA mapping of the OUTBOX_EVENT table in Oracle XE.
+ * JPA mapping of the OUTBOX_EVENT table in Azure SQL Database.
  *
  * This entity is READ-WRITE for the outbox-publisher:
  *   - SELECT WHERE status = 'PENDING' (polled by OutboxPollerService)
@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
  *   - UPDATE processed_date, retry_count
  *
  * The OUTBOX_EVENT row is originally INSERTED by the transaction-service
- * inside the same Oracle ACID transaction that mutates the account balance,
+ * inside the same Azure SQL ACID transaction that mutates the account balance,
  * guaranteeing at-least-once delivery without a two-phase commit.
  */
 @Entity
@@ -30,7 +30,7 @@ public class OutboxEvent {
     @Column(name = "event_type", nullable = false, length = 50)
     private String eventType;
 
-    @Column(name = "payload", nullable = false, columnDefinition = "CLOB")
+    @Column(name = "payload", nullable = false, columnDefinition = "NVARCHAR(MAX)")
     private String payload;
 
     @Column(name = "status", nullable = false, length = 20)

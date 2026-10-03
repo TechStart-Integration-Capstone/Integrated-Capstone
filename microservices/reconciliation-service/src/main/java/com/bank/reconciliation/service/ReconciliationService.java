@@ -1,9 +1,9 @@
 package com.bank.reconciliation.service;
 
-import com.bank.reconciliation.model.oracle.TransactionRecord;
+import com.bank.reconciliation.model.sqlserver.TransactionRecord;
 import com.bank.reconciliation.model.postgres.LedgerMutationAudit;
 import com.bank.reconciliation.model.postgres.ReconciliationLog;
-import com.bank.reconciliation.repository.oracle.TransactionRepository;
+import com.bank.reconciliation.repository.sqlserver.TransactionRepository;
 import com.bank.reconciliation.repository.postgres.LedgerMutationAuditRepository;
 import com.bank.reconciliation.repository.postgres.ReconciliationLogRepository;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -69,7 +69,7 @@ public class ReconciliationService {
     // Internal method — called both from @Transactional wrapper and directly (safe either way)
     private ReconciliationLog saveReconLog(TransactionRecord tx) {
         Optional<LedgerMutationAudit> auditOpt = auditRepository.findByTransactionId(tx.getTransactionId());
-        String oracleStatus = tx.getStatus();
+        String ledgerStatus = tx.getStatus();
         String postgresStatus;
         String reconStatus;
 
@@ -83,7 +83,7 @@ public class ReconciliationService {
                 reconStatus = "DRIFT_DETECTED";
             }
         } else {
-            if ("SUCCESS".equalsIgnoreCase(oracleStatus)) {
+            if ("SUCCESS".equalsIgnoreCase(ledgerStatus)) {
                 postgresStatus = "MISSING_AUDIT";
                 reconStatus = "DRIFT_DETECTED";
             } else {
@@ -93,9 +93,9 @@ public class ReconciliationService {
         }
 
         ReconciliationLog recon = reconLogRepository.save(
-                new ReconciliationLog(tx.getTransactionId(), oracleStatus, postgresStatus, reconStatus));
-        log.info("[reconciliation-service] txId={} oracle={} postgres={} recon={}",
-                tx.getTransactionId(), oracleStatus, postgresStatus, reconStatus);
+                new ReconciliationLog(tx.getTransactionId(), ledgerStatus, postgresStatus, reconStatus));
+        log.info("[reconciliation-service] txId={} azureSql={} postgres={} recon={}",
+                tx.getTransactionId(), ledgerStatus, postgresStatus, reconStatus);
         return recon;
     }
 

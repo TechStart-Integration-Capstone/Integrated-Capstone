@@ -44,10 +44,10 @@ Layer 3 — Business / Microservices
   audit-service        :8085   reconciliation-service :8086
   outbox-publisher     :8087   analytics-service      :8088
 
-  Oracle XE 21c :1521       PostgreSQL 15 :5432        Redis :6380
+  Azure SQL Database        PostgreSQL 15 :5432        Redis :6380
   CUSTOMER                  LEDGER_MUTATION_AUDIT      idempotency cache
   ACCOUNT                   RECONCILIATION_LOG         rate-limit store
-  TRANSACTION               NOTIFICATION
+  LEDGER_TRANSACTION        NOTIFICATION
   OUTBOX_EVENT
   AUDIT_LOG
 
@@ -70,12 +70,12 @@ Layer 5 — Observability
 | Service | Port | Responsibility |
 |---|---|---|
 | **api-gateway** | 8080 | Spring Cloud Gateway — JWT auth filter, Redis rate limiting, CORS, routing to all downstream services |
-| **auth-service** | 8081 | Login endpoint, JWT token generation (24-hour expiry), Oracle XE user store |
+| **auth-service** | 8081 | Login endpoint, JWT token generation (24-hour expiry), Azure SQL user store |
 | **account-service** | 8082 | Read account balances, list accounts by customer, balance reset (dev only) |
 | **transaction-service** | 8083 | Core balance mutation engine — pessimistic locking, Redis idempotency, Kafka outbox write, telemetry stats, stress-test endpoint |
 | **notification-service** | 8084 | Kafka consumer — persists customer alerts to PostgreSQL NOTIFICATION table |
 | **audit-service** | 8085 | Kafka consumer — writes append-only double-entry records to LEDGER_MUTATION_AUDIT |
-| **reconciliation-service** | 8086 | Scheduled every 15 min — cross-database drift detection Oracle vs PostgreSQL; manual trigger available |
+| **reconciliation-service** | 8086 | Scheduled every 15 min — cross-database drift detection between Azure SQL and PostgreSQL; manual trigger available |
 | **outbox-publisher** | 8087 | Transactional outbox poller — polls OUTBOX_EVENT every 5 s, publishes to Kafka, marks rows PROCESSED / FAILED |
 | **analytics-service** | 8088 | Kafka consumer — in-memory real-time aggregates; summary, per-account, and recent-events REST endpoints |
 
@@ -83,7 +83,6 @@ Infrastructure containers (not custom builds — pulled from Docker Hub):
 
 | Container | Port | Purpose |
 |---|---|---|
-| oracle-xe | 1521 | Master OLTP database |
 | postgresql | 5432 | Immutable audit database |
 | redis | 6380 (host) | Idempotency cache and rate-limit backing store |
 | zookeeper | 2181 | Kafka coordinator |
@@ -119,15 +118,17 @@ Infrastructure containers (not custom builds — pulled from Docker Hub):
 
 ## Database Schema
 
-### Oracle XE 21c — Master OLTP
+### Azure SQL Database — Master OLTP
 
 | Table | Description |
 |---|---|
 | `CUSTOMER` | User accounts and hashed credentials |
-| `ACCOUNT` | Master balance state — `NUMBER(18,4)`, `PESSIMISTIC_WRITE` lock on all mutations |
-| `TRANSACTION` | Master financial transaction records |
+| `ACCOUNT` | Master balance state — `DECIMAL(18,4)`, pessimistic write locks on mutations |
+| `LEDGER_TRANSACTION` | Master financial transaction records (`TRANSACTION` was renamed because it is reserved in SQL Server) |
 | `OUTBOX_EVENT` | Transactional outbox rows — `PENDING` / `PROCESSED` / `FAILED` / `DEAD_LETTER` |
 | `AUDIT_LOG` | Synchronous security and operational audit for immediate local ACID non-repudiation |
+
+The additive target schema is [schema-azure-sql.sql](backend/ledger-core/src/main/resources/schema-azure-sql.sql). Existing Oracle data is not copied by Docker Compose; see [Oracle to Azure SQL data migration](docs/oracle-to-azure-sql-migration.md) for the table/column mapping, cutover checks, and access prerequisites.
 
 ### PostgreSQL 15 — Immutable Audit Store
 
@@ -153,13 +154,15 @@ Make sure these are installed before you start:
 - **Docker Desktop** with Compose V2 — https://docs.docker.com/desktop/
 - **Java 17+** — required to build JARs with Maven
 - **Maven 3.9+** — required to build JARs before Docker copies them into images
-- **At least 16 GB RAM** recommended — Oracle XE alone uses ~2 GB, the full stack peaks around 5–6 GB
+- **At least 8 GB RAM** recommended for the local containers; Azure SQL Database is external to Compose
 
 ---
 
 ## Quick Start — Docker Compose (Recommended)
 
-The full stack runs entirely in Docker. Every microservice must be compiled into a JAR first — Docker just copies the built artifact into the image. There is no pre-built registry; you build locally.
+The supporting stack runs in Docker. Every microservice must be compiled into a JAR first — Docker just copies the built artifact into the image. There is no pre-built registry; you build locally.
+
+The application services connect to the Azure SQL database configured by `AZURE_SQL_JDBC_URL`; this variable must contain an encrypted SQL Server JDBC URL with an authentication mode supported by the runtime identity. In Azure, use `authentication=ActiveDirectoryMSI`; set `AZURE_MANAGED_IDENTITY_CLIENT_ID` only for a user-assigned identity. Do not commit connection details or credentials. Local Compose can connect only when its runtime has an Azure SQL-compatible identity/authentication context.
 
 ### Step 1 — Build all microservice JARs
 
@@ -198,10 +201,11 @@ cd ..\..```
 
 ```powershell
 cd docker
+$env:AZURE_SQL_JDBC_URL = "jdbc:sqlserver://<server>.database.windows.net:1433;databaseName=<database>;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;authentication=ActiveDirectoryMSI"
 docker compose up -d
 ```
 
-All 19 containers start in the correct dependency order. Oracle XE takes the longest (~60–90 seconds) to pass its health check. Other services that depend on it wait automatically via `depends_on` + `condition: service_healthy`.
+Replace the server and database placeholders before starting. `ActiveDirectoryMSI` requires an Azure-hosted identity endpoint; ordinary local Docker does not provide a managed identity. Use a supported local authentication mode for local development without committing credentials. The application and supporting containers start in dependency order. PostgreSQL and Kafka have local health checks; Azure SQL is external and must be reachable by the configured identity.
 
 ### Step 3 — Verify everything is running
 
@@ -209,7 +213,7 @@ All 19 containers start in the correct dependency order. Oracle XE takes the lon
 docker compose ps
 ```
 
-All containers should show `running` status. In Docker Desktop, all should have a green dot. The two most likely to need extra time are `oracle-xe` and `kafka`.
+All local containers should show `running` status. In Docker Desktop, all should have a green dot. Kafka may take extra time to become healthy.
 
 Check logs for any specific container:
 
@@ -268,14 +272,14 @@ Replace `transaction-service` with any service name from `docker-compose.yml`.
 
 ## Stopping and Cleaning Up
 
-Stop all containers but keep data volumes (Oracle, Postgres, Kafka data persists on next start):
+Stop all containers but keep local data volumes (PostgreSQL and Kafka data persist on next start):
 
 ```powershell
 cd docker
 docker compose down
 ```
 
-Stop and delete all data volumes (full reset — Oracle and Postgres data is wiped):
+Stop and delete local data volumes (PostgreSQL and Kafka data are wiped; Azure SQL is not affected):
 
 ```powershell
 cd docker
@@ -459,7 +463,7 @@ FSE-Capstone/
 │   ├── otel-config.yaml
 │   ├── loki-config.yaml
 │   ├── tempo.yaml
-│   ├── fix_passwords.sql             # Utility SQL for Oracle password fixes
+│   ├── fix_passwords.sql             # Utility SQL for user password-hash updates
 │   └── jmeter/
 │       └── balance_mutation_stress.jmx
 │
@@ -494,13 +498,12 @@ cd ..\..cd docker
 docker compose up -d --build analytics-service outbox-publisher
 ```
 
-### Oracle XE takes too long and dependent services crash on startup
+### Azure SQL connection fails
 
-Oracle has a 60-second `start_period` in its health check. On slower machines it can take longer. After Oracle is healthy, restart any services that failed:
+Confirm `AZURE_SQL_JDBC_URL` points to the target database, enables encryption, and specifies an authentication mode supported by the runtime. For Azure-hosted managed identity, ensure that the identity is assigned to the host and granted a database user with the required permissions. For a user-assigned identity, set `AZURE_MANAGED_IDENTITY_CLIENT_ID` and the JDBC `msiClientId` property.
 
 ```powershell
-cd docker
-docker compose restart auth-service account-service transaction-service outbox-publisher
+docker compose logs auth-service account-service transaction-service outbox-publisher reconciliation-service
 ```
 
 ### Port already in use
@@ -519,7 +522,7 @@ docker logs <container-name> --tail 50
 
 Common causes:
 - JAR was not built before `docker compose up` — missing `target/*.jar` file
-- Oracle XE health check failed — the service started before Oracle was ready (restart it)
+- Azure SQL is unreachable, the JDBC authentication mode is unsupported in the local container, or the managed identity lacks database permissions
 - Out of memory — increase Docker Desktop memory limit in Settings → Resources
 
 ### Full reset — wipe everything and start clean

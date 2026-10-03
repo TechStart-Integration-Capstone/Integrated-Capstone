@@ -11,7 +11,7 @@ public class AuditLog {
     @Column(name = "action") private String action;
     @Column(name = "entity") private String entity;
     @Column(name = "details", length = 4000) private String details;
-    @Column(name = "timestamp") private LocalDateTime timestamp = LocalDateTime.now();
+    @Column(name = "audit_timestamp") private LocalDateTime timestamp = LocalDateTime.now();
 
     public AuditLog() {}
     public AuditLog(Long customerId, String action, String entity, String details) {

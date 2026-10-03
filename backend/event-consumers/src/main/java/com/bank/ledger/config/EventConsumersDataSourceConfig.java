@@ -82,56 +82,57 @@ public class EventConsumersDataSourceConfig {
     static class PostgresRepositoriesConfig {}
 
     // =========================================================================
-    // 2. SECONDARY: Oracle Read-Only Data Source (Reconciliation Verification)
+    // 2. SECONDARY: Azure SQL read-only data source (Reconciliation Verification)
     // =========================================================================
     @Bean
-    @ConfigurationProperties("app.datasource.oracle")
-    public DataSourceProperties oracleReadOnlyDataSourceProperties() {
+    @ConfigurationProperties("app.datasource.azure-sql")
+    public DataSourceProperties sqlServerReadOnlyDataSourceProperties() {
         return new DataSourceProperties();
     }
 
-    @Bean(name = "oracleReadOnlyDataSource")
-    public DataSource oracleReadOnlyDataSource() {
-        DataSourceProperties props = oracleReadOnlyDataSourceProperties();
+    @Bean(name = "sqlServerReadOnlyDataSource")
+    public DataSource sqlServerReadOnlyDataSource() {
+        DataSourceProperties props = sqlServerReadOnlyDataSourceProperties();
         if (props.getUrl() == null || props.getUrl().isBlank()) {
             HikariDataSource ds = new HikariDataSource();
-            ds.setJdbcUrl("jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=Oracle");
+            ds.setJdbcUrl("jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MSSQLServer");
             ds.setUsername("SA");
             ds.setPassword("");
             ds.setDriverClassName("org.h2.Driver");
-            ds.setPoolName("OracleReconReadOnlyPool");
+            ds.setPoolName("SqlServerReconReadOnlyPool");
             return ds;
         }
         return props.initializeDataSourceBuilder().type(HikariDataSource.class).build();
     }
 
-    @Bean(name = "oracleEntityManagerFactory")
-    public LocalContainerEntityManagerFactoryBean oracleEntityManagerFactory(
+    @Bean(name = "sqlServerEntityManagerFactory")
+    public LocalContainerEntityManagerFactoryBean sqlServerEntityManagerFactory(
             EntityManagerFactoryBuilder builder,
-            @Qualifier("oracleReadOnlyDataSource") DataSource dataSource) {
+            @Qualifier("sqlServerReadOnlyDataSource") DataSource dataSource) {
         Map<String, Object> properties = new HashMap<>();
         properties.put("hibernate.hbm2ddl.auto", "none");
         properties.put("hibernate.show_sql", false);
+        properties.put("hibernate.dialect", "org.hibernate.dialect.SQLServerDialect");
 
         return builder
                 .dataSource(dataSource)
-                .packages("com.bank.ledger.model.oracle")
-                .persistenceUnit("oracleUnit")
+                .packages("com.bank.ledger.model.sqlserver")
+                .persistenceUnit("sqlServerUnit")
                 .properties(properties)
                 .build();
     }
 
-    @Bean(name = "oracleTransactionManager")
-    public PlatformTransactionManager oracleTransactionManager(
-            @Qualifier("oracleEntityManagerFactory") EntityManagerFactory entityManagerFactory) {
+    @Bean(name = "sqlServerTransactionManager")
+    public PlatformTransactionManager sqlServerTransactionManager(
+            @Qualifier("sqlServerEntityManagerFactory") EntityManagerFactory entityManagerFactory) {
         return new JpaTransactionManager(entityManagerFactory);
     }
 
     @Configuration
     @EnableJpaRepositories(
-            basePackages = "com.bank.ledger.repository.oracle",
-            entityManagerFactoryRef = "oracleEntityManagerFactory",
-            transactionManagerRef = "oracleTransactionManager"
+            basePackages = "com.bank.ledger.repository.sqlserver",
+            entityManagerFactoryRef = "sqlServerEntityManagerFactory",
+            transactionManagerRef = "sqlServerTransactionManager"
     )
-    static class OracleRepositoriesConfig {}
+    static class SqlServerRepositoriesConfig {}
 }

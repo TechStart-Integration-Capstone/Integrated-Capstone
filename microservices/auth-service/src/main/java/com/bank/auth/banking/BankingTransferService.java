@@ -4,9 +4,10 @@ import jakarta.validation.constraints.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -25,11 +26,13 @@ public class BankingTransferService {
     private final BankingService banking;
     private final JdbcTemplate jdbc;
     private final BankingLedger ledger;
+    private final boolean sqlServer;
     public BankingTransferService(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) {
         this.banking = banking; this.jdbc = jdbc; this.ledger = ledger;
+        this.sqlServer = detectSqlServer(jdbc);
     }
 
-    @Transactional(isolation = Isolation.READ_COMMITTED)
+    @Transactional
     public Receipt transfer(String authorization, Request request) {
         long customerId = banking.authenticatedCustomer(authorization).getCustomerId();
         String destination = BankingIdentifiers.resolveAccount(jdbc,request.destinationAccountNumber());
@@ -72,17 +75,33 @@ public class BankingTransferService {
     }
 
     private BankingLedger.Account lock(long id) {
+        String lockingClause = sqlServer ? " WITH (UPDLOCK, ROWLOCK)" : "";
+        String lockSuffix = sqlServer ? "" : " FOR UPDATE";
         List<BankingLedger.Account> accounts = jdbc.query("SELECT account_id, customer_id, account_number, currency, current_balance, status "
-                        + "FROM ACCOUNT WHERE account_id = ? FOR UPDATE",
+                        + "FROM ACCOUNT" + lockingClause + " WHERE account_id = ?" + lockSuffix,
                 (rs, row) -> new BankingLedger.Account(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
                         rs.getBigDecimal(5), rs.getString(6)), id);
         if (accounts.isEmpty()) throw error(HttpStatus.NOT_FOUND, "The account could not be found.");
         return accounts.get(0);
     }
 
+    private static boolean detectSqlServer(JdbcTemplate jdbc) {
+        if (jdbc.getDataSource() == null) {
+            throw new IllegalStateException("A datasource is required to select the database-specific row lock.");
+        }
+        try (Connection connection = jdbc.getDataSource().getConnection()) {
+            String product = connection.getMetaData().getDatabaseProductName();
+            if ("Microsoft SQL Server".equals(product)) return true;
+            if ("H2".equals(product)) return false;
+            throw new IllegalStateException("Unsupported database for transfer row locking: " + product);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Unable to determine the database row-lock syntax.", ex);
+        }
+    }
+
     private Receipt replay(String reference, Request request, String destination) {
-        List<Receipt> receipts = jdbc.query("SELECT t.from_account_id, a.account_number, t.amount, t.source_currency, t.transaction_date, c.first_name || ' ' || c.last_name, t.transaction_id "
-                        + "FROM TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id JOIN CUSTOMER c ON c.customer_id = a.customer_id WHERE t.reference_no = ? AND t.status = 'SUCCESS'",
+        List<Receipt> receipts = jdbc.query("SELECT t.from_account_id, a.account_number, t.amount, t.source_currency, t.transaction_date, CONCAT(c.first_name, ' ', c.last_name), t.transaction_id "
+                        + "FROM LEDGER_TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id JOIN CUSTOMER c ON c.customer_id = a.customer_id WHERE t.reference_no = ? AND t.status = 'SUCCESS'",
                 (rs, row) -> new Receipt(BankingIdentifiers.reference(rs.getLong(7),rs.getTimestamp(5).toLocalDateTime()), rs.getLong(1), rs.getString(2), rs.getBigDecimal(3), rs.getString(4),
                         "SUCCESS", rs.getTimestamp(5).toLocalDateTime(), rs.getString(6)), reference + "-D");
         if (receipts.isEmpty()) return null;

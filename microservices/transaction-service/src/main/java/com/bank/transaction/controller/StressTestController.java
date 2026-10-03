@@ -22,7 +22,7 @@ import java.util.concurrent.*;
  *
  * Spawns N concurrent threads that all try to debit ₱50 from an account
  * reset to ₱60. Proves that @Lock(PESSIMISTIC_WRITE) serialises requests
- * at the Oracle XE row level, allowing exactly 1 commit and 0 overdrafts.
+ * at the Azure SQL row level, allowing exactly 1 commit and 0 overdrafts.
  *
  * Route:  POST /api/v1/stress/double-spend-test
  * Proxied: API Gateway → transaction-service:8083
@@ -112,7 +112,16 @@ public class StressTestController {
                             "Safely rejected: Insufficient balance after serialised previous commit.",
                             latency));
 
-                } catch (AccountNotFoundException | org.springframework.dao.DataAccessException | RuntimeException ex) {
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    long latency = System.currentTimeMillis() - startTime;
+                    threadLogs.add(new StressTestResult.ThreadExecutionDetail(
+                            idx, "Thread-" + idx,
+                            "INTERRUPTED",
+                            "Execution interrupted while waiting to start.",
+                            latency));
+
+                } catch (RuntimeException ex) {
                     long latency = System.currentTimeMillis() - startTime;
                     threadLogs.add(new StressTestResult.ThreadExecutionDetail(
                             idx, "Thread-" + idx,
@@ -137,7 +146,7 @@ public class StressTestController {
 
         long totalDurationMs = System.currentTimeMillis() - startTime;
 
-        // ── 6. Read actual final balance from Oracle ──────────────────────────
+        // ── 6. Read actual final balance from Azure SQL ────────────────────────
         Account    finalAccount         = accountRepository.findById(targetAccountId).orElseThrow();
         BigDecimal actualFinalBalance   = finalAccount.getCurrentBalance();
         BigDecimal expectedFinalBalance = startingBalance.subtract(debitAmount); // ₱10.0000

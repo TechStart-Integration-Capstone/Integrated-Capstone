@@ -4,12 +4,10 @@ server:
 spring:
   application:
     name: ledger-core
-  # No spring.datasource here: ledger-core's only database is Oracle, configured under
-  # app.datasource.oracle (see OracleDataSourceConfig). Defaults point at the local
-  # docker-compose Oracle XE (port 1521, pluggable DB XEPDB1), so local runs use real Oracle, not H2.
+  # ledger-core's SQL Server datasource is configured under app.datasource.azure-sql.
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
@@ -17,6 +15,11 @@ spring:
   sql:
     init:
       mode: never
+  cloud:
+    azure:
+      credential:
+        managed-identity-enabled: true
+        client-id: ${AZURE_MANAGED_IDENTITY_CLIENT_ID:}
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
@@ -32,13 +35,11 @@ spring:
 
 app:
   datasource:
-    oracle:
-      url: ${SPRING_DATASOURCE_ORACLE_URL:jdbc:oracle:thin:@//localhost:1521/XEPDB1}
-      username: ${SPRING_DATASOURCE_ORACLE_USERNAME:ledger_master}
-      password: ${SPRING_DATASOURCE_ORACLE_PASSWORD:MasterSecretPassword123}
-      driver-class-name: oracle.jdbc.OracleDriver
-      hikari:                       # bound onto the Oracle HikariDataSource in OracleDataSourceConfig
-        pool-name: OracleMasterPool
+    azure-sql:
+      url: ${AZURE_SQL_JDBC_URL}
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+      hikari:
+        pool-name: AzureSqlMasterPool
         maximum-pool-size: 30
         minimum-idle: 10
         connection-timeout: 10000

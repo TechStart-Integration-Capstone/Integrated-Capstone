@@ -9,7 +9,7 @@ public class OutboxEvent {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "event_id") private Long eventId;
     @Column(name = "transaction_id") private Long transactionId;
     @Column(name = "event_type") private String eventType;
-    @Column(name = "payload", columnDefinition = "CLOB") private String payload;
+    @Column(name = "payload", columnDefinition = "NVARCHAR(MAX)") private String payload;
     @Column(name = "status") private String status = "PENDING";
     @Column(name = "created_date") private LocalDateTime createdDate = LocalDateTime.now();
     @Column(name = "processed_date") private LocalDateTime processedDate;

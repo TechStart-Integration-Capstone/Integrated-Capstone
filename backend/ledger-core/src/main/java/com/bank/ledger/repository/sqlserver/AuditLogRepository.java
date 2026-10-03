@@ -1,6 +1,6 @@
-package com.bank.ledger.repository.oracle;
+package com.bank.ledger.repository.sqlserver;
 
-import com.bank.ledger.model.oracle.AuditLog;
+import com.bank.ledger.model.sqlserver.AuditLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

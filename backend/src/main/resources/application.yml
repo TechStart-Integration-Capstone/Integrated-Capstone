@@ -9,7 +9,7 @@ spring:
   
   # Relational Persistence & HikariCP Configuration (Day 32 Requirement)
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=Oracle}
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MSSQLServer}
     driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
     username: ${SPRING_DATASOURCE_USERNAME:sa}
     password: ${SPRING_DATASOURCE_PASSWORD:}

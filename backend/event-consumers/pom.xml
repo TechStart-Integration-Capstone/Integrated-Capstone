@@ -13,7 +13,7 @@
 
     <artifactId>event-consumers</artifactId>
     <name>PayPink :: Event Consumers (Audit &amp; Reconciliation)</name>
-    <description>Kafka Event Listeners for Immutable PostgreSQL Auditing and Oracle/Postgres Reconciliation Sweeps</description>
+    <description>Kafka Event Listeners for immutable PostgreSQL auditing and Azure SQL reconciliation</description>
 
     <dependencies>
         <!-- Shared Common DTOs & Exceptions -->
@@ -44,15 +44,19 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
-        <!-- Relational Databases (PostgreSQL Audit + Oracle Read-Only Recon + H2) -->
+        <!-- Relational Databases (PostgreSQL audit + Azure SQL read-only recon + H2) -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
         <dependency>
-            <groupId>com.oracle.database.jdbc</groupId>
-            <artifactId>ojdbc11</artifactId>
+            <groupId>com.azure.spring</groupId>
+            <artifactId>spring-cloud-azure-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
             <scope>runtime</scope>
         </dependency>
         <dependency>

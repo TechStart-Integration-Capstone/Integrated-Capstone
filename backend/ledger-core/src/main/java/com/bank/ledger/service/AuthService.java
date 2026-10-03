@@ -2,8 +2,8 @@ package com.bank.ledger.service;
 
 import com.bank.ledger.dto.AuthRequest;
 import com.bank.ledger.dto.AuthResponse;
-import com.bank.ledger.model.oracle.Customer;
-import com.bank.ledger.repository.oracle.CustomerRepository;
+import com.bank.ledger.model.sqlserver.Customer;
+import com.bank.ledger.repository.sqlserver.CustomerRepository;
 import com.bank.ledger.security.JwtTokenProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;

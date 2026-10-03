@@ -1,6 +1,6 @@
-package com.bank.ledger.repository.oracle;
+package com.bank.ledger.repository.sqlserver;
 
-import com.bank.ledger.model.oracle.Customer;
+import com.bank.ledger.model.sqlserver.Customer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

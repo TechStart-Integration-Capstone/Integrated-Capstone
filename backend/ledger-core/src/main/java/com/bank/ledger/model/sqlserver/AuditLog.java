@@ -1,4 +1,4 @@
-package com.bank.ledger.model.oracle;
+package com.bank.ledger.model.sqlserver;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -24,7 +24,7 @@ public class AuditLog {
     @Column(name = "details", nullable = false, length = 4000)
     private String details;
 
-    @Column(name = "timestamp", nullable = false, updatable = false)
+    @Column(name = "audit_timestamp", nullable = false, updatable = false)
     private LocalDateTime timestamp = LocalDateTime.now();
 
     public AuditLog() {}

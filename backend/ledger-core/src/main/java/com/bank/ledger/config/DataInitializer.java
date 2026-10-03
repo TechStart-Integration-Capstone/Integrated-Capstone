@@ -1,9 +1,9 @@
 package com.bank.ledger.config;
 
-import com.bank.ledger.model.oracle.Account;
-import com.bank.ledger.model.oracle.Customer;
-import com.bank.ledger.repository.oracle.AccountRepository;
-import com.bank.ledger.repository.oracle.CustomerRepository;
+import com.bank.ledger.model.sqlserver.Account;
+import com.bank.ledger.model.sqlserver.Customer;
+import com.bank.ledger.repository.sqlserver.AccountRepository;
+import com.bank.ledger.repository.sqlserver.CustomerRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -33,7 +33,7 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         if (customerRepository.count() == 0) {
-            log.info("Seeding Initial PayPink Oracle Retail Banking Data (Philippine FinTech Locale)...");
+            log.info("Seeding initial PayPink Azure SQL retail banking data...");
 
             // 1. Customer: Juan Dela Cruz (Retail Customer)
             Customer juan = new Customer(
@@ -96,7 +96,7 @@ public class DataInitializer implements CommandLineRunner {
             );
             accountRepository.save(acc3);
 
-            log.info("Oracle Master Seed Complete: 3 Customers, 3 Localized Retail/Settlement Accounts (PHP ₱).");
+            log.info("Azure SQL seed complete: 3 customers and 3 retail/settlement accounts.");
         }
     }
 }

@@ -1,9 +1,9 @@
 package com.bank.reconciliation;
 
-import com.bank.reconciliation.model.oracle.TransactionRecord;
+import com.bank.reconciliation.model.sqlserver.TransactionRecord;
 import com.bank.reconciliation.model.postgres.LedgerMutationAudit;
 import com.bank.reconciliation.model.postgres.ReconciliationLog;
-import com.bank.reconciliation.repository.oracle.TransactionRepository;
+import com.bank.reconciliation.repository.sqlserver.TransactionRepository;
 import com.bank.reconciliation.repository.postgres.LedgerMutationAuditRepository;
 import com.bank.reconciliation.repository.postgres.ReconciliationLogRepository;
 import com.bank.reconciliation.service.ReconciliationService;
@@ -28,7 +28,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for ReconciliationService.
- * Both Oracle and PostgreSQL repositories are mocked — no DB connections needed.
+ * Both Azure SQL and PostgreSQL repositories are mocked — no DB connections needed.
  */
 @ExtendWith(MockitoExtension.class)
 class ReconciliationServiceTest {
@@ -48,7 +48,7 @@ class ReconciliationServiceTest {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    private TransactionRecord oracleTx(long id, String status, BigDecimal amount) {
+    private TransactionRecord ledgerTx(long id, String status, BigDecimal amount) {
         TransactionRecord tx = new TransactionRecord();
         sf(tx,"transactionId",id); sf(tx,"status",status); sf(tx,"amount",amount);
         sf(tx,"referenceNo","REF-"+id); return tx;
@@ -61,10 +61,10 @@ class ReconciliationServiceTest {
 
     private void sf(Object o,String n,Object v){try{var x=o.getClass().getDeclaredField(n);x.setAccessible(true);x.set(o,v);}catch(Exception e){throw new RuntimeException(e);}}
 
-    // ── MATCHED: Oracle SUCCESS + Postgres amount matches ────────────────────
-    @Test @DisplayName("reconcile: Oracle SUCCESS + matching Postgres audit = MATCHED")
-    void reconcile_oracleSuccessMatchingAudit_returnsMatched() {
-        TransactionRecord tx = oracleTx(1L,"SUCCESS",new BigDecimal("500.0000"));
+    // ── MATCHED: Azure SQL SUCCESS + Postgres amount matches ─────────────────
+    @Test @DisplayName("reconcile: Azure SQL SUCCESS + matching Postgres audit = MATCHED")
+    void reconcile_azureSqlSuccessMatchingAudit_returnsMatched() {
+        TransactionRecord tx = ledgerTx(1L,"SUCCESS",new BigDecimal("500.0000"));
         LedgerMutationAudit audit = pgAudit(1L,new BigDecimal("500.0000"));
         when(auditRepository.findByTransactionId(1L)).thenReturn(Optional.of(audit));
         when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -72,15 +72,15 @@ class ReconciliationServiceTest {
         ReconciliationLog log = service.reconcile(tx);
 
         assertThat(log.getReconStatus()).isEqualTo("MATCHED");
-        assertThat(log.getOracleStatus()).isEqualTo("SUCCESS");
+        assertThat(log.getLedgerStatus()).isEqualTo("SUCCESS");
         assertThat(log.getPostgresStatus()).isEqualTo("COMMITTED");
         verify(reconLogRepository,times(1)).save(any(ReconciliationLog.class));
     }
 
-    // ── DRIFT: Oracle SUCCESS + Postgres amount differs ──────────────────────
-    @Test @DisplayName("reconcile: Oracle SUCCESS + mismatched Postgres amount = DRIFT_DETECTED")
+    // ── DRIFT: Azure SQL SUCCESS + Postgres amount differs ───────────────────
+    @Test @DisplayName("reconcile: Azure SQL SUCCESS + mismatched Postgres amount = DRIFT_DETECTED")
     void reconcile_amountMismatch_returnsDriftDetected() {
-        TransactionRecord tx = oracleTx(2L,"SUCCESS",new BigDecimal("500.0000"));
+        TransactionRecord tx = ledgerTx(2L,"SUCCESS",new BigDecimal("500.0000"));
         LedgerMutationAudit audit = pgAudit(2L,new BigDecimal("499.9999")); // wrong amount
         when(auditRepository.findByTransactionId(2L)).thenReturn(Optional.of(audit));
         when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -91,10 +91,10 @@ class ReconciliationServiceTest {
         assertThat(log.getPostgresStatus()).isEqualTo("AMOUNT_MISMATCH");
     }
 
-    // ── DRIFT: Oracle SUCCESS but no Postgres audit found ────────────────────
-    @Test @DisplayName("reconcile: Oracle SUCCESS but Postgres audit missing = DRIFT_DETECTED")
+    // ── DRIFT: Azure SQL SUCCESS but no Postgres audit found ─────────────────
+    @Test @DisplayName("reconcile: Azure SQL SUCCESS but Postgres audit missing = DRIFT_DETECTED")
     void reconcile_missingPostgresAudit_returnsDriftDetected() {
-        TransactionRecord tx = oracleTx(3L,"SUCCESS",new BigDecimal("200.0000"));
+        TransactionRecord tx = ledgerTx(3L,"SUCCESS",new BigDecimal("200.0000"));
         when(auditRepository.findByTransactionId(3L)).thenReturn(Optional.empty());
         when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -104,10 +104,10 @@ class ReconciliationServiceTest {
         assertThat(log.getPostgresStatus()).isEqualTo("MISSING_AUDIT");
     }
 
-    // ── MATCHED: Oracle FAILED + no Postgres audit (expected — not applicable) 
-    @Test @DisplayName("reconcile: Oracle FAILED + no Postgres audit = MATCHED (not applicable)")
-    void reconcile_oracleFailed_noAudit_returnsMatched() {
-        TransactionRecord tx = oracleTx(4L,"FAILED",new BigDecimal("100.0000"));
+    // ── MATCHED: Azure SQL FAILED + no Postgres audit (not applicable)
+    @Test @DisplayName("reconcile: Azure SQL FAILED + no Postgres audit = MATCHED (not applicable)")
+    void reconcile_azureSqlFailed_noAudit_returnsMatched() {
+        TransactionRecord tx = ledgerTx(4L,"FAILED",new BigDecimal("100.0000"));
         when(auditRepository.findByTransactionId(4L)).thenReturn(Optional.empty());
         when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -118,10 +118,10 @@ class ReconciliationServiceTest {
     }
 
     // ── runFullSweep processes top-50 recent transactions ────────────────────
-    @Test @DisplayName("runFullSweep: processes all recent Oracle transactions")
+    @Test @DisplayName("runFullSweep: processes all recent Azure SQL transactions")
     void runFullSweep_processesAllTransactions() {
-        TransactionRecord tx1 = oracleTx(10L,"SUCCESS",new BigDecimal("100.0000"));
-        TransactionRecord tx2 = oracleTx(11L,"FAILED", new BigDecimal("200.0000"));
+        TransactionRecord tx1 = ledgerTx(10L,"SUCCESS",new BigDecimal("100.0000"));
+        TransactionRecord tx2 = ledgerTx(11L,"FAILED", new BigDecimal("200.0000"));
         when(transactionRepository.findTop50ByOrderByTransactionDateDesc()).thenReturn(List.of(tx1,tx2));
         when(auditRepository.findByTransactionId(10L)).thenReturn(Optional.of(pgAudit(10L,new BigDecimal("100.0000"))));
         when(auditRepository.findByTransactionId(11L)).thenReturn(Optional.empty());
@@ -149,7 +149,7 @@ class ReconciliationServiceTest {
     // ── Kafka consumer: valid event triggers reconcile ───────────────────────
     @Test @DisplayName("onTransactionEvent: valid Kafka message triggers reconcile for that txId")
     void onTransactionEvent_validMessage_triggersReconcile() {
-        TransactionRecord tx = oracleTx(20L,"SUCCESS",new BigDecimal("300.0000"));
+        TransactionRecord tx = ledgerTx(20L,"SUCCESS",new BigDecimal("300.0000"));
         when(transactionRepository.findById(20L)).thenReturn(Optional.of(tx));
         when(auditRepository.findByTransactionId(20L)).thenReturn(Optional.of(pgAudit(20L,new BigDecimal("300.0000"))));
         when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

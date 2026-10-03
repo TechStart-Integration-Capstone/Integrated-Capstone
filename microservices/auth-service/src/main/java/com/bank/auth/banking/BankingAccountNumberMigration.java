@@ -3,6 +3,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.stereotype.Component;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 
@@ -11,9 +12,9 @@ import java.util.*;
 public class BankingAccountNumberMigration implements ApplicationRunner {
     private final JdbcTemplate jdbc;
     public BankingAccountNumberMigration(JdbcTemplate jdbc){this.jdbc=jdbc;}
-    @Override @Transactional
+    @Override @Transactional(isolation = Isolation.SERIALIZABLE)
     public void run(ApplicationArguments args) {
-        var accounts=jdbc.query("SELECT account_id,account_number,customer_id,account_type FROM ACCOUNT ORDER BY account_id FOR UPDATE",
+        var accounts=jdbc.query("SELECT account_id,account_number,customer_id,account_type FROM ACCOUNT ORDER BY account_id",
                 (rs,row) -> new Existing(rs.getLong(1),rs.getString(2),rs.getLong(3),rs.getString(4)));
         Set<String> reserved = new HashSet<>();
         Map<Long,String> customerNumbers = new HashMap<>();

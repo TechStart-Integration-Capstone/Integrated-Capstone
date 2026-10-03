@@ -1,6 +1,6 @@
-package com.bank.ledger.repository.oracle;
+package com.bank.ledger.repository.sqlserver;
 
-import com.bank.ledger.model.oracle.OutboxEvent;
+import com.bank.ledger.model.sqlserver.OutboxEvent;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Pageable;

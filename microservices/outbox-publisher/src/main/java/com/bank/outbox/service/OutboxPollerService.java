@@ -31,14 +31,14 @@ import java.util.concurrent.atomic.AtomicLong;
  *     poll cycle. Keeps retrying until maxRetries is reached, after
  *     which the row is marked DEAD_LETTER for manual inspection.
  *
- * Both jobs are @Transactional so Oracle status updates are committed
+ * Both jobs are @Transactional so Azure SQL status updates are committed
  * atomically after each successful Kafka send.  If Kafka is unavailable
  * the status stays PENDING / FAILED and the row is retried next cycle —
  * at-least-once delivery is guaranteed without a distributed transaction.
  *
  * Kafka sends use async CompletableFuture callbacks to avoid blocking the
  * scheduler thread, but we wait for all futures in the batch to complete
- * before committing the Oracle status updates for that cycle.
+ * before committing Azure SQL status updates for that cycle.
  */
 @Service
 public class OutboxPollerService {
@@ -106,7 +106,7 @@ public class OutboxPollerService {
                         event.getPayload()
                 );
 
-                // Block per event so the @Transactional Oracle UPDATE stays atomic
+                // Block per event so the @Transactional SQL UPDATE stays atomic
                 // with the outcome of each individual send.
                 future.whenComplete((result, ex) -> {
                     if (ex == null) {

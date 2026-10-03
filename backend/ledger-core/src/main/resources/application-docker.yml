@@ -8,7 +8,7 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.OracleDialect
+        dialect: org.hibernate.dialect.SQLServerDialect
         format_sql: false
         jdbc:
           batch_size: 50
@@ -23,8 +23,6 @@ spring:
 
 app:
   datasource:
-    oracle:
-      url: jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      driver-class-name: oracle.jdbc.OracleDriver
-      username: ledger_master
-      password: MasterSecretPassword123
+    azure-sql:
+      url: ${AZURE_SQL_JDBC_URL}
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver

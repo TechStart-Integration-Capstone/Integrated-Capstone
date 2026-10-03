@@ -2,8 +2,8 @@ package com.bank.ledger.service;
 
 import com.bank.ledger.dto.MutationRequest;
 import com.bank.ledger.exception.BusinessException;
-import com.bank.ledger.model.oracle.TransactionRecord;
-import com.bank.ledger.repository.oracle.TransactionRepository;
+import com.bank.ledger.model.sqlserver.TransactionRecord;
+import com.bank.ledger.repository.sqlserver.TransactionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -25,7 +25,7 @@ public class FailedTransactionRecorder {
 
     /**
      * Persists a failed transaction attempt in an isolated, clean transaction.
-     * Called after the main Oracle mutation transaction has rolled back.
+     * Called after the main Azure SQL mutation transaction has rolled back.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public TransactionRecord recordFailure(MutationRequest request, BusinessException ex) {

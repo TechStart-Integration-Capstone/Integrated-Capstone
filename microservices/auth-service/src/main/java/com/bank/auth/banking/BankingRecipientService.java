@@ -3,6 +3,7 @@ package com.bank.auth.banking;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.*;
@@ -14,7 +15,7 @@ public class BankingRecipientService {
     private final BankingService banking;
     private final JdbcTemplate jdbc;
     public BankingRecipientService(BankingService banking, JdbcTemplate jdbc) { this.banking = banking; this.jdbc = jdbc; }
-    private static final String NAME = "c.first_name || ' ' || c.last_name";
+    private static final String NAME = "CONCAT(c.first_name, ' ', c.last_name)";
 
     @Transactional(readOnly = true)
     public Recipient lookup(String authorization, String number) {
@@ -42,21 +43,21 @@ public class BankingRecipientService {
         List<Recipient> recent = jdbc.query("SELECT a.account_number, " + NAME + ", "
                 + "(SELECT COUNT(*) FROM BANKING_FAVORITE f WHERE f.customer_id = ? AND f.account_id = a.account_id) "
                 + "FROM ACCOUNT a JOIN CUSTOMER c ON c.customer_id = a.customer_id JOIN "
-                + "(SELECT t.to_account_id, MAX(t.transaction_date) AS last_used FROM TRANSACTION t "
+                + "(SELECT t.to_account_id, MAX(t.transaction_date) AS last_used FROM LEDGER_TRANSACTION t "
                 + "JOIN ACCOUNT source ON source.account_id = t.from_account_id WHERE source.customer_id = ? "
                 + "AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN') AND t.status = 'SUCCESS' GROUP BY t.to_account_id) r "
                 + "ON r.to_account_id = a.account_id WHERE a.customer_id <> ? AND a.status = 'ACTIVE' AND c.status = 'ACTIVE' AND a.currency = 'PHP' "
-                + "ORDER BY r.last_used DESC, a.account_id FETCH FIRST 10 ROWS ONLY",
+                + "ORDER BY r.last_used DESC, a.account_id OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY",
                 (rs,row) -> new Recipient(rs.getString(1),rs.getString(2),rs.getInt(3) > 0), customer,customer,customer);
         return new Directory(favorites,recent);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public Recipient save(String authorization, String number) {
         long customer = banking.authenticatedCustomer(authorization).getCustomerId();
         Recipient recipient = find(customer,number);
         // Serialize repeated saves by this customer so adding a favorite is idempotent.
-        jdbc.queryForObject("SELECT customer_id FROM CUSTOMER WHERE customer_id = ? FOR UPDATE",Long.class,customer);
+        jdbc.queryForObject("SELECT customer_id FROM CUSTOMER WHERE customer_id = ?",Long.class,customer);
         jdbc.update("INSERT INTO BANKING_FAVORITE (customer_id, account_id) SELECT ?, a.account_id FROM ACCOUNT a "
                 + "WHERE a.account_number = ? AND NOT EXISTS (SELECT 1 FROM BANKING_FAVORITE f WHERE f.customer_id = ? AND f.account_id = a.account_id)",
                 customer,recipient.accountNumber(),customer);

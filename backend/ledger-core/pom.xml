@@ -13,7 +13,7 @@
 
     <artifactId>ledger-core</artifactId>
     <name>PayPink :: Ledger Core Engine</name>
-    <description>Core Retail Banking OLTP Engine: Oracle 21c Balance Mutations, Pessimistic Locking, Redis Idempotency, Transactional Outbox</description>
+    <description>Core Retail Banking OLTP Engine: Azure SQL Database balance mutations, pessimistic locking, Redis idempotency, and transactional outbox</description>
 
     <dependencies>
         <!-- Shared Common DTOs & Exceptions -->
@@ -56,10 +56,14 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
-        <!-- Relational Databases (Oracle Master + H2 test mode) -->
+        <!-- Azure SQL Database and H2 test mode -->
         <dependency>
-            <groupId>com.oracle.database.jdbc</groupId>
-            <artifactId>ojdbc11</artifactId>
+            <groupId>com.azure.spring</groupId>
+            <artifactId>spring-cloud-azure-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
             <scope>runtime</scope>
         </dependency>
         <dependency>

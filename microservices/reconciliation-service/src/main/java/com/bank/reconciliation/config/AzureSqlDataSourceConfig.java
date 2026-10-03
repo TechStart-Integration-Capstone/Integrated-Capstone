@@ -22,16 +22,16 @@ import java.util.Map;
 @Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(
-        basePackages = "com.bank.reconciliation.repository.oracle",
-        entityManagerFactoryRef = "oracleEntityManagerFactory",
-        transactionManagerRef = "oracleTransactionManager"
+        basePackages = "com.bank.reconciliation.repository.sqlserver",
+        entityManagerFactoryRef = "sqlServerEntityManagerFactory",
+        transactionManagerRef = "sqlServerTransactionManager"
 )
-public class OracleDataSourceConfig {
+public class AzureSqlDataSourceConfig {
 
     @Primary
-    @Bean(name = "oracleDataSource")
-    @ConfigurationProperties(prefix = "spring.datasource.oracle")
-    public DataSource oracleDataSource() {
+    @Bean(name = "sqlServerDataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.azure-sql")
+    public DataSource sqlServerDataSource() {
         return DataSourceBuilder.create()
                 .type(com.zaxxer.hikari.HikariDataSource.class)
                 .build();
@@ -47,25 +47,25 @@ public class OracleDataSourceConfig {
     }
 
     @Primary
-    @Bean(name = "oracleEntityManagerFactory")
-    public LocalContainerEntityManagerFactoryBean oracleEntityManagerFactory(
+    @Bean(name = "sqlServerEntityManagerFactory")
+    public LocalContainerEntityManagerFactoryBean sqlServerEntityManagerFactory(
             @Qualifier("entityManagerFactoryBuilder") EntityManagerFactoryBuilder builder,
-            @Qualifier("oracleDataSource") DataSource dataSource) {
+            @Qualifier("sqlServerDataSource") DataSource dataSource) {
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.dialect", "org.hibernate.dialect.OracleDialect");
+        props.put("hibernate.dialect", "org.hibernate.dialect.SQLServerDialect");
         props.put("hibernate.hbm2ddl.auto", "none");
         return builder
                 .dataSource(dataSource)
-                .packages("com.bank.reconciliation.model.oracle")
-                .persistenceUnit("oracle")
+                .packages("com.bank.reconciliation.model.sqlserver")
+                .persistenceUnit("sqlServer")
                 .properties(props)
                 .build();
     }
 
     @Primary
-    @Bean(name = "oracleTransactionManager")
-    public PlatformTransactionManager oracleTransactionManager(
-            @Qualifier("oracleEntityManagerFactory") EntityManagerFactory emf) {
+    @Bean(name = "sqlServerTransactionManager")
+    public PlatformTransactionManager sqlServerTransactionManager(
+            @Qualifier("sqlServerEntityManagerFactory") EntityManagerFactory emf) {
         return new JpaTransactionManager(emf);
     }
 }

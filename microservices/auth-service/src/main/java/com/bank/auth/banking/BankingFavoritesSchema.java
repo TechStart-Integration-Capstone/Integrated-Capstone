@@ -7,7 +7,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/** Additive, restart-safe migration for existing local Oracle installations. */
+/** Creates the Azure SQL favorites table when it has not yet been provisioned. */
 @Component
 public class BankingFavoritesSchema implements ApplicationRunner {
 
@@ -21,31 +21,19 @@ public class BankingFavoritesSchema implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments arguments) {
-        try {
-            // Check if table already exists in Oracle's data dictionary before creating
-            Integer count = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM user_tables WHERE table_name = 'BANKING_FAVORITE'",
-                Integer.class
-            );
-
-            if (count != null && count > 0) {
-                log.info("[auth-service] BANKING_FAVORITE table already exists, skipping creation.");
-                return;
-            }
-
-            jdbc.execute(
-                "CREATE TABLE BANKING_FAVORITE (" +
-                "  customer_id  NUMBER(19) NOT NULL, " +
-                "  account_id   NUMBER(19) NOT NULL, " +
-                "  created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, " +
-                "  CONSTRAINT pk_banking_favorite PRIMARY KEY (customer_id, account_id), " +
-                "  CONSTRAINT fk_favorite_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER(customer_id), " +
-                "  CONSTRAINT fk_favorite_account  FOREIGN KEY (account_id)  REFERENCES ACCOUNT(account_id)" +
-                ")"
-            );
-            log.info("[auth-service] BANKING_FAVORITE table created successfully.");
-        } catch (org.springframework.dao.DataAccessException ex) {
-            log.warn("[auth-service] BANKING_FAVORITE schema check note: {}", ex.getMessage());
-        }
+        jdbc.execute("""
+                IF OBJECT_ID(N'dbo.BANKING_FAVORITE', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.BANKING_FAVORITE (
+                        customer_id BIGINT NOT NULL,
+                        account_id BIGINT NOT NULL,
+                        created_date DATETIME2(7) NOT NULL DEFAULT SYSDATETIME(),
+                        CONSTRAINT pk_banking_favorite PRIMARY KEY (customer_id, account_id),
+                        CONSTRAINT fk_favorite_customer FOREIGN KEY (customer_id) REFERENCES dbo.CUSTOMER(customer_id),
+                        CONSTRAINT fk_favorite_account FOREIGN KEY (account_id) REFERENCES dbo.ACCOUNT(account_id)
+                    );
+                END
+                """);
+        log.info("[auth-service] BANKING_FAVORITE table is ready.");
     }
 }

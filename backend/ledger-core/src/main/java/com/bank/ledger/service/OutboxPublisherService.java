@@ -1,8 +1,8 @@
 package com.bank.ledger.service;
 
 import com.bank.ledger.event.KafkaTopics;
-import com.bank.ledger.model.oracle.OutboxEvent;
-import com.bank.ledger.repository.oracle.OutboxEventRepository;
+import com.bank.ledger.model.sqlserver.OutboxEvent;
+import com.bank.ledger.repository.sqlserver.OutboxEventRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Transactional Outbox relay (the ONLY publisher).
  *
- * Every second: claim up to 100 PENDING events (SELECT ... FOR UPDATE SKIP LOCKED),
+ * Every second: claim up to 100 PENDING events using the repository lock,
  * publish each to Kafka and wait for the broker ack, then mark PROCESSED.
  * On failure: exponential backoff (2^n s, max 60 s); after 5 attempts -> DEAD.
  *

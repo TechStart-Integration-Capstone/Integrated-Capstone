@@ -2,10 +2,10 @@
 -- CAPSTONE FSE: Core Retail Ledger & Balance Mutation Engine
 -- PostgreSQL 15+ schema OWNED BY event-consumers
 --   LEDGER_MUTATION_AUDIT  (immutable financial audit, one row per ledger leg)
---   RECONCILIATION_LOG     (Oracle vs PostgreSQL drift detection, upserted per leg)
+--   RECONCILIATION_LOG     (Azure SQL vs PostgreSQL drift detection, upserted per leg)
 --
 -- NOTIFICATION is owned by notification-service (see its own schema-postgres.sql).
--- Oracle tables are owned by ledger-core (schema-oracle.sql); this service only READS them.
+-- Azure SQL ledger tables are owned by ledger-core (schema-azure-sql.sql); this service only READS them.
 -- No seed rows: audit and reconciliation data only ever come from real Kafka events.
 -- ============================================================================
 

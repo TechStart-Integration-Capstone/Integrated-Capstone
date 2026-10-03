@@ -4,9 +4,14 @@ server:
 spring:
   application:
     name: auth-service
+  cloud:
+    azure:
+      credential:
+        managed-identity-enabled: true
+        client-id: ${AZURE_MANAGED_IDENTITY_CLIENT_ID:}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
   data:
     redis:
@@ -16,13 +21,11 @@ spring:
 
 app:
   datasource:
-    oracle:
-      url: ${SPRING_DATASOURCE_ORACLE_URL:jdbc:oracle:thin:@//localhost:1521/XEPDB1}
-      username: ${SPRING_DATASOURCE_ORACLE_USERNAME:ledger_master}
-      password: ${SPRING_DATASOURCE_ORACLE_PASSWORD:MasterSecretPassword123}
-      driver-class-name: oracle.jdbc.OracleDriver
+    azure-sql:
+      url: ${AZURE_SQL_JDBC_URL}
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
       hikari:
-        pool-name: AuthOraclePool
+        pool-name: AuthAzureSqlPool
         maximum-pool-size: 15
         minimum-idle: 5
         connection-timeout: 10000

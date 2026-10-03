@@ -3,10 +3,10 @@ package com.bank.ledger.service;
 import com.bank.ledger.dto.AccountDto;
 import com.bank.ledger.dto.CustomerDto;
 import com.bank.ledger.exception.AccountNotFoundException;
-import com.bank.ledger.model.oracle.Account;
-import com.bank.ledger.model.oracle.Customer;
-import com.bank.ledger.repository.oracle.AccountRepository;
-import com.bank.ledger.repository.oracle.CustomerRepository;
+import com.bank.ledger.model.sqlserver.Account;
+import com.bank.ledger.model.sqlserver.Customer;
+import com.bank.ledger.repository.sqlserver.AccountRepository;
+import com.bank.ledger.repository.sqlserver.CustomerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

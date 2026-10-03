@@ -1,4 +1,4 @@
-package com.bank.ledger.model.oracle;
+package com.bank.ledger.model.sqlserver;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;

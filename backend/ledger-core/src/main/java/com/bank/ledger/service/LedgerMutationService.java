@@ -9,14 +9,14 @@ import com.bank.ledger.exception.CurrencyMismatchException;
 import com.bank.ledger.exception.InsufficientFundsException;
 import com.bank.ledger.exception.InvalidTransferException;
 import com.bank.ledger.exception.LedgerPersistenceException;
-import com.bank.ledger.model.oracle.Account;
-import com.bank.ledger.model.oracle.AuditLog;
-import com.bank.ledger.model.oracle.OutboxEvent;
-import com.bank.ledger.model.oracle.TransactionRecord;
-import com.bank.ledger.repository.oracle.AccountRepository;
-import com.bank.ledger.repository.oracle.AuditLogRepository;
-import com.bank.ledger.repository.oracle.OutboxEventRepository;
-import com.bank.ledger.repository.oracle.TransactionRepository;
+import com.bank.ledger.model.sqlserver.Account;
+import com.bank.ledger.model.sqlserver.AuditLog;
+import com.bank.ledger.model.sqlserver.OutboxEvent;
+import com.bank.ledger.model.sqlserver.TransactionRecord;
+import com.bank.ledger.repository.sqlserver.AccountRepository;
+import com.bank.ledger.repository.sqlserver.AuditLogRepository;
+import com.bank.ledger.repository.sqlserver.OutboxEventRepository;
+import com.bank.ledger.repository.sqlserver.TransactionRepository;
 import com.bank.ledger.security.IdempotencyService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -61,7 +61,7 @@ public class LedgerMutationService {
 
     /**
      * Core Mutation Engine:
-     * Executes inside an atomic local ACID transaction on Oracle XE:
+     * Executes inside an atomic ACID transaction on Azure SQL:
      * 1. Acquires @Lock(LockModeType.PESSIMISTIC_WRITE) on accounts in ascending ID order to prevent deadlocks.
      * 2. Validates balance and currency compatibility.
      * 3. Updates Account balance(s) (debit source, credit target on internal transfer).
@@ -174,7 +174,7 @@ public class LedgerMutationService {
         txRecord.setOperation(operation);
         txRecord = transactionRepository.save(txRecord);
 
-        // 6. Synchronously Insert AUDIT_LOG in Oracle XE
+        // 6. Synchronously insert AUDIT_LOG in Azure SQL
         AuditLog auditLog = new AuditLog(
                 srcAccount.getCustomerId(),
                 "BALANCE_MUTATION_" + operation,
@@ -185,7 +185,7 @@ public class LedgerMutationService {
         );
         auditLogRepository.save(auditLog);
 
-        // 7. Insert OUTBOX_EVENT in Oracle XE (shared ledger-common contract with entries[] per leg)
+        // 7. Insert OUTBOX_EVENT in Azure SQL (shared ledger-common contract with entries[] per leg)
         TransactionOutboxPayload payload = new TransactionOutboxPayload(
                 txRecord.getTransactionId(),
                 referenceNo,

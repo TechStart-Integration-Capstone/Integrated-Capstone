@@ -140,7 +140,7 @@ public class LedgerMutationService {
         log.info("[transaction-service] TRANSACTION SUCCESS: Ref={} Type={} Op={} Amount=₱{} Account={} Before=₱{} After=₱{} User={}",
                 referenceNo, request.getTransactionType(), operation, amount, account.getAccountNumber(), beforeBalance, afterBalance, username);
 
-        // 7. Insert AUDIT_LOG in Oracle
+        // 7. Insert AUDIT_LOG in Azure SQL
         auditLogRepository.save(new AuditLog(account.getCustomerId(),
                 "BALANCE_MUTATION_" + operation, "ACCOUNT",
                 String.format("User [%s] %s ₱%s on Account [%s]. ₱%s → ₱%s. Ref: %s",

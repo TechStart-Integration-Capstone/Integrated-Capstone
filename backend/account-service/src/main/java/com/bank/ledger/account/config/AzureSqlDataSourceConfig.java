@@ -1,4 +1,4 @@
-package com.bank.ledger.config;
+package com.bank.ledger.account.config;
 
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.persistence.EntityManagerFactory;
@@ -22,57 +22,58 @@ import java.util.Map;
 @Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(
-        basePackages = "com.bank.ledger.repository.oracle",
-        entityManagerFactoryRef = "oracleEntityManagerFactory",
-        transactionManagerRef = "oracleTransactionManager"
+        basePackages = "com.bank.ledger.account.repository",
+        entityManagerFactoryRef = "azureSqlEntityManagerFactory",
+        transactionManagerRef = "azureSqlTransactionManager"
 )
-public class OracleDataSourceConfig {
+public class AzureSqlDataSourceConfig {
 
     @Primary
     @Bean
-    @ConfigurationProperties("app.datasource.oracle")
-    public DataSourceProperties oracleDataSourceProperties() {
+    @ConfigurationProperties("app.datasource.azure-sql")
+    public DataSourceProperties azureSqlDataSourceProperties() {
         return new DataSourceProperties();
     }
 
     @Primary
-    @Bean(name = "oracleDataSource")
-    @ConfigurationProperties("app.datasource.oracle.hikari")   // applies pool size 30 / min idle 10 from application.yml
-    public HikariDataSource oracleDataSource() {
-        DataSourceProperties props = oracleDataSourceProperties();
+    @Bean(name = "azureSqlDataSource")
+    @ConfigurationProperties("app.datasource.azure-sql.hikari")
+    public HikariDataSource azureSqlDataSource() {
+        DataSourceProperties props = azureSqlDataSourceProperties();
         if (props.getUrl() == null || props.getUrl().isBlank()) {
             HikariDataSource ds = new HikariDataSource();
-            ds.setJdbcUrl("jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=Oracle");
+            ds.setJdbcUrl("jdbc:h2:mem:ledgerdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MSSQLServer");
             ds.setUsername("SA");
             ds.setPassword("");
             ds.setDriverClassName("org.h2.Driver");
-            ds.setPoolName("OracleMasterPool");
+            ds.setPoolName("AccountAzureSqlPool");
             return ds;
         }
         return props.initializeDataSourceBuilder().type(HikariDataSource.class).build();
     }
 
     @Primary
-    @Bean(name = "oracleEntityManagerFactory")
-    public LocalContainerEntityManagerFactoryBean oracleEntityManagerFactory(
+    @Bean(name = "azureSqlEntityManagerFactory")
+    public LocalContainerEntityManagerFactoryBean azureSqlEntityManagerFactory(
             EntityManagerFactoryBuilder builder,
-            @Qualifier("oracleDataSource") DataSource dataSource) {
+            @Qualifier("azureSqlDataSource") DataSource dataSource) {
         Map<String, Object> properties = new HashMap<>();
-        properties.put("hibernate.hbm2ddl.auto", "update");
+        properties.put("hibernate.dialect", "org.hibernate.dialect.SQLServerDialect");
+        properties.put("hibernate.hbm2ddl.auto", "none");
         properties.put("hibernate.show_sql", false);
 
         return builder
                 .dataSource(dataSource)
-                .packages("com.bank.ledger.model.oracle")
-                .persistenceUnit("oracleUnit")
+                .packages("com.bank.ledger.account.model")
+                .persistenceUnit("accountUnit")
                 .properties(properties)
                 .build();
     }
 
     @Primary
-    @Bean(name = "oracleTransactionManager")
-    public PlatformTransactionManager oracleTransactionManager(
-            @Qualifier("oracleEntityManagerFactory") EntityManagerFactory entityManagerFactory) {
+    @Bean(name = "azureSqlTransactionManager")
+    public PlatformTransactionManager azureSqlTransactionManager(
+            @Qualifier("azureSqlEntityManagerFactory") EntityManagerFactory entityManagerFactory) {
         return new JpaTransactionManager(entityManagerFactory);
     }
 }

@@ -2,27 +2,6 @@ services:
   # ==========================================
   # Layer 4: Datastores & In-Memory Matrix
   # ==========================================
-  oracle-xe:
-    image: gvenzl/oracle-xe:21-slim
-    container_name: oracle-xe-master
-    environment:
-      - ORACLE_PASSWORD=OraclePassword123
-      - APP_USER=ledger_master
-      - APP_USER_PASSWORD=MasterSecretPassword123
-    ports:
-      - "1522:1521"
-    volumes:
-      - oracle_data:/opt/oracle/oradata
-      - ./../backend/src/main/resources/schema-oracle.sql:/docker-entrypoint-initdb.d/01_schema.sql
-    healthcheck:
-      test: ["CMD-SHELL", "echo 'SELECT 1 FROM dual;' | sqlplus -s ledger_master/MasterSecretPassword123@localhost:1521/XE || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
-    networks:
-      - ledger-net
-
   postgresql:
     image: postgres:15-alpine
     container_name: postgres-immutable-audit
@@ -34,7 +13,8 @@ services:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./../backend/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./../backend/event-consumers/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_ledger_schema.sql:ro
+      - ./../backend/notification-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/02_notification_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
       interval: 10s
@@ -155,15 +135,11 @@ services:
       context: ../microservices/auth-service
       dockerfile: Dockerfile
     container_name: auth-service
-    depends_on:
-      oracle-xe:
-        condition: service_healthy
     ports:
       - "8081:8081"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - AZURE_SQL_JDBC_URL=${AZURE_SQL_JDBC_URL:?Set AZURE_SQL_JDBC_URL for Azure SQL}
+      - AZURE_MANAGED_IDENTITY_CLIENT_ID=${AZURE_MANAGED_IDENTITY_CLIENT_ID:-}
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
     volumes:
       - ./../microservices/auth-service/target/auth-service.jar:/app/app.jar
@@ -175,15 +151,11 @@ services:
       context: ../microservices/account-service
       dockerfile: Dockerfile
     container_name: account-service
-    depends_on:
-      oracle-xe:
-        condition: service_healthy
     ports:
       - "8082:8082"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - AZURE_SQL_JDBC_URL=${AZURE_SQL_JDBC_URL:?Set AZURE_SQL_JDBC_URL for Azure SQL}
+      - AZURE_MANAGED_IDENTITY_CLIENT_ID=${AZURE_MANAGED_IDENTITY_CLIENT_ID:-}
     volumes:
       - ./../microservices/account-service/target/account-service.jar:/app/app.jar
     networks:
@@ -195,8 +167,6 @@ services:
       dockerfile: Dockerfile
     container_name: transaction-service
     depends_on:
-      oracle-xe:
-        condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
@@ -204,9 +174,8 @@ services:
     ports:
       - "8083:8083"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - AZURE_SQL_JDBC_URL=${AZURE_SQL_JDBC_URL:?Set AZURE_SQL_JDBC_URL for Azure SQL}
+      - AZURE_MANAGED_IDENTITY_CLIENT_ID=${AZURE_MANAGED_IDENTITY_CLIENT_ID:-}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -275,8 +244,6 @@ services:
       dockerfile: Dockerfile
     container_name: reconciliation-service
     depends_on:
-      oracle-xe:
-        condition: service_healthy
       postgresql:
         condition: service_healthy
       kafka:
@@ -284,9 +251,8 @@ services:
     ports:
       - "8086:8086"
     environment:
-      - ORACLE_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - ORACLE_DATASOURCE_USERNAME=ledger_master
-      - ORACLE_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - AZURE_SQL_JDBC_URL=${AZURE_SQL_JDBC_URL:?Set AZURE_SQL_JDBC_URL for Azure SQL}
+      - AZURE_MANAGED_IDENTITY_CLIENT_ID=${AZURE_MANAGED_IDENTITY_CLIENT_ID:-}
       - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
@@ -302,16 +268,13 @@ services:
       dockerfile: Dockerfile
     container_name: outbox-publisher
     depends_on:
-      oracle-xe:
-        condition: service_healthy
       kafka:
         condition: service_healthy
     ports:
       - "8087:8087"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - AZURE_SQL_JDBC_URL=${AZURE_SQL_JDBC_URL:?Set AZURE_SQL_JDBC_URL for Azure SQL}
+      - AZURE_MANAGED_IDENTITY_CLIENT_ID=${AZURE_MANAGED_IDENTITY_CLIENT_ID:-}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - OUTBOX_POLL_INTERVAL_MS=5000
       - OUTBOX_RETRY_INTERVAL_MS=30000
@@ -472,7 +435,6 @@ networks:
     driver: bridge
 
 volumes:
-  oracle_data:
   postgres_data:
   kafka_data:
   zookeeper_data:

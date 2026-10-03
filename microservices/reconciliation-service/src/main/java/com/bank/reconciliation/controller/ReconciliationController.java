@@ -24,7 +24,7 @@ public class ReconciliationController {
         reconciliationService.runFullSweep();
         return ResponseEntity.ok(Map.of(
                 "status", "COMPLETED",
-                "message", "System-wide Oracle vs PostgreSQL 15-minute reconciliation sweep executed successfully."
+                "message", "System-wide Azure SQL vs PostgreSQL 15-minute reconciliation sweep executed successfully."
         ));
     }
 

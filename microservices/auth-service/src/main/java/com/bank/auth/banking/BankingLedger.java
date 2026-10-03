@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-/** Writes ledger, audit and outbox entries in the caller's Oracle transaction. */
+/** Writes ledger, audit and outbox entries in the caller's Azure SQL transaction. */
 @Component
 public class BankingLedger {
     public record Account(long id, long customerId, String number, String currency, BigDecimal balance, String status) {}
@@ -21,7 +21,7 @@ public class BankingLedger {
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(Account account, Long counterpartyId, BigDecimal amount, BigDecimal after,
                        String operation, String type, String reference) {
-        jdbc.update("INSERT INTO TRANSACTION (from_account_id, to_account_id, amount, source_currency, target_currency, "
+        jdbc.update("INSERT INTO LEDGER_TRANSACTION (from_account_id, to_account_id, amount, source_currency, target_currency, "
                         + "transaction_type, reference_no, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'SUCCESS')",
                 account.id(), counterpartyId, amount, account.currency(), account.currency(), type, reference);
         post(account, amount, after, operation, type, reference);
@@ -30,7 +30,7 @@ public class BankingLedger {
     /** Posts audit/outbox for an existing transaction, within the same balance-update transaction. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void post(Account account, BigDecimal amount, BigDecimal after, String operation, String type, String reference) {
-        Long transactionId = jdbc.queryForObject("SELECT transaction_id FROM TRANSACTION WHERE reference_no = ?", Long.class, reference);
+        Long transactionId = jdbc.queryForObject("SELECT transaction_id FROM LEDGER_TRANSACTION WHERE reference_no = ?", Long.class, reference);
         String payload;
         try {
             payload = json.writeValueAsString(Map.of("transactionId", transactionId, "referenceNo", reference,

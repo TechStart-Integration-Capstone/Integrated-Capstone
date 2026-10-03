@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
-/** Unit tests for AccountService — no Oracle connection needed. */
+/** Unit tests for AccountService — no database connection needed. */
 @ExtendWith(MockitoExtension.class)
 class AccountServiceTest {
 

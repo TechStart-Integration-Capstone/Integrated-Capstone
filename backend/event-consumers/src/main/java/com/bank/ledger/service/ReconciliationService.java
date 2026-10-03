@@ -1,9 +1,9 @@
 package com.bank.ledger.service;
 
-import com.bank.ledger.model.oracle.TransactionRecord;
+import com.bank.ledger.model.sqlserver.TransactionRecord;
 import com.bank.ledger.model.postgres.LedgerMutationAudit;
 import com.bank.ledger.model.postgres.ReconciliationLog;
-import com.bank.ledger.repository.oracle.TransactionRepository;
+import com.bank.ledger.repository.sqlserver.TransactionRepository;
 import com.bank.ledger.repository.postgres.LedgerMutationAuditRepository;
 import com.bank.ledger.repository.postgres.ReconciliationLogRepository;
 import io.micrometer.core.instrument.Counter;
@@ -100,7 +100,7 @@ public class ReconciliationService {
                 .filter(a -> accountId.equals(a.getAccountId()))
                 .findFirst();
 
-        String oracleStatus = tx.getStatus();
+        String ledgerStatus = tx.getStatus();
         String postgresStatus;
         String reconStatus;
         List<String> mismatches = new ArrayList<>();
@@ -124,7 +124,7 @@ public class ReconciliationService {
                 reconStatus = "DRIFT_DETECTED";
             }
         } else {
-            if ("SUCCESS".equalsIgnoreCase(oracleStatus)) {
+            if ("SUCCESS".equalsIgnoreCase(ledgerStatus)) {
                 postgresStatus = "MISSING_AUDIT";
                 reconStatus = "DRIFT_DETECTED";
                 mismatches.add("MISSING_AUDIT_LEG");
@@ -142,15 +142,15 @@ public class ReconciliationService {
         }
 
         String mismatchFields = String.join(", ", mismatches);
-        upsertReconciliationLog(tx.getTransactionId(), accountId, oracleStatus, postgresStatus, reconStatus, mismatchFields);
+        upsertReconciliationLog(tx.getTransactionId(), accountId, ledgerStatus, postgresStatus, reconStatus, mismatchFields);
     }
 
-    private void upsertReconciliationLog(Long txId, Long accountId, String oracleStatus, String postgresStatus,
+    private void upsertReconciliationLog(Long txId, Long accountId, String ledgerStatus, String postgresStatus,
                                         String reconStatus, String mismatchFields) {
         Optional<ReconciliationLog> existing = reconciliationLogRepository.findByTransactionIdAndAccountId(txId, accountId);
         if (existing.isPresent()) {
             ReconciliationLog logEntry = existing.get();
-            logEntry.setOracleStatus(oracleStatus);
+            logEntry.setLedgerStatus(ledgerStatus);
             logEntry.setPostgresStatus(postgresStatus);
             logEntry.setReconStatus(reconStatus);
             logEntry.setMismatchFields(mismatchFields);
@@ -159,7 +159,7 @@ public class ReconciliationService {
             reconciliationLogRepository.save(logEntry);
         } else {
             ReconciliationLog newEntry = new ReconciliationLog(
-                    txId, accountId, oracleStatus, postgresStatus, reconStatus, mismatchFields
+                    txId, accountId, ledgerStatus, postgresStatus, reconStatus, mismatchFields
             );
             reconciliationLogRepository.save(newEntry);
         }
