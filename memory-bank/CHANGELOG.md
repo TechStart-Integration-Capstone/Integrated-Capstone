@@ -1,6 +1,8 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-03 — fix(phase2): FallbackController.java added to api-gateway (RFC-7807 503 on transactionCb open). RuntimeException removed from ignore-exceptions in account-service (was conflicting, circuit would never open). Internal ports removed from docker-compose.yml — only 8080 and 3001 exposed to host. Committed ce4efeb — [dom]
+- 2026-10-03 — fix(phase2): expose circuitbreakers in account-service actuator health (management.health.circuitbreakers.enabled=true). Committed f312540 — [dom]
 - 2026-10-03 — Phase 2 complete: CorrelationIdFilter.java in api-gateway (X-Correlation-ID inject/preserve, order=-99). Resilience4j circuitbreaker on account-service getAccountById+getCustomerProfile with Redis fallback (account:balance:{id}, 30s TTL, mayBeStale=true). AccountDto.mayBeStale added. api-gateway CircuitBreaker filter on transaction-service route (transactionCb, 28s timeout). Global httpclient 30s response-timeout. docker-compose account-service depends_on redis. Committed 736a4cd — [dom]
 - 2026-10-03 — fix(grafana): rename Oracle XE panel to Azure SQL Database (Primary Ledger). Committed 095ab57 — [dom]
 - 2026-10-03 — fix(phase1): outbox-publisher OutboxEventRepository FETCH FIRST -> OFFSET 0 ROWS FETCH NEXT (was crashing every 5s, breaking Kafka pipeline). auth-service BankingFavoritesSchema user_tables -> INFORMATION_SCHEMA.TABLES + T-SQL DDL. Committed 0481518 — [dom]
