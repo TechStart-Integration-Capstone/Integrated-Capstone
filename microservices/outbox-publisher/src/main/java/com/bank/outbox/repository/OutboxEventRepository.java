@@ -27,7 +27,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
             SELECT * FROM OUTBOX_EVENT
              WHERE status = 'PENDING'
              ORDER BY created_date ASC
-             FETCH FIRST :batchSize ROWS ONLY
+             OFFSET 0 ROWS FETCH NEXT :batchSize ROWS ONLY
             """,
             nativeQuery = true)
     List<OutboxEvent> findPendingBatch(int batchSize);
@@ -41,7 +41,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
             SELECT * FROM OUTBOX_EVENT
              WHERE status = 'FAILED'
              ORDER BY created_date ASC
-             FETCH FIRST :batchSize ROWS ONLY
+             OFFSET 0 ROWS FETCH NEXT :batchSize ROWS ONLY
             """,
             nativeQuery = true)
     List<OutboxEvent> findFailedBatch(int batchSize);
