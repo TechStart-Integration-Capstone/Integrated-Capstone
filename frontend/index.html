@@ -41,7 +41,7 @@
             <div class="system-pills">
                 <div class="pill pill-oracle" id="pill-oracle-status" title="Master Source of Truth (ACID Isolated)">
                     <span class="status-dot online"></span>
-                    <span>Oracle XE: <strong>PESSIMISTIC_WRITE</strong></span>
+                    <span>Azure SQL: <strong>PESSIMISTIC_WRITE</strong></span>
                 </div>
                 <div class="pill pill-postgres" id="pill-postgres-status" title="Immutable Audit Store (Append-Only)">
                     <span class="status-dot online"></span>
@@ -141,7 +141,7 @@
                         <div class="section-card">
                             <div class="card-header">
                                 <h2 class="card-title">My Accounts (customer_balance_master)</h2>
-                                <span class="badge-chip">Oracle XE 21c</span>
+                                <span class="badge-chip">Azure SQL</span>
                             </div>
                             <div class="accounts-carousel" id="accounts-container">
                                 <!-- Dynamic Account Cards injected by JS -->
@@ -207,7 +207,7 @@
                         <!-- Synchronous Security Audit Logs (Oracle XE) -->
                         <div class="section-card">
                             <div class="card-header">
-                                <h3 class="card-title">Security &amp; Operational Audit (Oracle XE)</h3>
+                                <h3 class="card-title">Security &amp; Operational Audit (Azure SQL)</h3>
                                 <span class="badge-chip pill-oracle">Synchronous Local ACID</span>
                             </div>
                             <div class="log-stream-box" id="oracle-audit-logs">
@@ -322,7 +322,7 @@
                         <span class="badge-chip">Asynchronous Decoupled Topology</span>
                     </div>
                     <p class="section-subtitle">
-                        Trace every balance mutation through perimeter validation, in-memory caching, Oracle XE ACID row locking, Transactional Outbox publishing, Kafka event streaming, and PostgreSQL immutable audit logging.
+                        Trace every balance mutation through perimeter validation, in-memory caching, Azure SQL ACID row locking, Transactional Outbox publishing, Kafka event streaming, and PostgreSQL immutable audit logging.
                     </p>
 
                     <!-- Interactive Lifecycle Stepper -->
@@ -347,7 +347,7 @@
                         <div class="lifecycle-arrow">&rarr;</div>
                         <div class="lifecycle-step" id="step-4">
                             <div class="step-badge">4</div>
-                            <div class="step-title">Oracle ACID Lock</div>
+                            <div class="step-title">Azure SQL ACID Lock</div>
                             <div class="step-desc">@Lock(PESSIMISTIC_WRITE)</div>
                         </div>
                         <div class="lifecycle-arrow">&rarr;</div>
@@ -398,7 +398,7 @@
 
                     <div class="pipeline-live-feed">
                         <div class="feed-column">
-                            <h3>Oracle XE Outbox Records (OUTBOX_EVENT)</h3>
+                            <h3>Azure SQL Outbox Records (OUTBOX_EVENT)</h3>
                             <div class="outbox-table-wrap" id="outbox-events-table">
                                 <!-- Populated dynamically -->
                             </div>
@@ -478,7 +478,7 @@
                         </button>
                     </div>
                     <p class="section-subtitle">
-                        Cross-compares <strong>Oracle XE TRANSACTION</strong> records against <strong>PostgreSQL LEDGER_MUTATION_AUDIT</strong> entries to detect and flag data drift (<code>MATCHED</code> vs <code>DRIFT_DETECTED</code>).
+                        Cross-compares <strong>Azure SQL TRANSACTION</strong> records against <strong>PostgreSQL LEDGER_MUTATION_AUDIT</strong> entries to detect and flag data drift (<code>MATCHED</code> vs <code>DRIFT_DETECTED</code>).
                     </p>
 
                     <div class="recon-table-wrap">
@@ -487,7 +487,7 @@
                                 <tr>
                                     <th>Recon ID</th>
                                     <th>Transaction ID</th>
-                                    <th>Oracle XE Status</th>
+                                    <th>Azure SQL Status</th>
                                     <th>PostgreSQL Status</th>
                                     <th>Recon Status</th>
                                     <th>Reconciliation Date</th>
@@ -594,7 +594,7 @@
                             <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"></line><line x1="3" y1="10" x2="21" y2="10"></line><polyline points="3" 10 12 3 21 10"></polyline><line x1="6" y1="10" x2="6" y2="21"></line><line x1="10" y1="10" x2="10" y2="21"></line><line x1="14" y1="10" x2="14" y2="21"></line><line x1="18" y1="10" x2="18" y2="21"></line></svg></div>
                             <div class="sla-metric" id="kpi-total-liquidity">₱0.00</div>
                             <div class="sla-label">Total System Deposits (PHP)</div>
-                            <div class="sla-badge status-good">Oracle Master State</div>
+                            <div class="sla-badge status-good">Azure SQL Master State</div>
                         </div>
                         <div class="sla-card">
                             <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
@@ -644,7 +644,7 @@
                                 </thead>
                                 <tbody id="customer-table-body">
                                     <tr>
-                                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading customer directory from Oracle XE...</td>
+                                        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading customer directory from Azure SQL...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -701,16 +701,16 @@
             <!-- TAB: VIEW AUDIT LOGS -->
             <section id="tab-audit" class="tab-panel">
                 <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-                    <!-- Synchronous Oracle XE Audit -->
+                    <!-- Synchronous Azure SQL Audit -->
                     <div class="section-card">
                         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <h3 class="card-title">Oracle XE Synchronous Security Audit</h3>
+                                <h3 class="card-title">Azure SQL Synchronous Security Audit</h3>
                                 <span class="badge-chip pill-oracle">Local ACID Non-Repudiation</span>
                             </div>
                             <button class="btn-secondary" onclick="loadInitialAuditLogs()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Refresh</button>
                         </div>
-                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem;">Committed synchronously in the same transaction as balance mutations on Oracle XE.</p>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem;">Committed synchronously in the same transaction as balance mutations on Azure SQL.</p>
                         <div class="log-stream-box" id="audit-tab-oracle-logs" style="max-height: 480px; overflow-y: auto;">
                             <!-- Dynamically populated by JS -->
                         </div>
@@ -753,7 +753,7 @@
                         <div class="sla-card">
                             <div class="sla-metric" id="report-stat-txcount">1,240</div>
                             <div class="sla-label">Total Verified Mutations</div>
-                            <div class="sla-badge status-good">Oracle &bull; Postgres Aligned</div>
+                            <div class="sla-badge status-good">Azure SQL &bull; Postgres Aligned</div>
                         </div>
                         <div class="sla-card">
                             <div class="sla-metric" id="report-stat-fees">₱0.00</div>
@@ -771,7 +771,7 @@
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 1.5rem;">
                         <div class="section-card" style="background: var(--bg-card-highlight); border: 1px solid var(--border-rose-medium); padding: 1.25rem;">
                             <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Cross-Database Reconciliation Report</h4>
-                            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Compares master state in Oracle XE vs audit logs in PostgreSQL to certify balance integrity.</p>
+                            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Compares master state in Azure SQL vs audit logs in PostgreSQL to certify balance integrity.</p>
                             <button class="btn-primary" onclick="exportReconciliationReportCSV()" style="width: 100%; justify-content: center; font-size: 0.85rem;">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download Reconciliation CSV
                             </button>
@@ -803,7 +803,7 @@
                                     <tr>
                                         <th>Recon Record</th>
                                         <th>Transaction Ref</th>
-                                        <th>Oracle XE Ledger Status</th>
+                                        <th>Azure SQL Ledger Status</th>
                                         <th>PostgreSQL Audit Status</th>
                                         <th>Drift Audit Outcome</th>
                                         <th>Timestamp</th>

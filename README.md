@@ -232,12 +232,15 @@ docker logs <container-name> --tail 50
 
 Go to **http://localhost:3001** in your browser.
 
-Default demo credentials (auto-seeded on first startup by `DataInitializer`):
+Optional demo data: run [scripts/seed_demo_azure_sql.sql](scripts/seed_demo_azure_sql.sql) against the application's Azure database in VS Code after creating the schema. It adds the three original demo customers and five funded PHP accounts. Rerunning it preserves existing customers, passwords and balances. It uses synthetic contact details and the current account-number format. `DataInitializer` repairs existing demo passwords; it does not create demo customers.
+
+Demo credentials after seeding:
 
 | Username | Password |
 |---|---|
 | `lviernes` | `password123` |
 | `arosales`| `password123` |
+| `glim` | `password123` |
 
 To get a JWT token via the API:
 
