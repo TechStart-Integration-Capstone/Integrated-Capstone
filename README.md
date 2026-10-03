@@ -166,6 +166,8 @@ The application services connect to the Azure SQL database configured by `AZURE_
 
 Use [docker/.env.example](docker/.env.example) as the template for the real local `docker/.env` file. The real `.env` file is ignored by Git.
 
+For a VS Code connection that uses **SQL Login**, copy its server and database into the JDBC URL and use `authentication=SqlPassword`. Set `AZURE_SQL_USERNAME` and `AZURE_SQL_PASSWORD` separately in `docker/.env`; put the password in single quotes to preserve special characters. The five Azure SQL services read these values, including reconciliation's Azure SQL datasource. VS Code's connected session does not supply a password to Docker. Rebuild the service JARs and run `docker compose up -d` after changing configuration so the containers receive it.
+
 ### Step 1 — Build all microservice JARs
 
 Run from the workspace root (`FSE-Capstone/` folder). Each service has its own `pom.xml`:

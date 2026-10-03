@@ -6,6 +6,8 @@ spring:
     name: auth-service
   datasource:
     url: ${AZURE_SQL_JDBC_URL}
+    username: ${AZURE_SQL_USERNAME:}
+    password: ${AZURE_SQL_PASSWORD:}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
     hikari:
       maximum-pool-size: 10
