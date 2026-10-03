@@ -6,19 +6,19 @@
 ## 1. Cloud Architecture & Pipeline Stage Topology
 
 ### Infrastructure Topology
-PayPink 2.0 is hosted on Microsoft Azure as a containerized microservice matrix running on an Ubuntu 24.04 LTS Virtual Machine (`Standard_D4s_v3`) orchestrated by Docker Compose.
+PayPink 2.0 is hosted on Microsoft Azure as a containerized microservice matrix running on an Ubuntu 24.04 LTS Virtual Machine (`Standard_D4s_v3`, 4 vCPU / 16GB RAM) orchestrated by Docker Compose.
 
 ```mermaid
 flowchart TD
-    subgraph Clients["Clients & Edge Ingress"]
-        Browser["Admin & Customer Web SPA\n(:80 / :443)"]
-        Mobile["Flutter Mobile App\n(:8080)"]
+    subgraph Clients["Clients & Ingress"]
+        Browser["Admin & Customer Web SPA\n(HTTP :80)"]
+        Mobile["Flutter Mobile App\n(REST :8080)"]
         Devs["Engineering Team\n(SSH :22 Whitelisted)"]
     end
 
-    subgraph AzureRG["Azure Resource Group (rg-paypink-test)"]
+    subgraph AzureRG["Azure Resource Group (rg-azuser8406_mml.local-722QP)"]
         subgraph NSG["Network Security Group (NSG)"]
-            FWRules["Inbound Rules:\n• Port 80 (HTTP / SPA)\n• Port 8080 (API Gateway)\n• Port 22 (SSH Admin)\n• Deny all else"]
+            FWRules["Inbound Rules:\n• Port 80 (HTTP / Nginx Web SPA)\n• Port 8080 (API Gateway)\n• Port 22 (SSH - Team IPs Whitelisted)\n• Azure Default Deny All Else"]
         end
 
         subgraph VM["Ubuntu 24.04 LTS VM (Standard_D4s_v3 - 4 vCPU / 16GB RAM)"]
@@ -30,7 +30,7 @@ flowchart TD
             subgraph CoreServices["Internal Microservices (ledger-net)"]
                 Orchestrator["remittance-orchestrator (:8083)"]
                 Risk["risk-engine (Python FastAPI :8000)"]
-                T24["t24-adapter + mock-core (:8089)"]
+                T24["t24-adapter + mock-core (127.0.0.1:9089)"]
                 Auth["auth-service (:8081)"]
                 Account["account-service (:8082)"]
                 Notif["notification-service (:8084)"]
@@ -47,22 +47,22 @@ flowchart TD
                 Kafka["Apache Kafka + Zookeeper (:9092)"]
             end
 
-            subgraph Telemetry["Observability Stack"]
+            subgraph Telemetry["Observability Stack (Loopback)"]
                 OTel["OpenTelemetry Collector (:4317/:4318)"]
                 Prom["Prometheus (:9090)"]
                 Loki["Loki (:3100)"]
                 Tempo["Tempo (:3200)"]
-                Grafana["Grafana (:3000)"]
+                Grafana["Grafana (127.0.0.1:3000)"]
             end
 
-            Runner["GitHub Self-Hosted Runner\n(Tags: self-hosted, azure-vm)"]
+            Runner["GitHub Self-Hosted Runner\n(Labels: self-hosted, azure-vm)"]
         end
     end
 
     Browser -->|HTTP :80| Nginx
     Nginx -->|Proxy /api/| Gateway
     Mobile -->|REST :8080| Gateway
-    Devs -->|SSH :22| VM
+    Devs -->|SSH :22 (Team IPs)| VM
 
     Gateway --> CoreServices
     CoreServices --> Datastores
@@ -79,225 +79,170 @@ flowchart TD
 
 ## 2. CI/CD Pipeline Stages Architecture
 
-PayPink 2.0 uses a 3-stage CI/CD pipeline. **Dev and Test use free GitHub cloud runners (no Azure cost)**; nothing deploys to Azure until approved.
+PayPink 2.0 uses a 3-stage CI/CD pipeline. **Dev and Test stages use free GitHub cloud runners (zero Azure compute cost)**; deployments to the Azure VM only trigger on the `main` branch after approval.
 
 ```mermaid
 flowchart TD
-    Devs["Developers\n(Local Compose dev)"] --> Repo["GitHub Repo\n(Pull requests, main)"]
+    Devs["Developers\n(Local Compose Dev)"] --> Repo["GitHub Repo\n(Pull requests, main)"]
     Repo --> S1
 
-    subgraph S1["1. Dev Stage (GitHub runner, no Azure cost)"]
-        S1_Build["Build and lint\n(Maven, pip install)"]
-        S1_Unit["Unit tests\n(JUnit, pytest)"]
-        S1_Trivy["Trivy scan\n(Container images)"]
-        S1_Build --> S1_Unit --> S1_Trivy
+    subgraph S1["1. Dev Stage (GitHub-Hosted Runner - $0 Cost)"]
+        S1_Build["Parallel Java Builds & Unit Tests\n(Maven verify on 10 services)"]
+        S1_Pytest["Risk Engine Tests\n(Python 3.12 pytest)"]
+        S1_Trivy["Security & Config Scan\n(Trivy CRITICAL exit code 1)"]
+        S1_Build --> S1_Unit_Done["Dev Checks Passed"]
+        S1_Pytest --> S1_Unit_Done
+        S1_Trivy --> S1_Unit_Done
     end
 
     S1 --> S2
 
-    subgraph S2["2. Test Stage (Temporary stack, then deleted)"]
-        S2_Integ["Integration tests\n(Testcontainers)"]
-        S2_Contract["Contract tests\n(Newman suite)"]
-        S2_Gate["Quality gate\n(Must pass to promote)"]
-        S2_Integ --> S2_Contract --> S2_Gate
+    subgraph S2["2. Test Stage (Temporary Stack, Torn Down After)"]
+        S2_Up["Start Essential CI Services\n(docker compose -p paypink-ci up -d)"]
+        S2_Health["Wait for Gateway Health\n(http://localhost:8080/actuator/health)"]
+        S2_Contract["Newman API Contract Tests\n(Postman Collection)"]
+        S2_Teardown["Tear Down CI Stack & Upload Reports\n(docker compose down -v)"]
+        S2_Up --> S2_Health --> S2_Contract --> S2_Teardown
     end
 
     S2 --> S3
 
-    subgraph S3["3. Prod Stage (Self-hosted runner on the VM)"]
-        S3_Approval["Approval gate\n(Required reviewer)"]
-        S3_Deploy["Deploy\n(Compose up --build)"]
-        S3_Health["Health check\n(Gateway on :8080)"]
-        S3_Approval --> S3_Deploy --> S3_Health
+    subgraph S3["3. Prod Stage (Self-Hosted Runner on Azure VM)"]
+        S3_Gate["Approval Gate\n(GitHub Environment: production)"]
+        S3_Disk["Disk Space Verification\n(Minimum 5 GB free)"]
+        S3_Deploy["Deploy Stack via Multi-Stage Build\n(docker compose --env-file /opt/paypink/.env up -d --build)"]
+        S3_Health["Gateway & Web SPA Health Checks\n(Up to 180s probe)"]
+        S3_Prune["Clean Up Dangling Images\n(docker image prune -f)"]
+        S3_Gate --> S3_Disk --> S3_Deploy --> S3_Health --> S3_Prune
     end
 
-    S3_Health --> AzureVM["Azure VM (Prod)\n(NSG: 80, 8080 open)"]
+    S3_Health --> AzureVM["Azure VM (Prod Live Host)\n(NSG: Ports 80 & 8080 open)"]
 
     classDef auto fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#065f46;
     classDef manual fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e;
     classDef prod fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#5b21b6;
 
-    class S1_Build,S1_Unit,S1_Trivy,S2_Integ,S2_Contract,S2_Gate auto;
-    class S3_Approval manual;
-    class S3_Deploy,S3_Health,AzureVM prod;
+    class S1_Build,S1_Pytest,S1_Trivy,S1_Unit_Done,S2_Up,S2_Health,S2_Contract,S2_Teardown auto;
+    class S3_Gate manual;
+    class S3_Disk,S3_Deploy,S3_Health,S3_Prune,AzureVM prod;
 ```
 
 ---
 
 ## 3. Azure Budget Optimization ($10 Cloud Budget Strategy)
 
-### The Math:
-* A `Standard_D4s_v3` instance (4 vCPU, 16 GiB RAM) costs approximately **~$0.192 per hour**.
-* **$10 total credit = ~52 hours of active runtime.**
-* Running continuously 24/7 would deplete the budget in **~2.1 days**.
+### Budget Reality & Calculations
+* **Compute:** `Standard_D4s_v3` (4 vCPU, 16 GiB RAM) costs **~$0.192 per hour**.
+* **Storage & Static IP:** A 64 GB Standard SSD and Standard Public IP incur background charges even when the VM is deallocated (**~$0.25 to $0.30 per day**).
+* **Net Available Runtime:** Over a typical 9–10 day capstone sprint, static costs consume ~$2.50. The remaining ~$7.50 provides **~40 hours of active VM runtime**.
 
 ### Mandatory Cost Control Protocols:
-1. **Always Deallocate (Not just Stop inside Linux):**
+1. **Always Deallocate when Inactive (Stopping inside Linux does NOT pause compute billing):**
    ```bash
-   az vm deallocate --resource-group "rg-azuser8406_mml.local-722QP" --name "vm-paypink-test"
+   az vm deallocate --resource-group "rg-azuser8406_mml.local-722QP" --name "vm-paypink-aly"
    ```
 2. **Auto-Shutdown Schedule (Every day at 7:00 PM PHT / 11:00 UTC):**
+   Configured in `01-provision-azure.sh` or via Azure CLI:
    ```bash
    az vm auto-shutdown \
      --resource-group "rg-azuser8406_mml.local-722QP" \
-     --name "vm-paypink-test" \
-     --time "1100" \
-     --email "your-email@example.com"
+     --name "vm-paypink-aly" \
+     --time "1100"
    ```
-3. **Configure a Stable DNS Name (Preserves URL across deallocations):**
+3. **Configure DNS Label (Preserves FQDN across deallocations):**
    ```bash
    az network public-ip update \
      --resource-group "rg-azuser8406_mml.local-722QP" \
-     --name "vm-paypink-testPublicIP" \
+     --name "vm-paypink-alyPublicIP" \
      --dns-name "paypink-demo-ph"
    ```
-   **Permanent URL:** `http://paypink-demo-ph.centralindia.cloudapp.azure.com` (or `.eastus.cloudapp.azure.com`).
+   **FQDN Format:** `<DNS_LABEL>.<REGION>.cloudapp.azure.com` (e.g. `paypink-demo-ph.eastus.cloudapp.azure.com`).
 
 ---
 
 ## 4. Step-by-Step Deployment Walkthrough
 
-### Phase 1: Provision Azure Infrastructure via CLI
+### Step 1: Provision Azure Infrastructure via CLI
+Run [`scripts/01-provision-azure.sh`](file:///scripts/01-provision-azure.sh) from your laptop or Cloud Shell after `az login`:
 
 ```bash
-# 1. Variables
-RESOURCE_GROUP="rg-azuser8406_mml.local-722QP"   # Use your assigned resource group
-LOCATION="centralindia"                         # Or "eastus" / "southeastasia"
-VM_NAME="vm-paypink-test"
-VM_SIZE="Standard_D4s_v3"
-ADMIN_USER="azureuser"
+export RESOURCE_GROUP="rg-azuser8406_mml.local-722QP"
+export DNS_LABEL="paypink-demo-ph"
+export TEAM_IPS="203.0.113.10/32 198.51.100.7/32"   # Replace with teammates' public IPs (curl ifconfig.me)
+export VM_NAME="vm-paypink-aly"
 
-# 2. Create NSG with Ports 80, 8080, and 22
-az network nsg create \
-  --resource-group "$RESOURCE_GROUP" \
-  --name "${VM_NAME}-nsg" \
-  --location "$LOCATION"
-
-az network nsg rule create --resource-group "$RESOURCE_GROUP" --nsg-name "${VM_NAME}-nsg" \
-  --name "Allow-HTTP-SPA" --priority 100 --direction Inbound --access Allow --protocol Tcp --destination-port-ranges 80
-
-az network nsg rule create --resource-group "$RESOURCE_GROUP" --nsg-name "${VM_NAME}-nsg" \
-  --name "Allow-API-Gateway" --priority 110 --direction Inbound --access Allow --protocol Tcp --destination-port-ranges 8080
-
-az network nsg rule create --resource-group "$RESOURCE_GROUP" --nsg-name "${VM_NAME}-nsg" \
-  --name "Allow-SSH" --priority 120 --direction Inbound --access Allow --protocol Tcp --destination-port-ranges 22
-
-# 3. Create Ubuntu 24.04 VM with Premium/Standard SSD
-az vm create \
-  --resource-group "$RESOURCE_GROUP" \
-  --name "$VM_NAME" \
-  --location "$LOCATION" \
-  --image "Canonical:ubuntu-24_04-lts:server:latest" \
-  --size "$VM_SIZE" \
-  --admin-username "$ADMIN_USER" \
-  --generate-ssh-keys \
-  --nsg "${VM_NAME}-nsg" \
-  --public-ip-sku Standard \
-  --os-disk-size-gb 64 \
-  --storage-sku StandardSSD_LRS
+./scripts/01-provision-azure.sh
 ```
+
+**Key Security Configurations Applied:**
+* **SSH Port 22:** Whitelisted exclusively to `${TEAM_IPS}`.
+* **HTTP Port 80 & API Gateway Port 8080:** Open for customer/mobile ingress.
+* **All Other Ports:** Blocked by Azure's default `DenyAllInBound` rule.
 
 ---
 
-### Phase 2: Ubuntu VM Host Bootstrapping
+### Step 2: Bootstrap the Ubuntu 24.04 VM Host
+Copy [`scripts/02-bootstrap-vm.sh`](file:///scripts/02-bootstrap-vm.sh) to the VM and run as `azureuser` (non-root):
 
-SSH into the VM:
 ```bash
-ssh azureuser@<VM_PUBLIC_IP>
+scp scripts/02-bootstrap-vm.sh azureuser@<VM_FQDN>:~
+ssh azureuser@<VM_FQDN> "./02-bootstrap-vm.sh"
 ```
 
-Execute the bootstrap script:
-```bash
-# 1. Upgrade & 4GB Swap Space
-sudo apt update && sudo apt upgrade -y
-sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
-sudo mkswap /swapfile && sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-
-# 2. Install Docker Engine, Compose & Build Tools
-sudo apt install -y ca-certificates curl gnupg lsb-release git openjdk-17-jdk maven python3-pip
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  noble stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# 3. Non-Root Docker Access
-sudo usermod -aG docker $USER
-sudo chmod 666 /var/run/docker.sock
-```
+**What this script configures:**
+1. **4 GB Swap Space:** Safety net for bursts.
+2. **Memory Limit Tuning:** Creates `/opt/paypink/.env` with `MSSQL_MEMORY_LIMIT_MB=3072` and `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=60` so ~20 containers run smoothly within 16 GB RAM.
+3. **Hardened Docker Daemon:** Enables log rotation (`max-size: 10m`, `max-file: 3`) to prevent disk exhaustion.
+4. **Secure User Permissions:** Adds `azureuser` to the `docker` group (`usermod -aG docker $USER`). **Never `chmod 666 /var/run/docker.sock`**.
 
 ---
 
-### Phase 3: Setup GitHub Self-Hosted Runner on VM
-
-1. In GitHub Repository $\rightarrow$ **Settings** $\rightarrow$ **Actions** $\rightarrow$ **Runners** $\rightarrow$ **New self-hosted runner** (Linux / x64).
-2. Run the registration snippet on the VM:
+### Step 3: Install GitHub Self-Hosted Runner on VM
+1. Go to your GitHub Repository $\rightarrow$ **Settings** $\rightarrow$ **Actions** $\rightarrow$ **Runners** $\rightarrow$ **New self-hosted runner** (Linux / x64).
+2. Follow the download and configuration steps shown in the GitHub UI:
    ```bash
    mkdir -p ~/actions-runner && cd ~/actions-runner
-   curl -o actions-runner-linux-x64-2.321.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.321.0/actions-runner-linux-x64-2.321.0.tar.gz
-   tar xzf ./actions-runner-linux-x64-2.321.0.tar.gz
+   # Use the exact curl URL shown by GitHub
+   tar xzf ./actions-runner-linux-x64-*.tar.gz
 
-   # Register with specific labels: [self-hosted, azure-vm]
+   # Register with runner labels
    ./config.sh --url https://github.com/TechStart-Integration-Capstone/Integrated-Capstone \
-     --token <YOUR_RUNNER_TOKEN> \
+     --token <RUNNER_TOKEN_FROM_GITHUB> \
      --labels "self-hosted,azure-vm" --unattended
 
-   # Install & start as background service
-   sudo ./svc.sh install
+   # Install & start service
+   sudo ./svc.sh install azureuser
    sudo ./svc.sh start
    ```
+   > [!TIP]
+   > If the runner was started before adding the user to the docker group, restart the service:
+   > `sudo ./svc.sh stop && sudo ./svc.sh start`
 
 ---
 
-### Phase 4: Production CI/CD Pipeline Workflow
+### Step 4: Validate External Port Hardening (Chaos 3 Evidence)
+Run [`scripts/03-verify-ports.sh`](file:///scripts/03-verify-ports.sh) from outside the VM:
 
-The workflow file [`.github/workflows/pipeline.yml`](file:///.github/workflows/pipeline.yml) maps 1:1 to our 3-stage architecture:
+```bash
+./scripts/03-verify-ports.sh paypink-demo-ph.eastus.cloudapp.azure.com
+```
 
-```
-Developers (Local Compose) ──▶ GitHub Repo 
-                                  │
-   ┌──────────────────────────────┴──────────────────────────────┐
-   │ 1. Dev Stage (GitHub Runner - $0)                           │
-   │    • Build & Lint (Maven, pip install)                      │
-   │    • Unit Tests (JUnit 5, pytest)                           │
-   │    • Trivy Scan (Container & FS security)                   │
-   └──────────────────────────────┬──────────────────────────────┘
-                                  ▼
-   ┌─────────────────────────────────────────────────────────────┐
-   │ 2. Test Stage (Temporary Stack, Then Deleted)               │
-   │    • Integration Tests (Testcontainers / Compose syntax)    │
-   │    • Contract Tests (Newman Postman collection)             │
-   │    • Quality Gate (Must pass to promote)                    │
-   └──────────────────────────────┬──────────────────────────────┘
-                                  ▼
-   ┌─────────────────────────────────────────────────────────────┐
-   │ 3. Prod Stage (Self-Hosted Runner on Azure VM)              │
-   │    • Approval Gate (Required reviewer / manual release)     │
-   │    • Deploy (docker compose up -d --build)                  │
-   │    • Health Check (Gateway probe on :8080 for 180s)         │
-   │    • Image Prune (Disk maintenance)                         │
-   └──────────────────────────────┬──────────────────────────────┘
-                                  ▼
-                       Azure VM (Prod Live Host)
-```
+**Expected Result:**
+* Ports **80** and **8080** are `OPEN`.
+* Port **22** is `OPEN` only if your IP is in the NSG whitelist.
+* All internal ports (`1433`, `3000`, `5432`, `6379`, `8081-8090`, `9089`, `9092`) report `closed` or `filtered`.
 
 ---
 
-## 5. Verification, Health Checks & URLs
+## 5. Live Services & Verification URLs
 
-| Component | Target URL |
-| :--- | :--- |
-| **Web SPA (Nginx :80)** | `http://<DNS_NAME_OR_PUBLIC_IP>` |
-| **API Gateway Health (:8080)** | `http://<DNS_NAME_OR_PUBLIC_IP>:8080/actuator/health` |
-| **Grafana Monitoring Stack** | `ssh -L 3000:localhost:3000 azureuser@<VM_PUBLIC_IP>` $\rightarrow$ `http://localhost:3000` |
+| Component | Port & Scope | Target Access URL |
+| :--- | :--- | :--- |
+| **Web SPA (Nginx)** | `80` (Public) | `http://<VM_FQDN>` |
+| **API Gateway Health** | `8080` (Public) | `http://<VM_FQDN>:8080/actuator/health` |
+| **T24 Mock Core Sidecar** | `127.0.0.1:9089` (Loopback) | `http://127.0.0.1:9089` (Internal container network) |
+| **Grafana Observability** | `127.0.0.1:3000` (Loopback) | `ssh -L 3000:localhost:3000 azureuser@<VM_FQDN>` $\rightarrow$ `http://localhost:3000` |
 
-### Default Seed Banking Credentials:
-* **User 1:** `lviernes` / `password123` (Accounts: ₱125,450.00 / ₱50,000.00)
-* **User 2:** `arosales` / `password123` (Savings: ₱84,320.50)
-* **User 3:** `glim` / `password123` (Time Deposit: ₱350,000.00)
+### Security & Seed Accounts
+* Seed accounts configured in database scripts should load secure demo passwords from `/opt/paypink/.env`.
+* Keep the deployment repository private to prevent leaking environment configurations and host addresses.
