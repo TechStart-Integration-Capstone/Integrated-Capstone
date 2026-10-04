@@ -69,7 +69,7 @@ Key SQL Server rules:
 ## Git
 - **Freeze tag:** `capstone1-freeze` → commit `1e51aea`
 - **Working branch:** `feature/capstone2-paypink-2.0-dom`
-- **Latest commit:** `ca90bce` — Phase 4 complete
+- **Latest commit:** `dcd2f62` — Phase 5 complete: Remittance Orchestrator 4-step saga engine
 
 ## Completed Phases
 - **Phase 0** ✅ — Git freeze tag, baseline doc, all containers green
@@ -77,18 +77,14 @@ Key SQL Server rules:
 - **Phase 2** ✅ — X-Correlation-ID filter, Resilience4j circuit breaker on account-service, FallbackController, port isolation (only 8080+3001 exposed)
 - **Phase 3** ✅ — Risk Engine Python FastAPI. scorer.py rules, /score + /health, manual OTel, routed via gateway
 - **Phase 4** ✅ — T24 Core Adapter + Simulator (Spring Boot microservice in `microservices/t24-adapter/`). OfsFormatterService, T24SimulatorController sidecar (90% /1 success, 8% /-1 reject, 2% timeout), T24IdempotencyStore, routed via gateway
+- **Phase 5** ✅ — Remittance Orchestrator 4-step saga engine (Hold → Risk → T24 → Commit/Release), live REMITTANCE table, Resilience4j circuit breakers, Kafka topic `remittance.events`, Postman Folder 10
 
 ## Current focus
-**Phase 5** — Remittance Orchestrator (Evolve Transaction Service)
-- Evolve transaction-service into Remittance Orchestrator 4-step saga (Hold → Risk → T24 → Commit/Release)
-- REMITTANCE table in Azure SQL (status: PENDING_CORE, POSTED, REJECTED, PROCESSING)
-- Kafka topic rename: `ledger.transaction.events` → `remittance.events` (key: accountId)
-- Resilience4j circuit breakers on Risk Engine and T24 Adapter calls
+**Phase 6** — Immutable Audit & Risk Decision Log (`RISK_DECISION` table in PostgreSQL + `audit-service`)
 
 ## Remaining Phases
 | Phase | Description | Risk |
 |---|---|---|
-| 5 | Remittance Orchestrator (Hold→Risk→T24→Commit/Release) | HIGH |
 | 6 | RISK_DECISION table in PostgreSQL | LOW |
 | 7 | Mobile Frontend (PWA) | LOW |
 | 8 | Chaos + Load Testing | MEDIUM |
