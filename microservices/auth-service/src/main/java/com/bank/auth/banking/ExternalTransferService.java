@@ -32,8 +32,17 @@ public class ExternalTransferService {
     private final BankingService banking;
     private final JdbcTemplate jdbc;
     private final BankingLedger ledger;
+    private final boolean isSqlServer;
     public ExternalTransferService(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) {
         this.banking=banking; this.jdbc=jdbc; this.ledger=ledger;
+        boolean sqlServer = true;
+        try (java.sql.Connection conn = jdbc.getDataSource() != null ? jdbc.getDataSource().getConnection() : null) {
+            if (conn != null) {
+                String product = conn.getMetaData().getDatabaseProductName();
+                sqlServer = product != null && (product.contains("Microsoft") || product.contains("SQL Server"));
+            }
+        } catch (Exception e) { sqlServer = true; }
+        this.isSqlServer = sqlServer;
     }
     public static Recipient recipientForType(String type) {
         if (type == null || !type.startsWith("EXT_")) return null;
@@ -51,7 +60,10 @@ public class ExternalTransferService {
         try { reference="EXT-"+Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256")
             .digest((customer+":"+request.idempotencyKey()).getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
-        var accounts=jdbc.query("SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WHERE account_id=? FOR UPDATE",
+        String lockSql = isSqlServer
+            ? "SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id=?"
+            : "SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WHERE account_id=? FOR UPDATE";
+        var accounts=jdbc.query(lockSql,
             (rs,n)->new BankingLedger.Account(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getBigDecimal(6),rs.getString(7)),request.sourceAccountId());
         if (accounts.isEmpty() || accounts.get(0).customerId()!=customer) throw error(HttpStatus.FORBIDDEN,"Choose one of your own accounts.");
         var source=accounts.get(0);
@@ -96,7 +108,10 @@ public class ExternalTransferService {
         // Lock accounts in ascending order, matching the internal-transfer lock order.
         var ids=jdbc.queryForList("SELECT DISTINCT from_account_id FROM LEDGER_TRANSACTION WHERE status='PENDING' AND transaction_type LIKE 'EXT_PESONET_%' AND transaction_date <= ? ORDER BY from_account_id",Long.class,cutoff);
         for (long id:ids) {
-            var source=jdbc.queryForObject("SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WHERE account_id=? FOR UPDATE",
+            String batchLockSql = isSqlServer
+                ? "SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id=?"
+                : "SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WHERE account_id=? FOR UPDATE";
+            var source=jdbc.queryForObject(batchLockSql,
                 (rs,n)->new BankingLedger.Account(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getBigDecimal(6),rs.getString(7)),id);
             var pending=jdbc.queryForList("SELECT reference_no FROM LEDGER_TRANSACTION WHERE from_account_id=? AND status='PENDING' AND transaction_type LIKE 'EXT_PESONET_%' AND transaction_date <= ? ORDER BY transaction_date,transaction_id",String.class,id,cutoff);
             for (String reference:pending) {

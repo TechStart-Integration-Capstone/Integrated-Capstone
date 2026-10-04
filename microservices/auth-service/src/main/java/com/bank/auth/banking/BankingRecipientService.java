@@ -56,7 +56,7 @@ public class BankingRecipientService {
         long customer = banking.authenticatedCustomer(authorization).getCustomerId();
         Recipient recipient = find(customer,number);
         // Serialize repeated saves by this customer so adding a favorite is idempotent.
-        jdbc.queryForObject("SELECT customer_id FROM CUSTOMER WHERE customer_id = ? FOR UPDATE",Long.class,customer);
+        jdbc.queryForObject("SELECT customer_id FROM CUSTOMER WITH (UPDLOCK, ROWLOCK) WHERE customer_id = ?",Long.class,customer);
         jdbc.update("INSERT INTO BANKING_FAVORITE (customer_id, account_id) SELECT ?, a.account_id FROM ACCOUNT a "
                 + "WHERE a.account_number = ? AND NOT EXISTS (SELECT 1 FROM BANKING_FAVORITE f WHERE f.customer_id = ? AND f.account_id = a.account_id)",
                 customer,recipient.accountNumber(),customer);

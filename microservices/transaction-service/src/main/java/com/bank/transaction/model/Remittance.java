@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "REMITTANCE")
+@Table(name = "REMITTANCE", uniqueConstraints = @UniqueConstraint(name = "uq_remittance_customer_idemp", columnNames = {"caller_customer_id", "idempotency_key"}))
 public class Remittance {
 
     @Id
@@ -16,7 +16,10 @@ public class Remittance {
     @Column(name = "reference_no", nullable = false, unique = true, length = 64)
     private String referenceNo;
 
-    @Column(name = "idempotency_key", unique = true, length = 80)
+    @Column(name = "caller_customer_id", nullable = false)
+    private Long callerCustomerId;
+
+    @Column(name = "idempotency_key", length = 80)
     private String idempotencyKey;
 
     @Column(name = "source_account_id", nullable = false)
@@ -70,6 +73,9 @@ public class Remittance {
 
     public String getReferenceNo() { return referenceNo; }
     public void setReferenceNo(String referenceNo) { this.referenceNo = referenceNo; }
+
+    public Long getCallerCustomerId() { return callerCustomerId; }
+    public void setCallerCustomerId(Long callerCustomerId) { this.callerCustomerId = callerCustomerId; }
 
     public String getIdempotencyKey() { return idempotencyKey; }
     public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }

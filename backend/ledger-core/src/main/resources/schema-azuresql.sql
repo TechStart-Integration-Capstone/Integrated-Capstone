@@ -103,7 +103,8 @@ GO
 CREATE TABLE dbo.REMITTANCE (
     remittance_id     BIGINT IDENTITY(1,1) PRIMARY KEY,
     reference_no      NVARCHAR(64)  NOT NULL UNIQUE,
-    idempotency_key   NVARCHAR(80)  NULL UNIQUE,
+    caller_customer_id BIGINT        NOT NULL,
+    idempotency_key   NVARCHAR(80)  NULL,
     source_account_id BIGINT        NOT NULL,
     target_account_id BIGINT        NOT NULL,
     amount            DECIMAL(18,4) NOT NULL,
@@ -116,7 +117,8 @@ CREATE TABLE dbo.REMITTANCE (
     created_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     updated_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT fk_remittance_src_account FOREIGN KEY (source_account_id) REFERENCES dbo.ACCOUNT(account_id),
-    CONSTRAINT fk_remittance_tgt_account FOREIGN KEY (target_account_id) REFERENCES dbo.ACCOUNT(account_id)
+    CONSTRAINT fk_remittance_tgt_account FOREIGN KEY (target_account_id) REFERENCES dbo.ACCOUNT(account_id),
+    CONSTRAINT uq_remittance_customer_idemp UNIQUE (caller_customer_id, idempotency_key)
 );
 GO
 

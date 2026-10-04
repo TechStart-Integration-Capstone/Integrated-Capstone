@@ -25,8 +25,20 @@ public class BankingTransferService {
     private final BankingService banking;
     private final JdbcTemplate jdbc;
     private final BankingLedger ledger;
+    private final boolean isSqlServer;
+
     public BankingTransferService(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) {
         this.banking = banking; this.jdbc = jdbc; this.ledger = ledger;
+        boolean sqlServer = true;
+        try (java.sql.Connection conn = jdbc.getDataSource() != null ? jdbc.getDataSource().getConnection() : null) {
+            if (conn != null) {
+                String product = conn.getMetaData().getDatabaseProductName();
+                sqlServer = product != null && (product.contains("Microsoft") || product.contains("SQL Server"));
+            }
+        } catch (Exception e) {
+            sqlServer = true;
+        }
+        this.isSqlServer = sqlServer;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -72,8 +84,10 @@ public class BankingTransferService {
     }
 
     private BankingLedger.Account lock(long id) {
-        List<BankingLedger.Account> accounts = jdbc.query("SELECT account_id, customer_id, account_number, currency, current_balance, COALESCE(held_balance, 0), status "
-                        + "FROM ACCOUNT WHERE account_id = ? FOR UPDATE",
+        String lockSql = isSqlServer
+                ? "SELECT account_id, customer_id, account_number, currency, current_balance, COALESCE(held_balance, 0), status FROM ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id = ?"
+                : "SELECT account_id, customer_id, account_number, currency, current_balance, COALESCE(held_balance, 0), status FROM ACCOUNT WHERE account_id = ? FOR UPDATE";
+        List<BankingLedger.Account> accounts = jdbc.query(lockSql,
                 (rs, row) -> new BankingLedger.Account(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
                         rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getString(7)), id);
         if (accounts.isEmpty()) throw error(HttpStatus.NOT_FOUND, "The account could not be found.");

@@ -230,4 +230,64 @@ class RemittanceSagaTest {
         assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(responseEntity.getBody().getStatus()).isEqualTo("PROCESSING");
     }
+
+    @Test
+    @DisplayName("Post-T24 commit failure preserves T24_POSTED status for saga worker without releasing funds")
+    void postT24CommitFailure_preservesT24PostedStatus() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("100.00"));
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
+
+        Remittance rem = new Remittance("TX-PH-999", 1L, 2L, new BigDecimal("100.00"), "PHP", "PENDING_CORE");
+        rem.setCallerCustomerId(1L);
+        when(remittanceRepository.save(any())).thenReturn(rem);
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        when(t24AdapterClient.executeTransfer(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new T24Result("POSTED", "FT2600100999", "TX-PH-999", null, false));
+
+        // Mock DB failure during commitLedgerMutation
+        doThrow(new RuntimeException("DB Outbox write error")).when(transactionRepository).save(any());
+
+        ResponseEntity<RemittanceResponse> responseEntity = controller.processRemittance(request, "idemp-commit-fail", "corr-1", "1");
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(responseEntity.getBody().getStatus()).isEqualTo("PROCESSING");
+        // Verify held balance was NOT released
+        verify(jdbcTemplate, never()).update(contains("held_balance = held_balance -"), any(), any());
+    }
+
+    @Test
+    @DisplayName("Reusing idempotency key with different request details throws 409 Conflict")
+    void retryWithDifferentDetails_throws409Conflict() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("100.00"));
+
+        Remittance existing = new Remittance("TX-PH-EXIST", 1L, 2L, new BigDecimal("200.00"), "PHP", "POSTED");
+        existing.setCallerCustomerId(1L);
+        when(remittanceRepository.findByCallerCustomerIdAndIdempotencyKey(1L, "reused-key"))
+                .thenReturn(java.util.Optional.of(existing));
+
+        assertThatThrownBy(() -> orchestratorService.processRemittance(request, "reused-key", "corr-1", 1L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+    }
 }

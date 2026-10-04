@@ -73,8 +73,8 @@ public class RemittanceOrchestratorService {
         log.info("[remittance-orchestrator] Processing transfer callerCustomerId={} sourceAcc={} targetAcc={} amount={} idemp={} corrId={}",
                 callerCustomerId, request.getSourceAccountId(), request.getTargetAccountId(), request.getAmount(), idempotencyKey, correlationId);
 
-        String redisKey = (idempotencyKey != null && !idempotencyKey.isBlank()) ? IDEMP_PREFIX + idempotencyKey : null;
-        String lockKey = (idempotencyKey != null && !idempotencyKey.isBlank()) ? LOCK_PREFIX + idempotencyKey : null;
+        String redisKey = (idempotencyKey != null && !idempotencyKey.isBlank()) ? IDEMP_PREFIX + callerCustomerId + ":" + idempotencyKey : null;
+        String lockKey = (idempotencyKey != null && !idempotencyKey.isBlank()) ? LOCK_PREFIX + callerCustomerId + ":" + idempotencyKey : null;
 
         // ── Step 1: Redis & Database Idempotency Check (#2) ───────────────────────────
         if (redisKey != null) {
@@ -92,12 +92,21 @@ public class RemittanceOrchestratorService {
             }
 
             // Check Database fallback
-            Optional<Remittance> existingOpt = remittanceRepository.findByIdempotencyKey(idempotencyKey);
+            Optional<Remittance> existingOpt = remittanceRepository.findByCallerCustomerIdAndIdempotencyKey(callerCustomerId, idempotencyKey);
             if (existingOpt.isPresent()) {
                 Remittance existing = existingOpt.get();
-                if ("POSTED".equalsIgnoreCase(existing.getStatus()) || "PROCESSING".equalsIgnoreCase(existing.getStatus())) {
+
+                // Validate request details match
+                if (!existing.getSourceAccountId().equals(request.getSourceAccountId())
+                        || !existing.getTargetAccountId().equals(request.getTargetAccountId())
+                        || existing.getAmount().compareTo(request.getAmount()) != 0) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "This Idempotency-Key was already used for a transfer with different request details.");
+                }
+
+                if ("POSTED".equalsIgnoreCase(existing.getStatus())) {
                     log.info("[remittance-orchestrator] DB idempotency hit for key={} ref={}", idempotencyKey, existing.getReferenceNo());
-                    RemittanceResponse resp = new RemittanceResponse(
+                    return new RemittanceResponse(
                             existing.getStatus(),
                             existing.getReferenceNo(),
                             existing.getFtReference(),
@@ -111,10 +120,27 @@ public class RemittanceOrchestratorService {
                             existing.getReason(),
                             true
                     );
-                    return resp;
-                } else if ("PENDING_CORE".equalsIgnoreCase(existing.getStatus())) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT,
-                            "A transfer request with this Idempotency-Key is currently in progress. Please retry shortly.");
+                } else if ("T24_POSTED".equalsIgnoreCase(existing.getStatus()) || "PROCESSING".equalsIgnoreCase(existing.getStatus()) || "PENDING_CORE".equalsIgnoreCase(existing.getStatus())) {
+                    return new RemittanceResponse(
+                            "PROCESSING",
+                            existing.getReferenceNo(),
+                            existing.getFtReference(),
+                            existing.getSourceAccountId(),
+                            existing.getTargetAccountId(),
+                            existing.getAmount(),
+                            BigDecimal.ZERO,
+                            BigDecimal.ZERO,
+                            existing.getRiskScore(),
+                            existing.getRiskDecision(),
+                            "Transfer is currently processing. Status will update via saga worker.",
+                            true
+                    );
+                } else if ("REJECTED".equalsIgnoreCase(existing.getStatus())) {
+                    String reason = existing.getReason() != null ? existing.getReason() : "Transfer was previously rejected.";
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
+                } else if ("FAILED".equalsIgnoreCase(existing.getStatus())) {
+                    String reason = existing.getReason() != null ? existing.getReason() : "Transfer previously failed.";
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, reason);
                 }
             }
 
@@ -172,15 +198,34 @@ public class RemittanceOrchestratorService {
                 if ("POSTED".equalsIgnoreCase(t24.status())) {
                     ledgerService.recordT24Posted(remittance, t24.ftReference());
 
-                    finalResponse = ledgerService.commitLedgerMutation(
-                            remittance,
-                            request,
-                            sourceAcc.id(),
-                            targetAcc.id(),
-                            request.getAmount(),
-                            risk,
-                            t24.ftReference()
-                    );
+                    try {
+                        finalResponse = ledgerService.commitLedgerMutation(
+                                remittance,
+                                request,
+                                sourceAcc.id(),
+                                targetAcc.id(),
+                                request.getAmount(),
+                                risk,
+                                t24.ftReference()
+                        );
+                    } catch (Exception commitEx) {
+                        log.error("[remittance-orchestrator] T24 POSTED for ref={} but local ledger commit failed: {}. Preserving T24_POSTED status for saga worker recovery.",
+                                referenceNo, commitEx.getMessage());
+                        finalResponse = new RemittanceResponse(
+                                "PROCESSING",
+                                referenceNo,
+                                t24.ftReference(),
+                                request.getSourceAccountId(),
+                                request.getTargetAccountId(),
+                                request.getAmount(),
+                                BigDecimal.ZERO,
+                                BigDecimal.ZERO,
+                                risk.score(),
+                                risk.decision(),
+                                "T24 Core Banking posted transfer. Local ledger update will be finalized shortly by saga worker.",
+                                false
+                        );
+                    }
                 } else if ("REJECTED".equalsIgnoreCase(t24.status())) {
                     String reason = "Core banking T24 rejected transfer: " + t24.reason();
                     ledgerService.releaseHoldFunds(remittance, sourceAcc.id(), request.getAmount(), reason);
@@ -209,7 +254,7 @@ public class RemittanceOrchestratorService {
             } catch (ResponseStatusException rse) {
                 throw rse;
             } catch (Exception ex) {
-                // Post-Hold Exception Guardrail (#1): Auto-release held balance on unhandled errors
+                // Post-Hold Exception Guardrail: Auto-release held balance ONLY if failure happened before T24 POSTED
                 log.error("[remittance-orchestrator] Unhandled error post-hold for ref={}. Releasing held balance: {}",
                         referenceNo, ex.getMessage());
                 ledgerService.releaseHoldFunds(remittance, sourceAcc.id(), request.getAmount(),

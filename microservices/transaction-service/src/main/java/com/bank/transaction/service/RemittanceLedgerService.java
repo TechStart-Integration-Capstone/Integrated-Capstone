@@ -115,6 +115,7 @@ public class RemittanceLedgerService {
                 request.getCurrency(),
                 "PENDING_CORE"
         );
+        remittance.setCallerCustomerId(callerCustomerId != null ? callerCustomerId : source.customerId());
         remittance.setIdempotencyKey(idempotencyKey);
         return remittanceRepository.save(remittance);
     }
