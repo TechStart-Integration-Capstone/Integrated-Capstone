@@ -15,13 +15,14 @@ Built on top of the Capstone 1 ledger engine.
 - [x] Phase 5: Remittance Orchestrator (Evolving Transaction Service — 4-Step Saga Engine)
 
 ## How a transfer works
-1. App → API Gateway (JWT check, rate limit, X-Correlation-ID)
-2. Remittance Orchestrator checks for duplicates (Redis idempotency)
-3. Risk Engine scores it (Python FastAPI, ≤ 200 ms SLA). Score > 0.85 → rejected
-4. T24 Core Adapter posts to T24 OFS first (synchronous). Response codes: 200/503/202/422
-5. Account Service validates account + ownership (Resilience4j circuit breaker → Redis cache fallback)
-6. Ledger balance mutation + OUTBOX row saved in one Azure SQL transaction (UPDLOCK, ROWLOCK)
-7. Outbox Publisher polls PENDING rows → Kafka → Audit, Notification, Reconciliation, Analytics
+1. App → API Gateway (JWT check, rate limit, X-Correlation-ID, unconditional header stripping of incoming untrusted X-Auth-* headers)
+2. Remittance Orchestrator checks for duplicates (Redis atomic SETNX idempotency check, 409 Conflict if in-progress)
+3. Risk Engine scores it FIRST (Python FastAPI, ≤ 200 ms SLA). Score > 0.85 → rejected before holding funds
+4. Hold funds SECOND via atomic `held_balance` UPDATE in Azure SQL & REMITTANCE row in PENDING_CORE state
+5. Remittance Ledger Service validates account ownership (caller customer ID match against source account)
+6. T24 Core Adapter posts to T24 OFS THIRD (synchronous). Response codes: 200/503/202/422
+7. Remittance Ledger Service performs short DB transaction: Debit balance, release held balance, credit target, write LEDGER_TRANSACTION + OUTBOX row
+8. Remittance Saga Worker periodically executes forward recovery for T24_POSTED sagas and resolves PROCESSING sagas
 
 ## Stack
 - **Backend:** Spring Boot 3.2.3, Spring Cloud Gateway 2023.0.0, Python FastAPI (Risk Engine)

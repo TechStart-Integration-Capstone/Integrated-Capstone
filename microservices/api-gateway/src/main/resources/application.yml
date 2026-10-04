@@ -113,6 +113,12 @@ spring:
           uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
           predicates:
             - Path=/api/v1/remittance/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+                deny-empty-key: false
 
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:

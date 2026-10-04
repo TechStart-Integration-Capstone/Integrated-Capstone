@@ -34,10 +34,12 @@ CREATE TABLE dbo.ACCOUNT (
     account_type     NVARCHAR(30)  NOT NULL DEFAULT 'SAVINGS',
     currency         NVARCHAR(10)  NOT NULL DEFAULT 'PHP',
     current_balance  DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
+    held_balance     DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
     status           NVARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
     created_date     DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT fk_account_customer FOREIGN KEY (customer_id) REFERENCES dbo.CUSTOMER(customer_id),
-    CONSTRAINT chk_account_balance_positive CHECK (current_balance >= 0.0000)
+    CONSTRAINT chk_account_balance_positive CHECK (current_balance >= 0.0000),
+    CONSTRAINT chk_account_held_positive CHECK (held_balance >= 0.0000)
 );
 GO
 

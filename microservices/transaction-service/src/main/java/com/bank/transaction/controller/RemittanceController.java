@@ -36,12 +36,26 @@ public class RemittanceController {
     public ResponseEntity<RemittanceResponse> processRemittance(
             @Valid @RequestBody RemittanceRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId,
+            @RequestHeader(value = "X-Auth-Customer-Id", required = false) String authCustomerIdHeader) {
 
-        log.info("[remittance-controller] Transfer request received from sourceAcc={} to targetAcc={} amount={}",
-                request.getSourceAccountId(), request.getTargetAccountId(), request.getAmount());
+        if (authCustomerIdHeader == null || authCustomerIdHeader.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Missing identity context: X-Auth-Customer-Id header required");
+        }
 
-        RemittanceResponse response = orchestratorService.processRemittance(request, idempotencyKey, correlationId);
+        Long callerCustomerId;
+        try {
+            callerCustomerId = Long.valueOf(authCustomerIdHeader.trim());
+        } catch (NumberFormatException e) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid X-Auth-Customer-Id header format");
+        }
+
+        log.info("[remittance-controller] Transfer request received from callerCustomerId={} sourceAcc={} to targetAcc={} amount={}",
+                callerCustomerId, request.getSourceAccountId(), request.getTargetAccountId(), request.getAmount());
+
+        RemittanceResponse response = orchestratorService.processRemittance(request, idempotencyKey, correlationId, callerCustomerId);
 
         if ("PROCESSING".equalsIgnoreCase(response.getStatus())) {
             return ResponseEntity.status(202).body(response);

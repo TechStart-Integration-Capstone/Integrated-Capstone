@@ -47,8 +47,4 @@ public class AuthService {
         return new AuthResponse(token, 86400000L, customer.getCustomerId(), customer.getUsername(),
                 customer.getFirstName() + " " + customer.getLastName(), roles);
     }
-
-    public AuthResponse getDemoToken() {
-        return authenticate(new AuthRequest("admin", "Admin@PayPink2026!"));
-    }
 }
