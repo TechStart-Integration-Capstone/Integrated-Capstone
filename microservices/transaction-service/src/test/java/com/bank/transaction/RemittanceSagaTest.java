@@ -73,6 +73,7 @@ class RemittanceSagaTest {
         );
 
         orchestratorService = new RemittanceOrchestratorService(
+                remittanceRepository,
                 ledgerService,
                 riskEngineClient,
                 t24AdapterClient,
@@ -84,6 +85,20 @@ class RemittanceSagaTest {
     }
 
     @Test
+    @DisplayName("Missing Idempotency-Key header throws 400 Bad Request")
+    void missingIdempotencyKey_throws400() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("100.00"));
+
+        assertThatThrownBy(() -> controller.processRemittance(request, null, "corr-1", "1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     @DisplayName("Missing X-Auth-Customer-Id header throws 401 Unauthorized")
     void missingAuthHeader_throws401() {
         RemittanceRequest request = new RemittanceRequest();
@@ -91,7 +106,7 @@ class RemittanceSagaTest {
         request.setTargetAccountId("2");
         request.setAmount(new BigDecimal("100.00"));
 
-        assertThatThrownBy(() -> controller.processRemittance(request, null, null, null))
+        assertThatThrownBy(() -> controller.processRemittance(request, "idemp-1", "corr-1", null))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
@@ -115,6 +130,15 @@ class RemittanceSagaTest {
                         "held_balance", BigDecimal.ZERO
                 )));
 
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L,
+                        "customer_id", 888L,
+                        "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"),
+                        "held_balance", BigDecimal.ZERO
+                )));
+
         // Risk passes
         when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
                 .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
@@ -124,6 +148,32 @@ class RemittanceSagaTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("Same-account self transfer throws 400 Bad Request")
+    void selfTransfer_throws400() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("1"); // Same account!
+        request.setAmount(new BigDecimal("100.00"));
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L,
+                        "customer_id", 1L,
+                        "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"),
+                        "held_balance", BigDecimal.ZERO
+                )));
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        assertThatThrownBy(() -> orchestratorService.processRemittance(request, "key-self", "corr-1", 1L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -144,5 +194,40 @@ class RemittanceSagaTest {
 
         // Verify zero DB updates occurred for holding funds
         verify(jdbcTemplate, never()).update(startsWith("UPDATE dbo.ACCOUNT SET held_balance"), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("T24 timeout returns 202 Accepted with status PROCESSING")
+    void t24Timeout_returns202Processing() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("100.00"));
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
+
+        Remittance rem = new Remittance("TX-PH-123", 1L, 2L, new BigDecimal("100.00"), "PHP", "PENDING_CORE");
+        when(remittanceRepository.save(any())).thenReturn(rem);
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        when(t24AdapterClient.executeTransfer(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new T24Result("PROCESSING", null, null, "T24 SLA processing delay", false));
+
+        ResponseEntity<RemittanceResponse> responseEntity = controller.processRemittance(request, "idemp-timeout", "corr-1", "1");
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(responseEntity.getBody().getStatus()).isEqualTo("PROCESSING");
     }
 }

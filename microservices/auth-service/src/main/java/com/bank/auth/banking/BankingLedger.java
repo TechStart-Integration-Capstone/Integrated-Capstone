@@ -13,7 +13,16 @@ import java.util.Map;
 /** Writes ledger, audit and outbox entries in the caller's Oracle transaction. */
 @Component
 public class BankingLedger {
-    public record Account(long id, long customerId, String number, String currency, BigDecimal balance, String status) {}
+    public record Account(long id, long customerId, String number, String currency, BigDecimal balance, BigDecimal heldBalance, String status) {
+        public Account(long id, long customerId, String number, String currency, BigDecimal balance, String status) {
+            this(id, customerId, number, currency, balance, BigDecimal.ZERO, status);
+        }
+        public BigDecimal availableBalance() {
+            BigDecimal b = balance != null ? balance : BigDecimal.ZERO;
+            BigDecimal h = heldBalance != null ? heldBalance : BigDecimal.ZERO;
+            return b.subtract(h);
+        }
+    }
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     public BankingLedger(JdbcTemplate jdbc, ObjectMapper json) { this.jdbc = jdbc; this.json = json; }

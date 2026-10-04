@@ -51,8 +51,8 @@ public class ExternalTransferService {
         try { reference="EXT-"+Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256")
             .digest((customer+":"+request.idempotencyKey()).getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
-        var accounts=jdbc.query("SELECT account_id,customer_id,account_number,currency,current_balance,status FROM ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id=?",
-            (rs,n)->new BankingLedger.Account(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getString(6)),request.sourceAccountId());
+        var accounts=jdbc.query("SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WHERE account_id=? FOR UPDATE",
+            (rs,n)->new BankingLedger.Account(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getBigDecimal(6),rs.getString(7)),request.sourceAccountId());
         if (accounts.isEmpty() || accounts.get(0).customerId()!=customer) throw error(HttpStatus.FORBIDDEN,"Choose one of your own accounts.");
         var source=accounts.get(0);
         var existing=receipts(customer,reference);
@@ -64,7 +64,7 @@ public class ExternalTransferService {
             return receipt;
         }
         if (!source.status().equals("ACTIVE") || !source.currency().equals("PHP")) throw error(HttpStatus.BAD_REQUEST,"Choose an active PHP account.");
-        if (source.balance().compareTo(request.amount())<0) throw error(HttpStatus.UNPROCESSABLE_ENTITY,"Not enough available balance.");
+        if (source.availableBalance().compareTo(request.amount())<0) throw error(HttpStatus.UNPROCESSABLE_ENTITY,"Not enough available balance.");
         String type="EXT_"+request.rail()+"_"+recipient.id();
         if (request.rail().equals("PESONET")) {
             // Queue the instruction only. No balance mutation or successful debit event yet.
@@ -96,8 +96,8 @@ public class ExternalTransferService {
         // Lock accounts in ascending order, matching the internal-transfer lock order.
         var ids=jdbc.queryForList("SELECT DISTINCT from_account_id FROM LEDGER_TRANSACTION WHERE status='PENDING' AND transaction_type LIKE 'EXT_PESONET_%' AND transaction_date <= ? ORDER BY from_account_id",Long.class,cutoff);
         for (long id:ids) {
-            var source=jdbc.queryForObject("SELECT account_id,customer_id,account_number,currency,current_balance,status FROM ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id=?",
-                (rs,n)->new BankingLedger.Account(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getString(6)),id);
+            var source=jdbc.queryForObject("SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WHERE account_id=? FOR UPDATE",
+                (rs,n)->new BankingLedger.Account(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getBigDecimal(6),rs.getString(7)),id);
             var pending=jdbc.queryForList("SELECT reference_no FROM LEDGER_TRANSACTION WHERE from_account_id=? AND status='PENDING' AND transaction_type LIKE 'EXT_PESONET_%' AND transaction_date <= ? ORDER BY transaction_date,transaction_id",String.class,id,cutoff);
             for (String reference:pending) {
                 var tx=jdbc.queryForMap("SELECT transaction_id,amount,transaction_type FROM LEDGER_TRANSACTION WHERE reference_no=?",reference);

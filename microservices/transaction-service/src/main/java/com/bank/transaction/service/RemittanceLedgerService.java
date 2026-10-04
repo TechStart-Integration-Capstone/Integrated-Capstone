@@ -74,8 +74,9 @@ public class RemittanceLedgerService {
     }
 
     @Transactional
-    public Remittance holdFunds(RemittanceRequest request, String referenceNo, Long callerCustomerId) {
+    public Remittance holdFunds(RemittanceRequest request, String referenceNo, String idempotencyKey, Long callerCustomerId) {
         AccountInfo source = resolveAccount(request.getSourceAccountId());
+        AccountInfo target = resolveAccount(request.getTargetAccountId());
 
         // 1. Ownership check: verify caller owns source account
         if (callerCustomerId != null && !source.customerId().equals(callerCustomerId)) {
@@ -85,13 +86,19 @@ public class RemittanceLedgerService {
                     "Access denied: caller does not own source account " + request.getSourceAccountId());
         }
 
-        // 2. Check available balance (current_balance - held_balance)
+        // 2. Reject same-account self-transfers (#3)
+        if (source.id().equals(target.id())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Source and target accounts cannot be the same account");
+        }
+
+        // 3. Check available balance (current_balance - held_balance)
         if (source.availableBalance().compareTo(request.getAmount()) < 0) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "Insufficient available funds in source account (Available: " + source.availableBalance() + ")");
         }
 
-        // 3. Atomic conditional UPDATE on ACCOUNT: hold funds without lock contention
+        // 4. Atomic conditional UPDATE on ACCOUNT: hold funds without lock contention
         String updateSql = "UPDATE dbo.ACCOUNT SET held_balance = held_balance + ? " +
                            "WHERE account_id = ? AND (current_balance - held_balance) >= ?";
         int rowsUpdated = jdbcTemplate.update(updateSql, request.getAmount(), source.id(), request.getAmount());
@@ -99,8 +106,6 @@ public class RemittanceLedgerService {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "Insufficient available funds in source account at hold execution");
         }
-
-        AccountInfo target = resolveAccount(request.getTargetAccountId());
 
         Remittance remittance = new Remittance(
                 referenceNo,
@@ -110,6 +115,7 @@ public class RemittanceLedgerService {
                 request.getCurrency(),
                 "PENDING_CORE"
         );
+        remittance.setIdempotencyKey(idempotencyKey);
         return remittanceRepository.save(remittance);
     }
 

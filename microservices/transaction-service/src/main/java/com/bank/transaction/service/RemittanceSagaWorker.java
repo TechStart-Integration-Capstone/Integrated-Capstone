@@ -10,15 +10,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * PayPink 2.0 — Remittance Saga Background Worker.
  *
- * Implements forward-recovery saga resolution:
+ * Implements forward-recovery saga resolution & stuck-hold sweeping:
  *   1. Scans for REMITTANCE rows in T24_POSTED state (T24 committed, local DB pending)
  *      and completes the local ledger debit, credit, and outbox event idempotently.
- *   2. Scans for REMITTANCE rows in PROCESSING state (T24 SLA timeout)
+ *   2. Scans for REMITTANCE rows in PROCESSING or old PENDING_CORE state (> 60s)
  *      and queries T24 status to either complete forward recovery or release held funds.
  */
 @Component
@@ -71,11 +73,23 @@ public class RemittanceSagaWorker {
             }
         }
 
-        // ── 2. Inquiry Resolution for PROCESSING Remittances ─────────────────────────
-        List<Remittance> processingList = remittanceRepository.findByStatus("PROCESSING");
-        for (Remittance remittance : processingList) {
+        // ── 2. Inquiry Resolution for PROCESSING & Old PENDING_CORE Remittances ──────
+        List<Remittance> pendingOrProcessing = new ArrayList<>();
+        pendingOrProcessing.addAll(remittanceRepository.findByStatus("PROCESSING"));
+
+        // Sweep PENDING_CORE rows older than 60 seconds (#1)
+        LocalDateTime sixtySecondsAgo = LocalDateTime.now().minusSeconds(60);
+        List<Remittance> pendingCoreList = remittanceRepository.findByStatus("PENDING_CORE");
+        for (Remittance r : pendingCoreList) {
+            if (r.getUpdatedAt() != null && r.getUpdatedAt().isBefore(sixtySecondsAgo)) {
+                pendingOrProcessing.add(r);
+            }
+        }
+
+        for (Remittance remittance : pendingOrProcessing) {
             try {
-                log.info("[saga-worker] Inquiring T24 status for PROCESSING saga ref={}...", remittance.getReferenceNo());
+                log.info("[saga-worker] Inquiring T24 status for saga ref={} status={}...",
+                        remittance.getReferenceNo(), remittance.getStatus());
 
                 RemittanceLedgerService.AccountInfo sourceAcc = ledgerService.resolveAccount(String.valueOf(remittance.getSourceAccountId()));
                 RemittanceLedgerService.AccountInfo targetAcc = ledgerService.resolveAccount(String.valueOf(remittance.getTargetAccountId()));
@@ -97,7 +111,7 @@ public class RemittanceSagaWorker {
                             remittance,
                             remittance.getSourceAccountId(),
                             remittance.getAmount(),
-                            "Core banking T24 rejected transfer: " + t24.reason()
+                            "Saga worker inquiry resolved REJECTED: " + t24.reason()
                     );
                     log.info("[saga-worker] Inquiry resolved REJECTED for ref={}. Released held funds.", remittance.getReferenceNo());
                 }

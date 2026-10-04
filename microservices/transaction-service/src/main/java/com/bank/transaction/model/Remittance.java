@@ -16,6 +16,9 @@ public class Remittance {
     @Column(name = "reference_no", nullable = false, unique = true, length = 64)
     private String referenceNo;
 
+    @Column(name = "idempotency_key", unique = true, length = 80)
+    private String idempotencyKey;
+
     @Column(name = "source_account_id", nullable = false)
     private Long sourceAccountId;
 
@@ -67,6 +70,9 @@ public class Remittance {
 
     public String getReferenceNo() { return referenceNo; }
     public void setReferenceNo(String referenceNo) { this.referenceNo = referenceNo; }
+
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
 
     public Long getSourceAccountId() { return sourceAccountId; }
     public void setSourceAccountId(Long sourceAccountId) { this.sourceAccountId = sourceAccountId; }

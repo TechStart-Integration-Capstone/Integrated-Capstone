@@ -103,6 +103,7 @@ GO
 CREATE TABLE dbo.REMITTANCE (
     remittance_id     BIGINT IDENTITY(1,1) PRIMARY KEY,
     reference_no      NVARCHAR(64)  NOT NULL UNIQUE,
+    idempotency_key   NVARCHAR(80)  NULL UNIQUE,
     source_account_id BIGINT        NOT NULL,
     target_account_id BIGINT        NOT NULL,
     amount            DECIMAL(18,4) NOT NULL,

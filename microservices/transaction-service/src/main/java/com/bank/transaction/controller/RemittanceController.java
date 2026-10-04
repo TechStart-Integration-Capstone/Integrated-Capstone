@@ -35,9 +35,14 @@ public class RemittanceController {
     @PostMapping("/transfer")
     public ResponseEntity<RemittanceResponse> processRemittance(
             @Valid @RequestBody RemittanceRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId,
             @RequestHeader(value = "X-Auth-Customer-Id", required = false) String authCustomerIdHeader) {
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Missing required header: Idempotency-Key");
+        }
 
         if (authCustomerIdHeader == null || authCustomerIdHeader.isBlank()) {
             throw new org.springframework.web.server.ResponseStatusException(

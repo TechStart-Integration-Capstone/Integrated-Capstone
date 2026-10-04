@@ -1,6 +1,6 @@
 # PayPink 2.0 — Project Context
 
-_Last updated: 2026-10-04 (Phase 5 Complete)_
+_Last updated: 2026-10-04 (Phase 5 Hardening & Must-Dos Complete)_
 
 ## What it is
 Mobile P2P remittance app (domestic, PHP) with real-time fraud screening and T24 core banking integration.
@@ -12,7 +12,7 @@ Built on top of the Capstone 1 ledger engine.
 - [x] Phase 2: OpenTelemetry & Observability Mesh
 - [x] Phase 3: Risk Engine & Fraud Screening Service
 - [x] Phase 4: T24 Core Adapter & Simulator
-- [x] Phase 5: Remittance Orchestrator (Evolving Transaction Service — 4-Step Saga Engine)
+- [x] Phase 5: Remittance Orchestrator & Saga Engine Hardening (All Must-Dos & Security Fixes Complete)
 
 ## How a transfer works
 1. App → API Gateway (JWT check, rate limit, X-Correlation-ID, unconditional header stripping of incoming untrusted X-Auth-* headers)

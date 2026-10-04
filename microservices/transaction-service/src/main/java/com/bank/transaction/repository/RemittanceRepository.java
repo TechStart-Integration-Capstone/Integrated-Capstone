@@ -9,5 +9,6 @@ import java.util.Optional;
 @Repository
 public interface RemittanceRepository extends JpaRepository<Remittance, Long> {
     Optional<Remittance> findByReferenceNo(String referenceNo);
+    Optional<Remittance> findByIdempotencyKey(String idempotencyKey);
     java.util.List<Remittance> findByStatus(String status);
 }
