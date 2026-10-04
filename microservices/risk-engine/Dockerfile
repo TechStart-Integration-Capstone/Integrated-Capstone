@@ -1,6 +1,6 @@
 # ── PayPink 2.0 Risk Engine ──────────────────────────────────────────────────
-# Python 3.12 slim — smaller image, compatible with all dependencies
-FROM python:3.12-slim
+# Python 3.11 slim — cached locally, compatible with all dependencies
+FROM python:3.11-slim
 
 WORKDIR /app
 

@@ -4,19 +4,36 @@ import com.bank.transaction.dto.ProblemDetails;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDateTime;
+import java.util.Map;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    /**
-     * Requirement 1.A — JSR-380 validation faults formatted as RFC-7807 Problem Details.
-     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(
+            ResponseStatusException ex, HttpServletRequest request) {
+
+        Map<String, Object> body = Map.of(
+                "timestamp", LocalDateTime.now().toString(),
+                "status", ex.getStatusCode().value(),
+                "error", ex.getReason() != null ? ex.getReason() : ex.getMessage(),
+                "path", request.getRequestURI()
+        );
+        return ResponseEntity.status(ex.getStatusCode())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ProblemDetails> handleValidationExceptions(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
@@ -35,12 +52,11 @@ public class GlobalExceptionHandler {
                     fieldError.getRejectedValue()
             );
         }
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
-    /**
-     * Requirement 1.A — Malformed JSON or unparseable payload.
-     */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ProblemDetails> handleMalformedJson(
             HttpMessageNotReadableException ex, HttpServletRequest request) {
@@ -53,7 +69,9 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         problem.addInvalidParam("payload", ex.getMostSpecificCause().getMessage(), null);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
     @ExceptionHandler(InsufficientFundsException.class)
@@ -67,7 +85,9 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI()
         );
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(problem);
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
     @ExceptionHandler(AccountNotFoundException.class)
@@ -81,7 +101,9 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI()
         );
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
     @ExceptionHandler(CurrencyMismatchException.class)
@@ -95,7 +117,9 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI()
         );
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(problem);
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
     @ExceptionHandler(PessimisticLockingFailureException.class)
@@ -109,7 +133,9 @@ public class GlobalExceptionHandler {
                 "High concurrency detected. Lock acquisition timed out for account row. Please retry.",
                 request.getRequestURI()
         );
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
     @ExceptionHandler(LedgerPersistenceException.class)
@@ -123,7 +149,9 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI()
         );
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 
     @ExceptionHandler(Exception.class)
@@ -137,6 +165,8 @@ public class GlobalExceptionHandler {
                 ex.getMessage() != null ? ex.getMessage() : "An unexpected server error occurred.",
                 request.getRequestURI()
         );
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problem);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(problem);
     }
 }

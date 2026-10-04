@@ -46,6 +46,7 @@
     </dependencies>
 
     <build>
+        <finalName>t24-adapter</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

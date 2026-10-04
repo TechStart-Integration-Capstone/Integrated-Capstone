@@ -97,6 +97,26 @@ CREATE TABLE dbo.OUTBOX_EVENT (
 );
 GO
 
+-- 7. REMITTANCE TABLE (PayPink 2.0 Synchronous Saga Orchestration)
+CREATE TABLE dbo.REMITTANCE (
+    remittance_id     BIGINT IDENTITY(1,1) PRIMARY KEY,
+    reference_no      NVARCHAR(64)  NOT NULL UNIQUE,
+    source_account_id BIGINT        NOT NULL,
+    target_account_id BIGINT        NOT NULL,
+    amount            DECIMAL(18,4) NOT NULL,
+    currency          NVARCHAR(10)  NOT NULL DEFAULT 'PHP',
+    status            NVARCHAR(30)  NOT NULL, -- PENDING_CORE, POSTED, REJECTED, PROCESSING
+    risk_score        DECIMAL(5,4)  NULL,
+    risk_decision     NVARCHAR(20)  NULL,
+    ft_reference      NVARCHAR(64)  NULL,
+    reason            NVARCHAR(255) NULL,
+    created_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
+    updated_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
+    CONSTRAINT fk_remittance_src_account FOREIGN KEY (source_account_id) REFERENCES dbo.ACCOUNT(account_id),
+    CONSTRAINT fk_remittance_tgt_account FOREIGN KEY (target_account_id) REFERENCES dbo.ACCOUNT(account_id)
+);
+GO
+
 -- Indexes for high-throughput concurrency
 CREATE INDEX idx_account_cust_id  ON dbo.ACCOUNT(customer_id);
 CREATE INDEX idx_account_num      ON dbo.ACCOUNT(account_number);
@@ -104,6 +124,8 @@ CREATE INDEX idx_tx_from_acc      ON dbo.LEDGER_TRANSACTION(from_account_id);
 CREATE INDEX idx_tx_ref_no        ON dbo.LEDGER_TRANSACTION(reference_no);
 CREATE INDEX idx_outbox_status    ON dbo.OUTBOX_EVENT(status, created_date);
 CREATE INDEX idx_audit_cust_id    ON dbo.AUDIT_LOG(customer_id, timestamp);
+CREATE INDEX idx_remittance_ref   ON dbo.REMITTANCE(reference_no);
+CREATE INDEX idx_remittance_stat  ON dbo.REMITTANCE(status);
 GO
 
 -- Seed data — same demo users as Oracle schema

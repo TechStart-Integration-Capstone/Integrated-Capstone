@@ -41,7 +41,7 @@ public class AnalyticsKafkaConsumer {
     }
 
     @KafkaListener(
-            topics   = "ledger.transaction.events",
+            topics   = {"remittance.events", "ledger.transaction.events"},
             groupId  = "analytics-service-group"
     )
     public void consume(String message) {

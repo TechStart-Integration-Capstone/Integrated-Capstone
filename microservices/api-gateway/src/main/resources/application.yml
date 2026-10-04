@@ -108,6 +108,12 @@ spring:
           predicates:
             - Path=/api/v1/t24/**
 
+        # Remittance Orchestrator (Phase 5) — 4-step saga engine
+        - id: remittance-orchestrator
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/api/v1/remittance/**
+
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:
   security:
