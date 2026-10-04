@@ -46,6 +46,7 @@ Built on top of the Capstone 1 ledger engine.
 | outbox-publisher | 8087 (internal only) | Azure SQL + Kafka |
 | analytics-service | 8088 (internal only) | Kafka (in-memory) |
 | risk-engine | 8000 (internal only) | None — stateless |
+| t24-adapter | 8090 (internal only) | None — simulator |
 
 ## Risk Engine (Phase 3)
 - Route: `POST /api/v1/risk/score` via gateway (StripPrefix=3 → risk-engine:8000/score)
@@ -54,14 +55,14 @@ Built on top of the Capstone 1 ledger engine.
 - Rules: self-transfer +0.90, >100k +0.50, >50k +0.30, >20k +0.15, new account +0.25, high velocity +0.30, non-PHP +0.20
 - OTel: manual tracing with W3C traceparent propagation (no auto-instrumentation — pkg_resources missing in python:3.12-slim)
 
-## Azure SQL Schema (as of Phase 1)
-Tables: `CUSTOMER`, `ACCOUNT`, `AUDIT_LOG`, `BANKING_FAVORITE`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT`
+## Azure SQL Schema (as of Phase 5)
+Tables: `CUSTOMER`, `ACCOUNT`, `AUDIT_LOG`, `BANKING_FAVORITE`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT`, `REMITTANCE`
 
 > TRANSACTION is a reserved word in T-SQL — table is named LEDGER_TRANSACTION everywhere.
 
 Key SQL Server rules:
 - `DECIMAL(18,4)` for balances
-- `WITH (UPDLOCK, ROWLOCK)` for pessimistic locking
+- `WITH (UPDLOCK, ROWLOCK)` for pessimistic locking (with dynamic H2 dialect fallback)
 - `OFFSET 0 ROWS FETCH NEXT n ROWS ONLY` for pagination
 - `SUBSTRING()`, `+` concat, `TOP 1` in subqueries, no `FROM DUAL`
 - mssql-jdbc:12.8.1.jre11 (no jre17 on Maven Central)
@@ -70,15 +71,15 @@ Key SQL Server rules:
 ## Git
 - **Freeze tag:** `capstone1-freeze` → commit `1e51aea`
 - **Working branch:** `feature/capstone2-paypink-2.0-dom`
-- **Latest commit:** `dcd2f62` — Phase 5 complete: Remittance Orchestrator 4-step saga engine
+- **Latest commit:** `7688fda` — docs(memory-bank): update CHANGELOG.md for Phase 5 completion and type safety fixes
 
 ## Completed Phases
-- **Phase 0** ✅ — Git freeze tag, baseline doc, all containers green
-- **Phase 1** ✅ — Oracle XE → Azure SQL. All 5 services migrated, all 9 UP, precision + login tests passed
-- **Phase 2** ✅ — X-Correlation-ID filter, Resilience4j circuit breaker on account-service, FallbackController, port isolation (only 8080+3001 exposed)
-- **Phase 3** ✅ — Risk Engine Python FastAPI. scorer.py rules, /score + /health, manual OTel, routed via gateway
-- **Phase 4** ✅ — T24 Core Adapter + Simulator (Spring Boot microservice in `microservices/t24-adapter/`). OfsFormatterService, T24SimulatorController sidecar (90% /1 success, 8% /-1 reject, 2% timeout), T24IdempotencyStore, routed via gateway
-- **Phase 5** ✅ — Remittance Orchestrator 4-step saga engine (Hold → Risk → T24 → Commit/Release), live REMITTANCE table, Resilience4j circuit breakers, Kafka topic `remittance.events`, Postman Folder 10
+- **Phase 0** (Completed) — Git freeze tag, baseline doc, all containers green
+- **Phase 1** (Completed) — Oracle XE → Azure SQL. All 5 services migrated, all 9 UP, precision + login tests passed
+- **Phase 2** (Completed) — X-Correlation-ID filter, Resilience4j circuit breaker on account-service, FallbackController, port isolation (only 8080+3001 exposed)
+- **Phase 3** (Completed) — Risk Engine Python FastAPI. scorer.py rules, /score + /health, manual OTel, routed via gateway
+- **Phase 4** (Completed) — T24 Core Adapter + Simulator (Spring Boot microservice in `microservices/t24-adapter/`). OfsFormatterService, T24SimulatorController sidecar (90% /1 success, 8% /-1 reject, 2% timeout), T24IdempotencyStore, routed via gateway
+- **Phase 5** (Completed) — Remittance Orchestrator 4-step saga engine (Hold → Risk → T24 → Commit/Release), live REMITTANCE table, Resilience4j circuit breakers, Kafka topic `remittance.events`, Postman Folder 10, post-T24 commit safety, customer-scoped idempotency, resolved account comparisons
 
 ## Current focus
 **Phase 6** — Immutable Audit & Risk Decision Log (`RISK_DECISION` table in PostgreSQL + `audit-service`)
