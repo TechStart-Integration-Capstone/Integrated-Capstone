@@ -1,6 +1,6 @@
 # PayPink 2.0 — Project Context
 
-_Last updated: 2026-10-03_
+_Last updated: 2026-10-04_
 
 ## What it is
 Mobile P2P remittance app (domestic, PHP) with real-time fraud screening.
@@ -61,7 +61,7 @@ Key SQL Server rules:
 ## Git
 - **Freeze tag:** `capstone1-freeze` → commit `1e51aea`
 - **Working branch:** `feature/capstone2-paypink-2.0-dom`
-- **Latest commit:** `4fa948f` — Phase 3 complete
+- **Latest commit:** `ca90bce` — Phase 4 complete
 
 ## Completed Phases
 - **Phase 0** ✅ — Git freeze tag, baseline doc, all containers green
