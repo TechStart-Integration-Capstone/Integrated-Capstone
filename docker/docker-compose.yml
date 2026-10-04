@@ -138,6 +138,7 @@ services:
       - RECONCILIATION_SERVICE_HOST=reconciliation-service
       - ANALYTICS_SERVICE_HOST=analytics-service
       - RISK_ENGINE_HOST=risk-engine
+      - T24_ADAPTER_HOST=t24-adapter
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
@@ -355,6 +356,24 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # T24 Core Adapter + OFS Simulator (Phase 4)
+  # ==========================================
+  t24-adapter:
+    build:
+      context: ../microservices/t24-adapter
+      dockerfile: Dockerfile
+    container_name: t24-adapter
+    # No host port — internal only, called by Remittance Orchestrator via http://t24-adapter:8090
+    environment:
+      - T24_SIMULATOR_URL=http://localhost:8090/ofs/process
+      - OTEL_SERVICE_NAME=t24-adapter
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    volumes:
+      - ./../microservices/t24-adapter/target/t24-adapter.jar:/app/app.jar
     networks:
       - ledger-net
 

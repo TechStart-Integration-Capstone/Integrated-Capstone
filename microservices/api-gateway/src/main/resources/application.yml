@@ -102,6 +102,12 @@ spring:
           filters:
             - StripPrefix=3
 
+        # T24 Core Adapter (Phase 4) — internal payment rail, exposed for testing
+        - id: t24-adapter
+          uri: http://${T24_ADAPTER_HOST:t24-adapter}:8090
+          predicates:
+            - Path=/api/v1/t24/**
+
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:
   security:
@@ -133,3 +139,6 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    circuitbreakers:
+      enabled: true

@@ -5,8 +5,10 @@ import com.bank.auth.dto.AuthResponse;
 import com.bank.auth.model.Customer;
 import com.bank.auth.repository.CustomerRepository;
 import com.bank.auth.security.JwtTokenProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -31,10 +33,10 @@ public class AuthService {
         }
 
         Customer customer = customerRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
 
         if (!passwordEncoder.matches(request.getPassword(), customer.getPasswordHash())) {
-            throw new RuntimeException("Invalid username or password");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
         }
 
         boolean isAdmin = "admin".equalsIgnoreCase(customer.getUsername());

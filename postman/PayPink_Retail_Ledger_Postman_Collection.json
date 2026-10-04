@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "8f3b2c1a-7d4e-4f9a-9e12-3b4c5d6e7f8a",
-    "name": "PayPink 2.0 — Core Retail Ledger & Risk Engine",
-    "description": "Full test suite for PayPink Capstone 1 + Capstone 2 (Phase 0–3). Covers: JWT auth, account queries (with mayBeStale circuit breaker), ledger mutations, idempotency, stress tests, reconciliation, telemetry, X-Correlation-ID verification, and the Phase 3 Risk Engine scoring API.",
+    "name": "PayPink 2.0 \u2014 Core Retail Ledger & Risk Engine",
+    "description": "Full test suite for PayPink Capstone 1 + Capstone 2 (Phase 0\u20133). Covers: JWT auth, account queries (with mayBeStale circuit breaker), ledger mutations, idempotency, stress tests, reconciliation, telemetry, X-Correlation-ID verification, and the Phase 3 Risk Engine scoring API.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -34,15 +34,27 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"lviernes\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             }
           }
         },
@@ -62,15 +74,27 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"arosales\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             }
           }
         },
@@ -99,13 +123,20 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/v1/auth/demo-token",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "demo-token"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "demo-token"
+              ]
             }
           }
         },
         {
-          "name": "POST Login — Invalid Password (401 expected)",
+          "name": "POST Login \u2014 Invalid Password (401 expected)",
           "event": [
             {
               "listen": "test",
@@ -119,15 +150,27 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"username\": \"lviernes\",\n  \"password\": \"wrongpassword\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             }
           }
         }
@@ -152,11 +195,22 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
             }
           }
         },
@@ -169,8 +223,8 @@
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "var j = pm.response.json();",
-                  "pm.test(\"mayBeStale is false — live DB read\", () => pm.expect(j.mayBeStale).to.be.false);",
-                  "pm.test(\"Redis cache written — account:balance:1 exists (check Redis)\", () => pm.expect(j.accountId).to.eql(1));"
+                  "pm.test(\"mayBeStale is false \u2014 live DB read\", () => pm.expect(j.mayBeStale).to.be.false);",
+                  "pm.test(\"Redis cache written \u2014 account:balance:1 exists (check Redis)\", () => pm.expect(j.accountId).to.eql(1));"
                 ],
                 "type": "text/javascript"
               }
@@ -178,11 +232,23 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/1",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts", "1"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "1"
+              ]
             }
           }
         },
@@ -206,27 +272,57 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/customer/1",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts", "customer", "1"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "customer",
+                "1"
+              ]
             }
           }
         },
         {
-          "name": "POST Reset Account Balance (Stress Prep — resets to 60)",
+          "name": "POST Reset Account Balance (Stress Prep \u2014 resets to 60)",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"targetBalance\": 60.0000\n}" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetBalance\": 60.0000\n}"
+            },
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/3/reset-balance",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts", "3", "reset-balance"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "3",
+                "reset-balance"
+              ]
             }
           }
         }
@@ -241,7 +337,9 @@
             {
               "listen": "prerequest",
               "script": {
-                "exec": ["pm.environment.set(\"idemp_key\", \"IDEMP-POSTMAN-\" + Date.now());"],
+                "exec": [
+                  "pm.environment.set(\"idemp_key\", \"IDEMP-POSTMAN-\" + Date.now());"
+                ],
                 "type": "text/javascript"
               }
             },
@@ -263,9 +361,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{idemp_key}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idemp_key}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -273,13 +380,20 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
         {
-          "name": "POST Redis Idempotency Duplicate Replay (same key — must return cached)",
+          "name": "POST Redis Idempotency Duplicate Replay (same key \u2014 must return cached)",
           "event": [
             {
               "listen": "test",
@@ -297,9 +411,18 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{idemp_key}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idemp_key}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -307,8 +430,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
@@ -330,14 +460,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": 100.12345,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": 100.12345,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}"
+            },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
@@ -357,14 +503,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": -50.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"mutationAmount\": -50.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}"
+            },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
@@ -386,14 +548,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"accountId\": 3,\n  \"mutationAmount\": 9999999.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}" },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 3,\n  \"mutationAmount\": 9999999.0000,\n  \"operation\": \"DEBIT\",\n  \"currency\": \"PHP\"\n}"
+            },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         }
@@ -421,8 +599,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -430,8 +614,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/stress/double-spend-test",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "stress", "double-spend-test"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stress",
+                "double-spend-test"
+              ]
             }
           }
         }
@@ -446,18 +637,32 @@
             {
               "listen": "test",
               "script": {
-                "exec": ["pm.test(\"Status 200\", () => pm.response.to.have.status(200));"],
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ],
                 "type": "text/javascript"
               }
             }
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/reconciliation/run",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reconciliation", "run"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reconciliation",
+                "run"
+              ]
             }
           }
         },
@@ -465,11 +670,23 @@
           "name": "GET Reconciliation Audit Logs",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/reconciliation/logs",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reconciliation", "logs"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reconciliation",
+                "logs"
+              ]
             }
           }
         }
@@ -485,8 +702,15 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/v1/telemetry/stats",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telemetry", "stats"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telemetry",
+                "stats"
+              ]
             }
           }
         },
@@ -497,8 +721,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/actuator/prometheus",
-              "host": ["{{base_url}}"],
-              "path": ["actuator", "prometheus"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "prometheus"
+              ]
             }
           }
         },
@@ -521,15 +750,20 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/actuator/health",
-              "host": ["{{base_url}}"],
-              "path": ["actuator", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
             }
           }
         }
       ]
     },
     {
-      "name": "7. Phase 2 — Network Hardening & Resilience4j",
+      "name": "7. Phase 2 \u2014 Network Hardening & Resilience4j",
       "item": [
         {
           "name": "GET X-Correlation-ID Auto-Generated (no header sent)",
@@ -555,8 +789,15 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/v1/auth/demo-token",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "demo-token"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "demo-token"
+              ]
             }
           }
         },
@@ -579,16 +820,28 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "X-Correlation-ID", "value": "my-custom-trace-id-12345" }],
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "my-custom-trace-id-12345"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/auth/demo-token",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "demo-token"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "demo-token"
+              ]
             }
           }
         },
         {
-          "name": "GET Account — mayBeStale=false (live DB, circuit CLOSED)",
+          "name": "GET Account \u2014 mayBeStale=false (live DB, circuit CLOSED)",
           "event": [
             {
               "listen": "test",
@@ -596,7 +849,7 @@
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "var j = pm.response.json();",
-                  "pm.test(\"mayBeStale is false — reading from Azure SQL\", () => pm.expect(j.mayBeStale).to.be.false);"
+                  "pm.test(\"mayBeStale is false \u2014 reading from Azure SQL\", () => pm.expect(j.mayBeStale).to.be.false);"
                 ],
                 "type": "text/javascript"
               }
@@ -604,11 +857,23 @@
           ],
           "request": {
             "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/1",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts", "1"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "1"
+              ]
             }
           }
         },
@@ -634,15 +899,20 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/actuator/health",
-              "host": ["{{base_url}}"],
-              "path": ["actuator", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
             }
           }
         }
       ]
     },
     {
-      "name": "8. Phase 3 — Risk Engine (Python FastAPI)",
+      "name": "8. Phase 3 \u2014 Risk Engine (Python FastAPI)",
       "item": [
         {
           "name": "GET Risk Engine Health (no JWT needed)",
@@ -666,13 +936,20 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/v1/risk/health",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "health"
+              ]
             }
           }
         },
         {
-          "name": "POST Score — Low Risk (5k PHP) → APPROVE score=0.0",
+          "name": "POST Score \u2014 Low Risk (5k PHP) \u2192 APPROVE score=0.0",
           "event": [
             {
               "listen": "test",
@@ -692,8 +969,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -701,13 +984,20 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/risk/score",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "score"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
             }
           }
         },
         {
-          "name": "POST Score — Medium Risk (75k PHP) → APPROVE score=0.3",
+          "name": "POST Score \u2014 Medium Risk (75k PHP) \u2192 APPROVE score=0.3",
           "event": [
             {
               "listen": "test",
@@ -726,8 +1016,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -735,13 +1031,20 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/risk/score",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "score"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
             }
           }
         },
         {
-          "name": "POST Score — Self-Transfer → REJECT score=0.9",
+          "name": "POST Score \u2014 Self-Transfer \u2192 REJECT score=0.9",
           "event": [
             {
               "listen": "test",
@@ -760,8 +1063,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -769,13 +1078,20 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/risk/score",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "score"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
             }
           }
         },
         {
-          "name": "POST Score — New Account + High Velocity → REJECT score=1.0",
+          "name": "POST Score \u2014 New Account + High Velocity \u2192 REJECT score=1.0",
           "event": [
             {
               "listen": "test",
@@ -794,8 +1110,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -803,13 +1125,20 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/risk/score",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "score"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
             }
           }
         },
         {
-          "name": "POST Score — Non-PHP Currency → higher risk",
+          "name": "POST Score \u2014 Non-PHP Currency \u2192 higher risk",
           "event": [
             {
               "listen": "test",
@@ -826,8 +1155,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -835,13 +1170,20 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/risk/score",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "score"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
             }
           }
         },
         {
-          "name": "POST Score — Missing Required Field (422 expected)",
+          "name": "POST Score \u2014 Missing Required Field (422 expected)",
           "event": [
             {
               "listen": "test",
@@ -856,8 +1198,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{jwt_token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -865,13 +1213,20 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/risk/score",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "score"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
             }
           }
         },
         {
-          "name": "POST Score — No JWT (401 expected)",
+          "name": "POST Score \u2014 No JWT (401 expected)",
           "event": [
             {
               "listen": "test",
@@ -885,17 +1240,348 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/risk/score",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "risk", "score"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "9. Phase 4 \u2014 T24 Core Adapter & Simulator",
+      "item": [
+        {
+          "name": "GET T24 Adapter Health (no JWT needed)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is UP\", () => pm.expect(j.status).to.eql(\"UP\"));",
+                  "pm.test(\"service is t24-adapter\", () => pm.expect(j.service).to.eql(\"t24-adapter\"));",
+                  "pm.test(\"version is 2.0.0\", () => pm.expect(j.version).to.eql(\"2.0.0\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Happy Path (T24 /1 POSTED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-PH-1791004427-abc1234\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 15000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is POSTED\", () => pm.expect(j.status).to.eql(\"POSTED\"));",
+                  "pm.test(\"ftReference generated\", () => pm.expect(j.ftReference).to.include(\"FT20261004\"));",
+                  "pm.test(\"ofsResponse format /1\", () => pm.expect(j.ofsResponse).to.include(\"/1\"));",
+                  "pm.test(\"cachedResponse is false\", () => pm.expect(j.cachedResponse).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Idempotency Replay (same ref)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-PH-1791004427-abc1234\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 15000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is POSTED\", () => pm.expect(j.status).to.eql(\"POSTED\"));",
+                  "pm.test(\"cachedResponse is TRUE (T24 Idempotency hit)\", () => pm.expect(j.cachedResponse).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Simulated T24 Rejection (SIM-REJECT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-SIM-REJECT-001\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 5000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is REJECTED\", () => pm.expect(j.status).to.eql(\"REJECTED\"));",
+                  "pm.test(\"ofsResponse format /-1\", () => pm.expect(j.ofsResponse).to.include(\"/-1\"));",
+                  "pm.test(\"reason present\", () => pm.expect(j.reason).to.include(\"Account Closed\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Simulated SLA Timeout (SIM-TIMEOUT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-SIM-TIMEOUT-001\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 5000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 202 Accepted (Processing)\", () => pm.response.to.have.status(202));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is PROCESSING\", () => pm.expect(j.status).to.eql(\"PROCESSING\"));",
+                  "pm.test(\"reason indicates SLA timeout\", () => pm.expect(j.reason).to.include(\"timeout\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Missing Field (400 expected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000.0000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 No JWT (401 expected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-001\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 5000.0000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 Unauthorized\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     }

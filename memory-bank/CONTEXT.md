@@ -68,19 +68,18 @@ Key SQL Server rules:
 - **Phase 1** ✅ — Oracle XE → Azure SQL. All 5 services migrated, all 9 UP, precision + login tests passed
 - **Phase 2** ✅ — X-Correlation-ID filter, Resilience4j circuit breaker on account-service, FallbackController, port isolation (only 8080+3001 exposed)
 - **Phase 3** ✅ — Risk Engine Python FastAPI. scorer.py rules, /score + /health, manual OTel, routed via gateway
+- **Phase 4** ✅ — T24 Core Adapter + Simulator (Spring Boot microservice in `microservices/t24-adapter/`). OfsFormatterService, T24SimulatorController sidecar (90% /1 success, 8% /-1 reject, 2% timeout), T24IdempotencyStore, routed via gateway
 
 ## Current focus
-**Phase 4** — T24 Core Adapter + Simulator
-- New Spring Boot service: `microservices/t24-adapter/`
-- T24 OFS Simulator (Spring Boot RestController) on same service, configurable response via query param (200/503/202/422)
-- T24CoreAdapter calls simulator, builds OFS string, returns FT reference or reason code
-- Add to docker-compose.yml on ledger-net (internal only)
-- Gateway route: /api/v1/t24/**
+**Phase 5** — Remittance Orchestrator (Evolve Transaction Service)
+- Evolve transaction-service into Remittance Orchestrator 4-step saga (Hold → Risk → T24 → Commit/Release)
+- REMITTANCE table in Azure SQL (status: PENDING_CORE, POSTED, REJECTED, PROCESSING)
+- Kafka topic rename: `ledger.transaction.events` → `remittance.events` (key: accountId)
+- Resilience4j circuit breakers on Risk Engine and T24 Adapter calls
 
 ## Remaining Phases
 | Phase | Description | Risk |
 |---|---|---|
-| 4 | T24 Core Adapter + Simulator | MEDIUM |
 | 5 | Remittance Orchestrator (Hold→Risk→T24→Commit/Release) | HIGH |
 | 6 | RISK_DECISION table in PostgreSQL | LOW |
 | 7 | Mobile Frontend (PWA) | LOW |
