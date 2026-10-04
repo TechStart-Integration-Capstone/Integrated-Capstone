@@ -9,8 +9,8 @@ import java.util.regex.Pattern;
 import javax.net.ssl.*;
 
 public class EmailRelay {
-    private static final String GMAIL_USER = "jonlevi.jlv@gmail.com";
-    private static final String GMAIL_PASS = "ffaeorqwvupclnrc";
+    private static final String GMAIL_USER = System.getenv().getOrDefault("SPRING_MAIL_USERNAME", "notifications@paypink.ph");
+    private static final String GMAIL_PASS = System.getenv().getOrDefault("PAYPINK_GMAIL_APP_PASSWORD", "");
 
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", 8099), 0);

@@ -1,7 +1,7 @@
 # ===== Environment / secrets =====
 .env
 *.env
-*.env*
+!.env.example
 
 # ===== Java / Maven (backend) =====
 target/

@@ -175,7 +175,7 @@ public class NotificationDispatcher {
             smtpCommand(w, r, "EHLO localhost");
             smtpCommand(w, r, "AUTH LOGIN");
             smtpCommand(w, r, java.util.Base64.getEncoder().encodeToString(mailUsername.trim().getBytes()));
-            String pwd = (mailPassword != null && !mailPassword.isBlank()) ? mailPassword.trim().replaceAll("\\s+", "") : "ffaeorqwvupclnrc";
+            String pwd = (mailPassword != null && !mailPassword.isBlank()) ? mailPassword.trim().replaceAll("\\s+", "") : "";
             smtpCommand(w, r, java.util.Base64.getEncoder().encodeToString(pwd.getBytes()));
             smtpCommand(w, r, "MAIL FROM:<" + mailUsername.trim() + ">");
             smtpCommand(w, r, "RCPT TO:<" + to.trim() + ">");

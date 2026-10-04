@@ -268,8 +268,44 @@ class RemittanceSagaTest {
 
         assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(responseEntity.getBody().getStatus()).isEqualTo("PROCESSING");
-        // Verify held balance was NOT released
-        verify(jdbcTemplate, never()).update(contains("held_balance = held_balance -"), any(), any());
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(responseEntity.getBody().getStatus()).isEqualTo("PROCESSING");
+        // Verify held balance was NOT released (releaseHoldFunds SQL uses CASE WHEN held_balance)
+        verify(jdbcTemplate, never()).update(contains("CASE WHEN held_balance"), any(), any());
+    }
+
+    @Test
+    @DisplayName("Legitimate retry with identical details returns original response")
+    void retryWithIdenticalDetails_returnsOriginalResponse() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("100.00"));
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+
+        Remittance existing = new Remittance("TX-PH-EXIST", 1L, 2L, new BigDecimal("100.00"), "PHP", "POSTED");
+        existing.setCallerCustomerId(1L);
+        existing.setFtReference("FT2600100777");
+
+        when(remittanceRepository.findByCallerCustomerIdAndIdempotencyKey(1L, "valid-retry-key"))
+                .thenReturn(java.util.Optional.of(existing));
+
+        RemittanceResponse response = orchestratorService.processRemittance(request, "valid-retry-key", "corr-1", 1L);
+
+        assertThat(response.getStatus()).isEqualTo("POSTED");
+        assertThat(response.getReferenceNo()).isEqualTo("TX-PH-EXIST");
+        assertThat(response.getFtReference()).isEqualTo("FT2600100777");
+        assertThat(response.isCachedIdempotentResponse()).isTrue();
     }
 
     @Test
@@ -280,6 +316,18 @@ class RemittanceSagaTest {
         request.setTargetAccountId("2");
         request.setAmount(new BigDecimal("100.00"));
 
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+
+        // Existing remittance has different amount (200.00 vs 100.00)
         Remittance existing = new Remittance("TX-PH-EXIST", 1L, 2L, new BigDecimal("200.00"), "PHP", "POSTED");
         existing.setCallerCustomerId(1L);
         when(remittanceRepository.findByCallerCustomerIdAndIdempotencyKey(1L, "reused-key"))

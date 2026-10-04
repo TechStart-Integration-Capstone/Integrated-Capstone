@@ -39,7 +39,8 @@ CREATE TABLE dbo.ACCOUNT (
     created_date     DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT fk_account_customer FOREIGN KEY (customer_id) REFERENCES dbo.CUSTOMER(customer_id),
     CONSTRAINT chk_account_balance_positive CHECK (current_balance >= 0.0000),
-    CONSTRAINT chk_account_held_positive CHECK (held_balance >= 0.0000)
+    CONSTRAINT chk_account_held_positive CHECK (held_balance >= 0.0000),
+    CONSTRAINT chk_account_held_le_balance CHECK (held_balance <= current_balance)
 );
 GO
 
@@ -117,8 +118,7 @@ CREATE TABLE dbo.REMITTANCE (
     created_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     updated_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     CONSTRAINT fk_remittance_src_account FOREIGN KEY (source_account_id) REFERENCES dbo.ACCOUNT(account_id),
-    CONSTRAINT fk_remittance_tgt_account FOREIGN KEY (target_account_id) REFERENCES dbo.ACCOUNT(account_id),
-    CONSTRAINT uq_remittance_customer_idemp UNIQUE (caller_customer_id, idempotency_key)
+    CONSTRAINT fk_remittance_tgt_account FOREIGN KEY (target_account_id) REFERENCES dbo.ACCOUNT(account_id)
 );
 GO
 
@@ -131,6 +131,7 @@ CREATE INDEX idx_outbox_status    ON dbo.OUTBOX_EVENT(status, created_date);
 CREATE INDEX idx_audit_cust_id    ON dbo.AUDIT_LOG(customer_id, timestamp);
 CREATE INDEX idx_remittance_ref   ON dbo.REMITTANCE(reference_no);
 CREATE INDEX idx_remittance_stat  ON dbo.REMITTANCE(status);
+CREATE UNIQUE INDEX uq_remittance_customer_idemp ON dbo.REMITTANCE(caller_customer_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
 GO
 
 -- Seed data — same demo users as Oracle schema

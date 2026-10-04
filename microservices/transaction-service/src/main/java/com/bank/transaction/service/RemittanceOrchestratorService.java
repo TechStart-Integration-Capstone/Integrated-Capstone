@@ -96,9 +96,12 @@ public class RemittanceOrchestratorService {
             if (existingOpt.isPresent()) {
                 Remittance existing = existingOpt.get();
 
-                // Validate request details match
-                if (!existing.getSourceAccountId().equals(request.getSourceAccountId())
-                        || !existing.getTargetAccountId().equals(request.getTargetAccountId())
+                RemittanceLedgerService.AccountInfo srcAcc = ledgerService.resolveAccount(request.getSourceAccountId());
+                RemittanceLedgerService.AccountInfo tgtAcc = ledgerService.resolveAccount(request.getTargetAccountId());
+
+                // Validate request details match (comparing Long vs Long)
+                if (!existing.getSourceAccountId().equals(srcAcc.id())
+                        || !existing.getTargetAccountId().equals(tgtAcc.id())
                         || existing.getAmount().compareTo(request.getAmount()) != 0) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT,
                             "This Idempotency-Key was already used for a transfer with different request details.");
@@ -178,7 +181,14 @@ public class RemittanceOrchestratorService {
             }
 
             // ── Step 3: Hold Funds SECOND (Ownership Check + Same-Account Check + Atomic held_balance) ──────
-            Remittance remittance = ledgerService.holdFunds(request, referenceNo, idempotencyKey, callerCustomerId);
+            Remittance remittance;
+            try {
+                remittance = ledgerService.holdFunds(request, referenceNo, idempotencyKey, callerCustomerId);
+            } catch (org.springframework.dao.DataIntegrityViolationException dive) {
+                log.warn("[remittance-orchestrator] Concurrent duplicate idempotency key insertion detected for customerId={} key={}", callerCustomerId, idempotencyKey);
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "A transfer request with this Idempotency-Key is currently in progress. Please retry shortly.");
+            }
 
             // ── Step 4 & 5: T24 Core Adapter & Ledger Commit (With Exception Guardrail) ──────
             RemittanceResponse finalResponse;
