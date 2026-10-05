@@ -13,6 +13,17 @@ public class BankingAccountNumberMigration implements ApplicationRunner {
     public BankingAccountNumberMigration(JdbcTemplate jdbc){this.jdbc=jdbc;}
     @Override @Transactional
     public void run(ApplicationArguments args) {
+        try {
+            Integer tableExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'ACCOUNT'",
+                Integer.class
+            );
+            if (tableExists == null || tableExists == 0) {
+                return;
+            }
+        } catch (Exception e) {
+            return;
+        }
         var accounts=jdbc.query("SELECT account_id,account_number,customer_id,account_type FROM ACCOUNT ORDER BY account_id",
                 (rs,row) -> new Existing(rs.getLong(1),rs.getString(2),rs.getLong(3),rs.getString(4)));
         Set<String> reserved = new HashSet<>();

@@ -13,7 +13,7 @@ services:
     # No host port — internal only, connect via docker exec or azure-data-studio through docker network
     volumes:
       - azuresql_data:/var/opt/mssql
-      - ./../backend/ledger-core/src/main/resources/schema-azuresql.sql:/mssql-server-setup-scripts.d/01_schema.sql:ro
+      - ./../microservices/transaction-service/src/main/resources/schema-azuresql.sql:/mssql-server-setup-scripts.d/01_schema.sql:ro
       - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/02_seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1"]
@@ -34,7 +34,7 @@ services:
     # No host port — internal only
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./../backend/event-consumers/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./../microservices/audit-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
       interval: 10s
