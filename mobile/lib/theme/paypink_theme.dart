@@ -22,6 +22,8 @@ class PayPinkTheme {
   static const Color amberBg = Color(0xFFFEF3C7);
   static const Color red = Color(0xFFB91C1C);
   static const Color redBg = Color(0xFFFEE2E2);
+  static const Color indigo = Color(0xFF4F46E5);
+  static const Color indigoBg = Color(0xFFEEF2FF);
 
   // Glassmorphism tokens
   static const Color glassWhite = Color(0xB8FFFFFF);

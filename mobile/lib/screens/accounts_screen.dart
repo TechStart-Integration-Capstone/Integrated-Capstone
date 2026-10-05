@@ -23,6 +23,7 @@ class AccountsScreen extends StatefulWidget {
 class _AccountsScreenState extends State<AccountsScreen> {
   bool _maskEveryday = true;
   bool _maskSavings = false;
+  bool _maskLoan = true;
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +72,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       border: Border.all(color: PayPinkTheme.pink),
                     ),
                     child: Text(
-                      '2 linked',
+                      '3 linked',
                       style: PayPinkTheme.body(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
@@ -117,6 +118,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
             isMasked: _maskEveryday,
             onToggleMask: () => setState(() => _maskEveryday = !_maskEveryday),
             balance: 50.00,
+            heldBalance: 0.00,
+            interestRate: 0.25,
             type: 'EVERYDAY_ACCOUNT',
             status: 'Active',
             ledgerId: 'everyday-5046',
@@ -135,12 +138,29 @@ class _AccountsScreenState extends State<AccountsScreen> {
             isMasked: _maskSavings,
             onToggleMask: () => setState(() => _maskSavings = !_maskSavings),
             balance: 0.00,
+            heldBalance: 0.00,
+            interestRate: 1.50,
             type: 'SAVINGS_ACCOUNT',
             status: 'Active',
             ledgerId: 'savings-8504',
             icon: Icons.savings_rounded,
             iconColor: PayPinkTheme.wine,
             iconBg: PayPinkTheme.pinkSubtle,
+          ),
+          const SizedBox(height: 14),
+
+          // Personal Loan Account Card
+          _buildLoanCard(
+            context,
+            name: 'Personal Loan',
+            maskedNumber: _maskLoan ? '•••• •••• 9921' : '001 9 9921 4410',
+            fullNumber: '001 9 9921 4410',
+            isMasked: _maskLoan,
+            onToggleMask: () => setState(() => _maskLoan = !_maskLoan),
+            remainingBalance: 45000.00,
+            amortization: 3750.00,
+            dueDate: 'Oct 25, 2026',
+            status: 'Current',
           ),
           const SizedBox(height: 20),
 
@@ -189,6 +209,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
     required bool isMasked,
     required VoidCallback onToggleMask,
     required double balance,
+    double heldBalance = 0.0,
+    double interestRate = 1.50,
     required String type,
     required String status,
     required String ledgerId,
@@ -279,7 +301,49 @@ class _AccountsScreenState extends State<AccountsScreen> {
               letterSpacing: -0.6,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          // Available vs Held vs Interest Pills
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: PayPinkTheme.greenBg,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Avail: ₱${balance.toStringAsFixed(2)}',
+                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: PayPinkTheme.line),
+                ),
+                child: Text(
+                  'Held: ₱${heldBalance.toStringAsFixed(2)}',
+                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w600, color: PayPinkTheme.muted),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: PayPinkTheme.pinkSubtle,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${interestRate.toStringAsFixed(2)}% p.a.',
+                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
           const Divider(color: PayPinkTheme.line, height: 1),
           const SizedBox(height: 10),
           Row(
@@ -330,6 +394,194 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         const SizedBox(width: 4),
                         Text(
                           'Transfer',
+                          style: PayPinkTheme.body(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: PayPinkTheme.wine,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoanCard(
+    BuildContext context, {
+    required String name,
+    required String maskedNumber,
+    required String fullNumber,
+    required bool isMasked,
+    required VoidCallback onToggleMask,
+    required double remainingBalance,
+    required double amortization,
+    required String dueDate,
+    required String status,
+  }) {
+    return GlassCard(
+      onTap: () => PayPinkBottomSheets.showLoanDetails(
+        context,
+        loanNumber: fullNumber,
+        remaining: remainingBalance,
+        amortization: amortization,
+        dueDate: dueDate,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: PayPinkTheme.indigoBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.real_estate_agent_rounded, color: PayPinkTheme.indigo, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 2),
+                      GestureDetector(
+                        onTap: onToggleMask,
+                        child: Row(
+                          children: [
+                            Text(
+                              maskedNumber,
+                              style: PayPinkTheme.mono(fontSize: 10, color: PayPinkTheme.muted),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              isMasked ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              size: 12,
+                              color: PayPinkTheme.muted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: PayPinkTheme.indigoBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '• $status',
+                  style: PayPinkTheme.body(
+                    fontSize: 9.5,
+                    color: PayPinkTheme.indigo,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.hideBalances ? '••••••' : '₱${remainingBalance.toStringAsFixed(2)}',
+                    style: PayPinkTheme.display(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.6,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text('Remaining loan balance', style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: PayPinkTheme.pinkSubtle,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('Due: $dueDate', style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine)),
+                    Text('₱${amortization.toStringAsFixed(0)}/mo', style: PayPinkTheme.mono(fontSize: 10.5, fontWeight: FontWeight.w800, color: PayPinkTheme.ink)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(color: PayPinkTheme.line, height: 1),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '5.50% p.a. · 12 Mo',
+                style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+              ),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => PayPinkBottomSheets.showLoanDetails(
+                      context,
+                      loanNumber: fullNumber,
+                      remaining: remainingBalance,
+                      amortization: amortization,
+                      dueDate: dueDate,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_month_outlined, size: 13, color: PayPinkTheme.wine),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Schedule',
+                          style: PayPinkTheme.body(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: PayPinkTheme.wine,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  GestureDetector(
+                    onTap: () => PayPinkBottomSheets.showLoanDetails(
+                      context,
+                      loanNumber: fullNumber,
+                      remaining: remainingBalance,
+                      amortization: amortization,
+                      dueDate: dueDate,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.payment_rounded, size: 14, color: PayPinkTheme.wine),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Pay Loan',
                           style: PayPinkTheme.body(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,

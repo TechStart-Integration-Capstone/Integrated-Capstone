@@ -87,6 +87,35 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       isCredit: true,
       ofscore: 'FUNDS.TRANSFER,AUTH/I/PROCESS,//PH100201,DEBIT.ACCT.NO=CORE.POOL,CREDIT.ACCT.NO=5046,AMOUNT=50.00,CCY=PHP',
     ),
+    TransactionItem(
+      id: 'TRX-20260925-882',
+      title: 'Personal Loan Disbursement',
+      date: 'Sep 25, 2026',
+      account: 'Loan •••• 9921',
+      amount: 50000.00,
+      isCredit: true,
+      ofscore: 'LD.LOANS.AND.DEPOSITS,AUTH/I/PROCESS,//PH092501,DEBIT.ACCT.NO=TREASURY.POOL,CREDIT.ACCT.NO=9921,AMOUNT=50000.00,CCY=PHP',
+    ),
+    TransactionItem(
+      id: 'TRX-20260928-104',
+      title: 'Coffee Bean Manila (Reversed)',
+      date: 'Sep 28, 2026',
+      account: 'Account •••• 5046',
+      amount: 185.00,
+      isCredit: false,
+      ofscore: 'FUNDS.TRANSFER,REVERSE/I/PROCESS,//REV20260928,DEBIT.ACCT.NO=MERCH.COFFEE,CREDIT.ACCT.NO=5046,AMOUNT=185.00,CCY=PHP',
+      status: 'REVERSED',
+    ),
+    TransactionItem(
+      id: 'TRX-20261001-331',
+      title: 'External Transfer (DLQ Retrying)',
+      date: 'Oct 1, 2026',
+      account: 'Account •••• 5046',
+      amount: 500.00,
+      isCredit: false,
+      ofscore: 'FUNDS.TRANSFER,AUTH/I/PROCESS,//PH100133,DEBIT.ACCT.NO=5046,CREDIT.ACCT.NO=EXT.9912,AMOUNT=500.00,CCY=PHP',
+      status: 'FAILED_DLQ',
+    ),
   ];
 
   @override

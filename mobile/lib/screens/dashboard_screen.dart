@@ -334,7 +334,123 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 14),
+
+          // Spending Patterns & Customer 360 Insights Card
+          GlassCard(
+            onTap: () => PayPinkBottomSheets.showHardwareVault(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.donut_large_rounded, color: PayPinkTheme.wine, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Spending Patterns & Insights',
+                          style: PayPinkTheme.display(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: PayPinkTheme.ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: PayPinkTheme.greenBg,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Customer 360',
+                        style: PayPinkTheme.body(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: PayPinkTheme.green,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Multi-Segment Spending Distribution Bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    height: 8,
+                    child: Row(
+                      children: [
+                        Expanded(flex: 60, child: Container(color: PayPinkTheme.wine)),
+                        const SizedBox(width: 2),
+                        Expanded(flex: 25, child: Container(color: PayPinkTheme.green)),
+                        const SizedBox(width: 2),
+                        Expanded(flex: 15, child: Container(color: PayPinkTheme.indigo)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Legend
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: PayPinkTheme.wine, shape: BoxShape.circle)),
+                        const SizedBox(width: 4),
+                        Text('Transfers (60%)', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: PayPinkTheme.green, shape: BoxShape.circle)),
+                        const SizedBox(width: 4),
+                        Text('Bills & Utilities (25%)', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Container(width: 8, height: 8, decoration: const BoxDecoration(color: PayPinkTheme.indigo, shape: BoxShape.circle)),
+                        const SizedBox(width: 4),
+                        Text('Services (15%)', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: PayPinkTheme.line, height: 1),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.security_rounded, size: 13, color: PayPinkTheme.green),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Risk Score: 0.12 (Safe) · KYC L3',
+                          style: PayPinkTheme.mono(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Security vault →',
+                      style: PayPinkTheme.body(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: PayPinkTheme.wine,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
 
           // Your Accounts Section Header
           Row(
@@ -359,7 +475,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: Border.all(color: PayPinkTheme.pink),
                     ),
                     child: Text(
-                      '2 in one place',
+                      '3 linked',
                       style: PayPinkTheme.body(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
@@ -598,6 +714,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     Text(
                       'Account details →',
+                      style: PayPinkTheme.body(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: PayPinkTheme.wine,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Personal Loan Preview Card
+          GlassCard(
+            onTap: () => PayPinkBottomSheets.showLoanDetails(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: PayPinkTheme.indigoBg,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.real_estate_agent_rounded,
+                            color: PayPinkTheme.indigo,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Personal Loan',
+                              style: PayPinkTheme.display(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '001 9 9921 4410',
+                              style: PayPinkTheme.mono(
+                                fontSize: 10,
+                                color: PayPinkTheme.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: PayPinkTheme.indigoBg,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '• Current',
+                        style: PayPinkTheme.body(
+                          fontSize: 9.5,
+                          color: PayPinkTheme.indigo,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.hideBalances ? '••••••' : '₱45,000.00',
+                          style: PayPinkTheme.display(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Remaining loan balance',
+                          style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: PayPinkTheme.pinkSubtle,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Due: Oct 25 (₱3,750)',
+                        style: PayPinkTheme.body(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: PayPinkTheme.wine,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: PayPinkTheme.line, height: 1),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '5.50% p.a. · 12 Mo',
+                      style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                    ),
+                    Text(
+                      'Loan details →',
                       style: PayPinkTheme.body(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
