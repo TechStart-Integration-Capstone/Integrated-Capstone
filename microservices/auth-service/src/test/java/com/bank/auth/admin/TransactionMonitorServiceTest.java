@@ -21,10 +21,10 @@ public class TransactionMonitorServiceTest {
         jdbc.execute("CREATE SCHEMA dbo");
         jdbc.execute("CREATE ALIAS ISJSON FOR 'com.bank.auth.admin.TransactionMonitorServiceTest.isJson'");
         jdbc.execute("CREATE ALIAS JSON_VALUE FOR 'com.bank.auth.admin.TransactionMonitorServiceTest.jsonValue'");
-        jdbc.execute("CREATE TABLE dbo.ACCOUNT(account_id BIGINT PRIMARY KEY, account_number VARCHAR(30))");
-        jdbc.execute("CREATE TABLE dbo.LEDGER_TRANSACTION(transaction_id BIGINT PRIMARY KEY, reference_no VARCHAR(64), transaction_date TIMESTAMP, from_account_id BIGINT, transaction_type VARCHAR(30), operation VARCHAR(10), amount DECIMAL(18,4), source_currency VARCHAR(10), status VARCHAR(20))");
+        jdbc.execute("CREATE TABLE dbo.ACCOUNT(account_id BIGINT PRIMARY KEY, account_number VARCHAR(30), account_type VARCHAR(30))");
+        jdbc.execute("CREATE TABLE dbo.LEDGER_TRANSACTION(transaction_id BIGINT PRIMARY KEY, reference_no VARCHAR(64), transaction_date TIMESTAMP, from_account_id BIGINT, transaction_type VARCHAR(30), amount DECIMAL(18,4), source_currency VARCHAR(10), status VARCHAR(20), to_account_id BIGINT)");
         jdbc.execute("CREATE TABLE dbo.OUTBOX_EVENT(event_id BIGINT PRIMARY KEY, transaction_id BIGINT, payload VARCHAR(4000))");
-        jdbc.update("INSERT INTO dbo.ACCOUNT VALUES (10, '001181233469')");
+        jdbc.update("INSERT INTO dbo.ACCOUNT VALUES (10, '001181233469', 'SAVINGS_ACCOUNT')");
     }
 
     public static int isJson(String value) {
@@ -41,8 +41,12 @@ public class TransactionMonitorServiceTest {
     }
 
     private void insert(long id, String date, String type, String operation) {
-        jdbc.update("INSERT INTO dbo.LEDGER_TRANSACTION VALUES (?, ?, ?, 10, ?, ?, 15.2500, 'PHP', 'SUCCESS')",
-                id, "DB-REF-" + id, LocalDateTime.parse(date), type, operation);
+        jdbc.update("INSERT INTO dbo.LEDGER_TRANSACTION VALUES (?, ?, ?, 10, ?, 15.2500, 'PHP', 'SUCCESS', NULL)",
+                id, "DB-REF-" + id, LocalDateTime.parse(date), type);
+        if (operation != null) {
+            jdbc.update("INSERT INTO dbo.OUTBOX_EVENT VALUES (?, ?, ?)", id + 100, id,
+                    "{\"operation\":\"" + operation + "\"}");
+        }
     }
 
     @Test void filtersPhilippineDayAndOrdersNewestFirstIncludingTies() {
@@ -79,5 +83,16 @@ public class TransactionMonitorServiceTest {
 
     @Test void emptyDatabaseReturnsNoSampleRows() {
         assertThat(monitor("2026-10-03T12:00:00Z").today()).isEmpty();
+    }
+
+    @Test void excludesTransactionsInvolvingDedicatedTestAccounts() {
+        jdbc.update("INSERT INTO dbo.ACCOUNT VALUES (20, '001981233461', 'STRESS_TEST_ACCOUNT')");
+        insert(1, "2026-10-03T10:00:00", "DEBIT", null);
+        insert(2, "2026-10-03T11:00:00", "TRANSFER_OUT", null);
+        insert(3, "2026-10-03T12:00:00", "CREDIT", null);
+        jdbc.update("UPDATE dbo.LEDGER_TRANSACTION SET from_account_id = 20 WHERE transaction_id = 1");
+        jdbc.update("UPDATE dbo.LEDGER_TRANSACTION SET to_account_id = 20 WHERE transaction_id = 2");
+        assertThat(monitor("2026-10-03T12:00:00Z").today())
+                .extracting(TransactionMonitorService.Row::transactionId).containsExactly("3");
     }
 }
