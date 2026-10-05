@@ -13,8 +13,11 @@ services:
     # No host port — internal only, connect via docker exec or azure-data-studio through docker network
     volumes:
       - azuresql_data:/var/opt/mssql
+      # Setup scripts run ONLY when the data volume is empty (first start). Existing volumes skip them;
+      # loan-service applies 02_loans.sql itself at startup, so loans work either way.
       - ./../microservices/transaction-service/src/main/resources/schema-azuresql.sql:/mssql-server-setup-scripts.d/01_schema.sql:ro
-      - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/02_seed.sql:ro
+      - ./../microservices/loan-service/src/main/resources/db/phase6_loans.sql:/mssql-server-setup-scripts.d/02_loans.sql:ro
+      - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/03_seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1"]
       interval: 10s
@@ -35,7 +38,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./../microservices/audit-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./../backend/event-consumers/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./../backend/notification-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/02_notification.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
