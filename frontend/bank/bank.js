@@ -23,7 +23,7 @@ const accountName = type => ({SAVINGS_ACCOUNT:'Savings account', EVERYDAY_ACCOUN
 const formattedAccountNumber = number => /^\d{12}$/.test(number) ? number.replace(/^(\d{3})(\d)(\d{7})(\d)$/,'$1 $2 $3 $4') : number;
 const accountNumber = account => state.visibleAccounts.has(account.accountId) ? formattedAccountNumber(account.accountNumber) : `•••• •••• ${account.accountNumber.slice(-4)}`;
 const isSuccess = tx => ['SUCCESS', 'COMPLETED'].includes(tx.status);
-const friendlyType = tx => tx.type?.startsWith('EXT_') ? (tx.type.includes('PESONET') ? 'PESONet transfer' : 'InstaPay transfer') : ({CREDIT:'Money received', DEBIT:'Payment', WELCOME_GIFT:'Welcome gift', TRANSFER_OUT:'Transfer sent', TRANSFER_IN:'Transfer received', TRANSFER:'Account transfer', INSTAPAY:'InstaPay transfer', PESONET:'PESONet transfer', WITHDRAWAL:'Withdrawal', DEPOSIT:'Deposit'}[tx.type] || String(tx.type || 'Transaction').replaceAll('_',' ').toLowerCase().replace(/^./, c => c.toUpperCase()));
+const friendlyType = tx => tx.type?.startsWith('EXT_') ? (tx.type.includes('PESONET') ? 'PESONet transfer' : 'InstaPay transfer') : ({CREDIT:'Money received', DEBIT:'Payment', WELCOME_GIFT:'Welcome gift', TRANSFER_OUT:'Transfer sent', TRANSFER_IN:'Transfer received', TRANSFER:'Account transfer', INSTAPAY:'InstaPay transfer', PESONET:'PESONet transfer', WITHDRAWAL:'Withdrawal', DEPOSIT:'Deposit', LOAN_DISBURSEMENT:'Loan received', LOAN_REPAYMENT:'Loan payment'}[tx.type] || String(tx.type || 'Transaction').replaceAll('_',' ').toLowerCase().replace(/^./, c => c.toUpperCase()));
 const txDate = tx => new Date(tx.date.endsWith('Z') || /[+-]\d\d:\d\d$/.test(tx.date) ? tx.date : `${tx.date}Z`);
 const shortDate = tx => txDate(tx).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
 const statusPill = status => `<span class="pill ${['ACTIVE','SUCCESS','COMPLETED'].includes(status) ? 'pill-green' : status === 'FAILED' ? 'pill-red' : 'pill-gray'}">${escapeHtml(status === 'SUCCESS' ? 'Completed' : String(status).toLowerCase().replace(/^./, c => c.toUpperCase()))}</span>`;
@@ -37,13 +37,14 @@ function toast(message, error = false) {
   toastTimer = setTimeout(() => { node.hidden = true; }, 4500);
 }
 
-async function api(path, {method = 'GET', body, authenticated = true} = {}) {
-  const headers = {Accept:'application/json'};
+async function api(path, {method = 'GET', body, authenticated = true, headers: customHeaders = {}} = {}) {
+  const headers = {Accept:'application/json', ...customHeaders};
   if (body) headers['Content-Type'] = 'application/json';
   if (authenticated && state.session) headers.Authorization = `Bearer ${state.session.token}`;
   let response;
+  const targetUrl = path.startsWith('/api/') ? path : `${API}${path}`;
   try {
-    response = await fetch(`${API}${path}`, {method, headers, body:body ? JSON.stringify(body) : undefined,
+    response = await fetch(targetUrl, {method, headers, body:body ? JSON.stringify(body) : undefined,
       cache:'no-store', signal:AbortSignal.timeout(15000)});
   } catch {
     throw new Error('We couldn’t reach the bank. Check your connection and try again.');
@@ -54,9 +55,11 @@ async function api(path, {method = 'GET', body, authenticated = true} = {}) {
     throw new Error('Your session has ended. Please log in again.');
   }
   if (!response.ok) {
-    const error = new Error(data.message || (response.status === 429
-      ? 'Too many requests. Please wait a moment and try again.' : 'We couldn’t complete your request. Please try again.'));
+    const errorMsg = data.error || data.message || data.reason || (response.status === 429
+      ? 'Too many requests. Please wait a moment and try again.' : 'We couldn’t complete your request. Please try again.');
+    const error = new Error(errorMsg);
     error.status = response.status;
+    error.data = data;
     throw error;
   }
   return data;
@@ -105,7 +108,7 @@ function renderShell() {
   const initials = name.split(/\s+/).slice(0,2).map(part => part[0]).join('').toUpperCase();
   app.innerHTML = `<div class="bank-layout">
     <aside class="sidebar">${brand()}<div class="eyebrow">YOUR BANKING</div>
-      <nav aria-label="Main navigation">${navLink('overview','Overview','home')}${navLink('accounts','My accounts','wallet')}${navLink('transfer','Transfers','arrow')}${navLink('activity','Transactions','activity')}</nav>
+      <nav aria-label="Main navigation">${navLink('overview','Overview','home')}${navLink('accounts','My accounts','wallet')}${navLink('transfer','Transfers','arrow')}${navLink('activity','Transactions','activity')}${navLink('loans','Loans','coins')}</nav>
       <div class="sidebar-bottom"><div class="privacy-note">${icon('shield')}<strong>A little privacy goes a long way.</strong><p>Keep your account details and password just for you.</p></div><button class="logout" data-action="logout">${icon('logout')}<span>Log out</span></button></div>
     </aside>
     <div class="bank-content"><header class="topbar"><div class="breadcrumb"><span>PayPink</span><span>/</span><strong id="breadcrumb-page">Personal banking</strong></div>
@@ -121,7 +124,7 @@ function heading(title, subtitle) {
 function renderPage() {
   const main = document.querySelector('#main');
   if (!state.session || !main) return;
-  const titles = {overview:'Overview',accounts:'My accounts',activity:'Transactions',transfer:'Transfers'};
+  const titles = {overview:'Overview',accounts:'My accounts',activity:'Transactions',transfer:'Transfers',loans:'Loans'};
   document.title = `${titles[state.page]} — PayPink`;
   document.querySelector('#breadcrumb-page').textContent = titles[state.page];
   document.querySelectorAll('.nav-link').forEach(button => {
@@ -136,7 +139,7 @@ function renderPage() {
     return;
   }
   main.innerHTML = (state.error ? `<div class="notice" role="alert">${escapeHtml(state.error)} Showing your last loaded information.</div>` : '')
-    + (state.page === 'overview' ? overview() : state.page === 'accounts' ? accountsPage() : state.page === 'transfer' ? transferPage() : activityPage())
+    + (state.page === 'overview' ? overview() : state.page === 'accounts' ? accountsPage() : state.page === 'transfer' ? transferPage() : state.page === 'loans' ? loansPage() : activityPage())
     + `<footer class="page-footer"><span>© ${new Date().getFullYear()} PayPink. A little more everyday.</span><span>${icon('lock')} ${state.updated ? `Updated ${state.updated.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}` : 'Personal banking'} · Philippine peso accounts</span></footer>`;
 }
 
@@ -429,6 +432,17 @@ function transferPage() {
       <aside class="transfer-guide"><span class="circle-icon">${icon('activity')}</span><h2>Your money, on the move.</h2><p>Move money from Everyday to Savings, or send to someone else with PayPink.</p><ol><li>Choose the account to pay from.</li><li>Select your receiving account or enter a PayPink account number.</li><li>Review the details and confirm.</li></ol><div class="transfer-guide-note">${icon('shield')} Double-check the receiving account number before sending.</div></aside></div>`;
 }
 
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID(); } catch (e) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 async function reviewTransfer() {
   if (state.transfer?.mode === 'external') return reviewExternalTransfer();
   const form = state.transfer;
@@ -451,7 +465,7 @@ async function reviewTransfer() {
     destination = form.recipient.accountNumber;
     if (destination === source.accountNumber) { form.error = 'Choose a different receiving account.'; renderPage(); return; }
   }
-  form.review = {sourceAccountId:source.accountId,destinationAccountNumber:destination,amount:form.amount,idempotencyKey:crypto.randomUUID()};
+  form.review = {sourceAccountId:source.accountId,destinationAccountNumber:destination,amount:form.amount,idempotencyKey:generateUUID()};
   showDialog('Review your transfer', `<p class="muted">Please check these details before sending.</p><dl class="detail-list">${detail('From',`${escapeHtml(accountName(source.accountType))} · ${escapeHtml(source.accountNumber.slice(-4))}`)}${detail('Recipient',escapeHtml(form.mode === 'own' ? state.profile.fullName : form.recipient.fullName))}${detail('Recipient account',escapeHtml(maskedNumber(destination)))}${detail('Amount',escapeHtml(money(amount)))}${detail('Transfer fee','₱0.00')}${detail('Total to deduct',`<strong>${escapeHtml(money(amount))}</strong>`)}</dl>`, '<button class="btn btn-secondary" data-action="close-dialog">Go back</button><button class="btn btn-primary" data-action="confirm-transfer">Confirm transfer</button>');
 }
 
@@ -467,12 +481,43 @@ async function sendTransfer() {
   form.sending = true; form.error = '';
   dialog.close(); renderPage();
   try {
-    const receipt = await api('/transfers',{method:'POST',body:request});
+    const idempKey = request.idempotencyKey || (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'idemp-' + Date.now());
+    const payload = {
+      sourceAccountId: String(request.sourceAccountId),
+      targetAccountId: String(request.destinationAccountNumber),
+      amount: parseFloat(request.amount),
+      currency: 'PHP'
+    };
+
+    const res = await api('/api/v1/remittance/transfer', {
+      method: 'POST',
+      body: payload,
+      headers: {
+        'Idempotency-Key': idempKey,
+        'X-Correlation-ID': 'corr-' + Date.now()
+      }
+    });
+
     if (generation !== state.generation || !state.session) return;
     delete state.session.pendingTransfer; saveSession();
+
+    const receipt = {
+      reference: res.referenceNo || ('PP-' + Date.now()),
+      ftReference: res.ftReference,
+      status: (res.status === 'POSTED' || res.status === 'COMPLETED') ? 'SUCCESS' : res.status,
+      amount: res.amount || request.amount,
+      currency: 'PHP',
+      recipientName: form.recipient ? form.recipient.fullName : (form.mode === 'own' ? state.profile.fullName : 'PayPink customer'),
+      destinationAccountNumber: request.destinationAccountNumber,
+      date: new Date().toISOString(),
+      riskScore: res.riskScore,
+      riskDecision: res.riskDecision,
+      reason: res.reason
+    };
+
     form.receipt = receipt; form.review = null;
     await refresh();
-    toast('Transfer complete. The receiving account has been credited.');
+    toast('Transfer complete. Screened by Risk Engine & posted via T24 Core.');
 
     // Real-time synchronization broadcast across banking and admin tabs
     try {
@@ -482,6 +527,7 @@ async function sendTransfer() {
       const syncEvent = {
         type: 'CUSTOMER_TRANSFER',
         reference: receipt.reference,
+        ftReference: receipt.ftReference,
         sourceAccountId: request.sourceAccountId,
         sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : '001181233469',
         sourceBeforeBalance: beforeBal,
@@ -513,8 +559,10 @@ async function sendTransfer() {
 }
 
 function transferReceipt(receipt) {
+  const ftItem = receipt.ftReference ? detail('T24 Core reference', escapeHtml(receipt.ftReference)) : '';
+  const riskItem = (receipt.riskScore !== undefined && receipt.riskScore !== null) ? detail('Risk evaluation', `Score ${escapeHtml(receipt.riskScore)} (${escapeHtml(receipt.riskDecision || 'APPROVED')})`) : '';
   return heading('All sent.', 'Your transfer is complete. Both account balances have been updated.')
-    + `<section class="transfer-receipt"><span class="receipt-check">${icon('check')}</span><h2>Transfer successful</h2><div class="receipt-amount">${escapeHtml(money(receipt.amount,receipt.currency))}</div><p class="receipt-recipient">${escapeHtml(receipt.recipientName || 'PayPink customer')}</p><p class="muted">${escapeHtml(maskedNumber(receipt.destinationAccountNumber))}</p><dl class="detail-list">${detail('Reference number',escapeHtml(receipt.reference))}${detail('Status',statusPill(receipt.status))}${detail('Transfer fee','₱0.00')}${detail('Date & time',escapeHtml(txDate({date:receipt.date}).toLocaleString('en-PH')))}</dl><div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
+    + `<section class="transfer-receipt"><span class="receipt-check">${icon('check')}</span><h2>Transfer successful</h2><div class="receipt-amount">${escapeHtml(money(receipt.amount,receipt.currency))}</div><p class="receipt-recipient">${escapeHtml(receipt.recipientName || 'PayPink customer')}</p><p class="muted">${escapeHtml(maskedNumber(receipt.destinationAccountNumber))}</p><dl class="detail-list">${detail('Reference number',escapeHtml(receipt.reference))}${ftItem}${riskItem}${detail('Status',statusPill(receipt.status))}${detail('Transfer fee','₱0.00')}${detail('Date & time',escapeHtml(txDate({date:receipt.date}).toLocaleString('en-PH')))}</dl><div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
 }
 
 function recipientPicker() {

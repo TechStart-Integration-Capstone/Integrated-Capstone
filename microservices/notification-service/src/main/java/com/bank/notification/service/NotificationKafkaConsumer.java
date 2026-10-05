@@ -42,6 +42,12 @@ public class NotificationKafkaConsumer {
         try {
             JsonNode node = objectMapper.readTree(message);
 
+            if (LoanNotificationMessages.isLoanEvent(node)) {
+                LoanNotificationMessages.build(node).ifPresent(alert ->
+                        deliver(alert.customerId(), alert.accountId(), alert.referenceNo(), alert.message()));
+                return;
+            }
+
             Long   customerId = node.has("customerId")  ? node.get("customerId").asLong()  : 1L;
             Long   accountId  = node.has("accountId")   ? node.get("accountId").asLong()   : 0L;
             String operation  = node.has("operation")   ? node.get("operation").asText()   : "DEBIT";
@@ -56,20 +62,30 @@ public class NotificationKafkaConsumer {
                     currencySymbol(currency), amount,
                     operation.toLowerCase(), accountId, refNo);
 
-            // Dispatch over all three channels (Email / SMS / Push)
-            boolean delivered = dispatcher.dispatch(customerId, alertMsg, refNo);
-
-            // Persist delivery record — status reflects actual dispatch outcome
-            String status = delivered ? "SENT" : "FAILED";
-            notificationRepository.save(new Notification(customerId, alertMsg, status));
-
-            log.info("[notification-service] Notification {} for customerId={} ref={}",
-                    status, customerId, refNo);
+            deliver(customerId, accountId, refNo, alertMsg);
 
         } catch (Exception ex) {
             log.error("[notification-service] Failed to process notification event: {}",
                     ex.getMessage());
         }
+    }
+
+    /** Dispatch once per (reference_no, account_id) and persist the delivery record. */
+    private void deliver(Long customerId, Long accountId, String refNo, String alertMsg) {
+        if (notificationRepository.existsByReferenceNoAndAccountId(refNo, accountId)) {
+            log.info("[notification-service] Already notified ref={} accountId={} — skipped duplicate event", refNo, accountId);
+            return;
+        }
+
+        // Dispatch over all three channels (Email / SMS / Push)
+        boolean delivered = dispatcher.dispatch(customerId, alertMsg, refNo);
+
+        // Persist delivery record — status reflects actual dispatch outcome
+        String status = delivered ? "SENT" : "FAILED";
+        notificationRepository.save(new Notification(customerId, accountId, refNo, alertMsg, status));
+
+        log.info("[notification-service] Notification {} for customerId={} ref={}",
+                status, customerId, refNo);
     }
 
     private String currencySymbol(String currency) {

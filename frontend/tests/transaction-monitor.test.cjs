@@ -5,18 +5,24 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function app() {
+    const session = new Map();
     const elements = {
         'monitor-transactions-body': { innerHTML: '' },
         'monitor-status-filter': { value: 'ALL' },
         'monitor-type-filter': { value: 'ALL' }
     };
     const context = vm.createContext({
-        window: {}, console, AbortSignal,
+        window: {}, console, AbortSignal, atob,
         document: { addEventListener() {}, getElementById: id => elements[id] },
+        sessionStorage: {
+            getItem: key => session.get(key) ?? null,
+            setItem: (key, value) => session.set(key, value),
+            removeItem: key => session.delete(key)
+        },
         localStorage: { getItem() { throw new Error('Monitor must not load cached simulation rows'); } }
     });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/js/app.js'), 'utf8'), context);
-    return { context, elements, run: code => vm.runInContext(code, context), html: () => elements['monitor-transactions-body'].innerHTML };
+    return { context, elements, session, run: code => vm.runInContext(code, context), html: () => elements['monitor-transactions-body'].innerHTML };
 }
 
 function row(id, reference, date = new Date().toISOString(), operation = 'DEBIT') {
@@ -95,4 +101,50 @@ test('overlapping refreshes share one request', async () => {
     resolve({ ok: true, json: async () => [] });
     await Promise.all([first, second]);
     assert.match(a.html(), /No transactions today/);
+});
+
+test('simulation events cannot replace database rows when the monitor rerenders', async () => {
+    const a = app();
+    a.context.fetch = async () => ({ ok: true, json: async () => [row(1, 'DB-ROW')] });
+    await a.run('loadRecentTransactions()');
+    a.run("recentTransactions.unshift({ref:'SIMULATED',type:'CREDIT',amount:1000}); renderTransactionMonitor()");
+    assert.match(a.html(), /DB-ROW/);
+    assert.doesNotMatch(a.html(), /SIMULATED/);
+});
+
+test('expired authorization clears rows and asks for administrator sign-in', async () => {
+    const a = app();
+    a.run("currentJwtToken = 'expired-admin-token'");
+    a.context.fetch = async () => ({ ok: true, json: async () => [row(1, 'DB-ROW')] });
+    await a.run('loadRecentTransactions()');
+    a.context.fetch = async (url, options) => {
+        assert.equal(options.headers.Authorization, 'Bearer expired-admin-token');
+        return { ok: false, status: 401 };
+    };
+    await a.run('loadRecentTransactions()');
+    assert.match(a.html(), /Please sign in as an administrator/);
+    assert.doesNotMatch(a.html(), /DB-ROW/);
+});
+
+test('logout clears the monitor and discards responses still in flight', async () => {
+    const a = app();
+    let resolve;
+    a.run("currentJwtToken = 'admin-token'; showAdminToast = () => {}");
+    a.context.fetch = () => new Promise(r => { resolve = r; });
+    const pending = a.run('loadRecentTransactions()');
+    a.run('handleAdminLogout()');
+    resolve({ ok: true, json: async () => [row(1, 'PRIVATE-ROW')] });
+    await pending;
+    assert.match(a.html(), /Please sign in as an administrator/);
+    assert.doesNotMatch(a.html(), /PRIVATE-ROW/);
+});
+
+test('a cached customer token cannot masquerade as an administrator session', async () => {
+    const a = app();
+    const claims = Buffer.from(JSON.stringify({roles:['ROLE_CUSTOMER'],exp:Date.now()/1000+3600})).toString('base64url');
+    a.session.set('paypink_admin_jwt', `header.${claims}.signature`);
+    a.session.set('paypink_admin_user', JSON.stringify({ roles: ['ROLE_ADMIN'] }));
+    await a.run('initializeAuthSession()');
+    assert.equal(a.run('currentJwtToken'), null);
+    assert.equal(a.session.has('paypink_admin_jwt'), false);
 });

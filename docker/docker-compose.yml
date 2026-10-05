@@ -13,8 +13,11 @@ services:
     # No host port — internal only, connect via docker exec or azure-data-studio through docker network
     volumes:
       - azuresql_data:/var/opt/mssql
-      - ./../backend/ledger-core/src/main/resources/schema-azuresql.sql:/mssql-server-setup-scripts.d/01_schema.sql:ro
-      - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/02_seed.sql:ro
+      # Setup scripts run ONLY when the data volume is empty (first start). Existing volumes skip them;
+      # loan-service applies 02_loans.sql itself at startup, so loans work either way.
+      - ./../microservices/transaction-service/src/main/resources/schema-azuresql.sql:/mssql-server-setup-scripts.d/01_schema.sql:ro
+      - ./../microservices/loan-service/src/main/resources/db/phase6_loans.sql:/mssql-server-setup-scripts.d/02_loans.sql:ro
+      - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/03_seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1"]
       interval: 10s
@@ -34,7 +37,8 @@ services:
     # No host port — internal only
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./../backend/event-consumers/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./../microservices/audit-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./../backend/notification-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/02_notification.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
       interval: 10s
@@ -128,6 +132,8 @@ services:
         condition: service_started
       reconciliation-service:
         condition: service_started
+      loan-service:
+        condition: service_started
       redis:
         condition: service_healthy
     ports:
@@ -140,6 +146,7 @@ services:
       - ANALYTICS_SERVICE_HOST=analytics-service
       - RISK_ENGINE_HOST=risk-engine
       - T24_ADAPTER_HOST=t24-adapter
+      - LOAN_SERVICE_HOST=loan-service
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
@@ -378,6 +385,37 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     volumes:
       - ./../microservices/t24-adapter/target/t24-adapter.jar:/app/app.jar
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Loan Service (Phase 6) — apply / accept / repay / EOD
+  # ==========================================
+  loan-service:
+    build:
+      context: ../microservices/loan-service
+      dockerfile: Dockerfile
+    container_name: loan-service
+    depends_on:
+      azure-sql:
+        condition: service_healthy
+      transaction-service:
+        condition: service_started
+    # No host port — internal only, accessed via api-gateway:8080 (/api/v1/loans/**)
+    # Money moves only through transaction-service's /internal/remittance/transfer (not routed by the gateway).
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - ORCHESTRATOR_URL=http://transaction-service:8083
+    volumes:
+      - ./../microservices/loan-service/target/loan-service.jar:/app/app.jar
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     networks:
       - ledger-net
 

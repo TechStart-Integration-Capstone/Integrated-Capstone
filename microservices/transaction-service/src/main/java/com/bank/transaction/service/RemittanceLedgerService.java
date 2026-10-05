@@ -58,6 +58,16 @@ public class RemittanceLedgerService {
         }
     }
 
+    private Object getValue(Map<String, Object> map, String key) {
+        if (map.containsKey(key)) return map.get(key);
+        if (map.containsKey(key.toUpperCase())) return map.get(key.toUpperCase());
+        if (map.containsKey(key.toLowerCase())) return map.get(key.toLowerCase());
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(key)) return entry.getValue();
+        }
+        return null;
+    }
+
     public AccountInfo resolveAccount(String accountIdOrNumber) {
         String sql = "SELECT account_id, customer_id, account_number, current_balance, held_balance FROM dbo.ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_number = ? OR CAST(account_id AS NVARCHAR(50)) = ?";
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, accountIdOrNumber, accountIdOrNumber);
@@ -65,11 +75,17 @@ public class RemittanceLedgerService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found in ledger: " + accountIdOrNumber);
         }
         Map<String, Object> r = rows.get(0);
-        Long id = ((Number) r.get("account_id")).longValue();
-        Long customerId = ((Number) r.get("customer_id")).longValue();
-        String number = (String) r.get("account_number");
-        BigDecimal balance = (BigDecimal) r.get("current_balance");
-        BigDecimal heldBalance = r.get("held_balance") != null ? (BigDecimal) r.get("held_balance") : BigDecimal.ZERO;
+        Object idObj = getValue(r, "account_id");
+        Object custObj = getValue(r, "customer_id");
+        Object numObj = getValue(r, "account_number");
+        Object balObj = getValue(r, "current_balance");
+        Object heldObj = getValue(r, "held_balance");
+
+        Long id = idObj != null ? ((Number) idObj).longValue() : null;
+        Long customerId = custObj != null ? ((Number) custObj).longValue() : null;
+        String number = numObj != null ? numObj.toString() : null;
+        BigDecimal balance = balObj != null ? new BigDecimal(balObj.toString()) : BigDecimal.ZERO;
+        BigDecimal heldBalance = heldObj != null ? new BigDecimal(heldObj.toString()) : BigDecimal.ZERO;
         return new AccountInfo(id, customerId, number, balance, heldBalance);
     }
 
@@ -117,7 +133,15 @@ public class RemittanceLedgerService {
         );
         remittance.setCallerCustomerId(callerCustomerId != null ? callerCustomerId : source.customerId());
         remittance.setIdempotencyKey(idempotencyKey);
+        remittance.setTransactionType(request.getTransactionType());
         return remittanceRepository.save(remittance);
+    }
+
+    /** LEDGER_TRANSACTION id for a POSTED remittance, or null if the ledger row is not there yet. */
+    public Long findTransactionId(String referenceNo) {
+        return transactionRepository.findByReferenceNo(referenceNo)
+                .map(TransactionRecord::getTransactionId)
+                .orElse(null);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -176,25 +200,35 @@ public class RemittanceLedgerService {
         String updateTargetSql = "UPDATE dbo.ACCOUNT SET current_balance = ? WHERE account_id = ?";
         jdbcTemplate.update(updateTargetSql, targetAfter, currentTarget.id());
 
-        // 2. Save LEDGER_TRANSACTION row
+        // 2. Save LEDGER_TRANSACTION row (plain transfers keep their existing P2P_REMITTANCE type)
+        String remittanceType = remittance.getTransactionType();
+        String ledgerType = remittanceType == null || RemittanceRequest.TYPE_TRANSFER.equals(remittanceType)
+                ? "P2P_REMITTANCE" : remittanceType;
         TransactionRecord tx = new TransactionRecord(
                 currentSource.id(),
                 currentTarget.id(),
                 amount,
                 request.getCurrency(),
                 request.getCurrency(),
-                "P2P_REMITTANCE",
+                ledgerType,
                 remittance.getReferenceNo(),
                 "SUCCESS",
                 null
         );
         TransactionRecord savedTx = transactionRepository.save(tx);
 
-        // 3. Save OUTBOX_EVENT row
+        // 3. Save OUTBOX_EVENT row. transactionId/accountId/operation/before/afterBalance describe the
+        //    debit leg so audit-service writes LEDGER_MUTATION_AUDIT and reconciliation can match it.
         String payloadJson = String.format(
-                "{\"remittanceId\":%d,\"referenceNo\":\"%s\",\"ftReference\":\"%s\",\"sourceAccountId\":%d,\"targetAccountId\":%d,\"amount\":%.4f,\"status\":\"POSTED\"}",
+                "{\"remittanceId\":%d,\"referenceNo\":\"%s\",\"ftReference\":\"%s\",\"sourceAccountId\":%d,\"targetAccountId\":%d,"
+                        + "\"amount\":%s,\"status\":\"POSTED\",\"transactionId\":%d,\"transactionType\":\"%s\","
+                        + "\"accountId\":%d,\"customerId\":%d,\"operation\":\"DEBIT\",\"currency\":\"%s\","
+                        + "\"beforeBalance\":%s,\"afterBalance\":%s}",
                 remittance.getRemittanceId(), remittance.getReferenceNo(), ftReference,
-                currentSource.id(), currentTarget.id(), amount
+                currentSource.id(), currentTarget.id(), amount.toPlainString(),
+                savedTx.getTransactionId(), ledgerType,
+                currentSource.id(), currentSource.customerId(), request.getCurrency(),
+                sourceBefore.toPlainString(), sourceAfter.toPlainString()
         );
 
         OutboxEvent event = new OutboxEvent();
@@ -216,7 +250,7 @@ public class RemittanceLedgerService {
         BigDecimal riskScore = risk != null ? risk.score() : null;
         String riskDecision = risk != null ? risk.decision() : null;
 
-        return new RemittanceResponse(
+        RemittanceResponse response = new RemittanceResponse(
                 "POSTED",
                 remittance.getReferenceNo(),
                 ftReference,
@@ -230,5 +264,7 @@ public class RemittanceLedgerService {
                 null,
                 false
         );
+        response.setTransactionId(savedTx.getTransactionId());
+        return response;
     }
 }

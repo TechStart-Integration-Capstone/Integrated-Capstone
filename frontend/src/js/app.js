@@ -91,6 +91,11 @@ let currentCustomerId = 1;
 let selectedSourceAccountId = 1;
 let accountsData = [];
 let recentTransactions = [];
+// The monitor accepts only database responses; simulation/broadcast rows use recentTransactions.
+let monitorTransactions = [];
+let monitorLoadState = 'loading';
+let monitorError = '';
+let monitorRequest = null;
 let oracleAuditLogs = [];
 let outboxEvents = [];
 let postgresAudits = [
@@ -110,6 +115,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCustomerAndAccounts();
     await loadAllCustomers(false);
     await loadRecentTransactions();
+    setInterval(() => {
+        if (currentJwtToken) loadRecentTransactions();
+        else renderTransactionMonitor();
+    }, 5000);
     await loadInitialAuditLogs();
     await loadReconciliationLogs(); // Live report preview & reconciliation records
     setupRailsSelector();
@@ -137,39 +146,19 @@ async function initializeAuthSession() {
 
     if (savedToken && savedUser) {
         try {
-            currentJwtToken = savedToken;
-            currentAdminSession = JSON.parse(savedUser);
-            updateAdminUI(currentAdminSession);
-            closeAdminLoginModal();
-            return;
+            const claims = JSON.parse(atob(savedToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            if (claims.roles?.includes('ROLE_ADMIN') && claims.exp * 1000 > Date.now()) {
+                currentJwtToken = savedToken;
+                currentAdminSession = JSON.parse(savedUser);
+                updateAdminUI(currentAdminSession);
+                closeAdminLoginModal();
+                return;
+            }
         } catch (e) {}
     }
-
-    // Authenticate via banking login endpoint
-    try {
-        const res = await fetch(`${API_BASE}/auth/banking/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'lviernes', password: 'password123' })
-        });
-        if (res.ok) {
-            const data = await res.json();
-            currentJwtToken = data.token;
-            currentAdminSession = {
-                ...data,
-                fullName: 'Levi Viernes',
-                roles: ['ROLE_ADMIN', 'ROLE_CORE_ENGINEER']
-            };
-            sessionStorage.setItem('paypink_admin_jwt', data.token);
-            sessionStorage.setItem('paypink_admin_user', JSON.stringify(currentAdminSession));
-            updateAdminUI(currentAdminSession);
-            closeAdminLoginModal();
-            return;
-        }
-    } catch (ignored) {}
-
-    // Display privileged admin login modal gate
-    closeAdminLoginModal();
+    sessionStorage.removeItem('paypink_admin_jwt');
+    sessionStorage.removeItem('paypink_admin_user');
+    showAdminLoginModal();
 }
 
 function showAdminLoginModal() {
@@ -215,6 +204,8 @@ async function handleAdminLoginSubmit(event) {
                 updateAdminUI(data);
                 closeAdminLoginModal();
                 showAdminToast(`Authenticated as ${data.fullName} (ROLE_ADMIN)`);
+                if (monitorRequest) await monitorRequest;
+                await loadRecentTransactions();
                 return;
             } else {
                 throw new Error('Access Denied: Account lacks ROLE_ADMIN privilege.');
@@ -224,25 +215,6 @@ async function handleAdminLoginSubmit(event) {
             throw new Error(errData.detail || errData.message || 'Invalid administrator username or password.');
         }
     } catch (e) {
-        // Fallback demo authentication for offline / standalone mode
-        if (username === 'admin' && (password === 'Admin@PayPink2026!' || password === 'admin123' || password === 'password123')) {
-            const mockAdminData = {
-                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGVzIjpbIlJPTEVfQURNSU4iLCJST0xFX0NPUkVfRU5HSU5FRVIiXX0.admin",
-                username: "admin",
-                fullName: "PayPink Core System Administrator",
-                roles: ["ROLE_ADMIN", "ROLE_CORE_ENGINEER"],
-                customerId: 0
-            };
-            currentJwtToken = mockAdminData.token;
-            currentAdminSession = mockAdminData;
-            sessionStorage.setItem('paypink_admin_jwt', mockAdminData.token);
-            sessionStorage.setItem('paypink_admin_user', JSON.stringify(mockAdminData));
-            updateAdminUI(mockAdminData);
-            closeAdminLoginModal();
-            showAdminToast('Authenticated as System Administrator (ROLE_ADMIN)');
-            return;
-        }
-
         if (errorEl) {
             errorEl.textContent = e.message || 'Authentication failed. Please verify credentials.';
             errorEl.style.display = 'block';
@@ -282,6 +254,10 @@ function handleAdminLogout() {
     sessionStorage.removeItem('paypink_admin_user');
     currentJwtToken = null;
     currentAdminSession = null;
+    monitorTransactions = [];
+    monitorLoadState = 'error';
+    monitorError = 'Please sign in as an administrator to view today\'s transactions.';
+    renderTransactionMonitor();
     showAdminLoginModal();
     showAdminToast('Signed out of Administrator Portal.');
 }
@@ -1016,6 +992,7 @@ function switchTab(tabName) {
         loadAllCustomers();
     } else if (tabName === 'transactions') {
         renderTransactionMonitor();
+        loadRecentTransactions();
     } else if (tabName === 'audit') {
         loadInitialAuditLogs();
         loadPostgresAuditLogs();
@@ -1349,6 +1326,18 @@ async function toggleAccountStatus(accountId, currentStatus) {
 /**
  * 11. Transaction Monitoring, Audit Views & Report Exporting
  */
+function monitorDateKey(value) {
+    if (!value) return null;
+    const date = getPhilippineDate(value);
+    return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+}
+
+function escapeMonitorText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[char]));
+}
+
 function renderTransactionMonitor() {
     const tbody = document.getElementById('monitor-transactions-body');
     if (!tbody) return;
@@ -1356,29 +1345,40 @@ function renderTransactionMonitor() {
     const statusFilter = document.getElementById('monitor-status-filter')?.value || 'ALL';
     const typeFilter = document.getElementById('monitor-type-filter')?.value || 'ALL';
 
-    const list = recentTransactions.filter(tx => {
+    if (monitorLoadState !== 'ready') {
+        const message = monitorLoadState === 'error' ? monitorError : 'Loading today\'s transactions...';
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem;">${escapeMonitorText(message)}</td></tr>`;
+        return;
+    }
+
+    const today = monitorDateKey(new Date());
+    const list = monitorTransactions.filter(tx => {
+        if (monitorDateKey(tx.transactionDate) !== today) return false;
         if (statusFilter !== 'ALL' && tx.status !== statusFilter) return false;
-        if (typeFilter !== 'ALL' && !tx.type.includes(typeFilter)) return false;
+        if (typeFilter === 'TRANSFER' && !/TRANSFER|^EXT_/.test(tx.transactionType || '')) return false;
+        if ((typeFilter === 'CREDIT' || typeFilter === 'DEBIT') && tx.operation !== typeFilter) return false;
         return true;
-    });
+    }).sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
+        || String(b.transactionId).localeCompare(String(a.transactionId), 'en', { numeric: true }));
 
     if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">No transactions found matching filter criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">No transactions today matching the selected filters.</td></tr>';
         return;
     }
 
     tbody.innerHTML = list.map(tx => {
-        const accDisplay = tx.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : '001181233469');
-        const isCredit = tx.type.includes('CREDIT') || tx.type.includes('IN');
+        const isCredit = tx.operation === 'CREDIT';
+        const sign = isCredit ? '+' : tx.operation === 'DEBIT' ? '-' : '';
+        const currency = tx.currency === 'PHP' ? '₱' : `${escapeMonitorText(tx.currency)} `;
         return `
         <tr>
-            <td><code>${tx.ref}</code></td>
-            <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${tx.date}</td>
-            <td><strong>${formatAccountNumber(accDisplay)}</strong></td>
-            <td><span class="badge-chip">${tx.type}</span></td>
-            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${isCredit ? '+' : '-'}₱${formatCurrency(tx.amount)}</strong></td>
-            <td><code>IDEMP-PH-${tx.id}</code></td>
-            <td><span class="status-tag ${tx.status === 'SUCCESS' || tx.status === 'COMPLETED' ? 'tag-success' : 'tag-error'}">${tx.status}</span></td>
+            <td><code>${escapeMonitorText(tx.referenceNo)}</code></td>
+            <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${escapeMonitorText(formatPhilippineDateTime(tx.transactionDate))}</td>
+            <td><strong>${escapeMonitorText(formatAccountNumber(tx.accountNumber))}</strong></td>
+            <td><span class="badge-chip">${escapeMonitorText(tx.transactionType)}</span></td>
+            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${sign}${currency}${formatCurrency(tx.amount)}</strong></td>
+            <td>${escapeMonitorText(tx.operation || '—')}</td>
+            <td><span class="status-tag ${tx.status === 'SUCCESS' || tx.status === 'COMPLETED' ? 'tag-success' : 'tag-error'}">${escapeMonitorText(tx.status)}</span></td>
         </tr>
     `}).join('');
 }
@@ -1462,34 +1462,40 @@ function saveAuditsToStorage() {
 }
 
 async function loadRecentTransactions(isManualClick = false) {
-    const saved = localStorage.getItem('paypink_admin_recent_transactions');
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                recentTransactions = parsed;
-            }
-        } catch (e) {}
-    }
-
-    if (recentTransactions.length === 0) {
-        recentTransactions = [
-            { id: 103, ref: 'TX-PH-2026-0929-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), status: 'SUCCESS' },
-            { id: 102, ref: 'TX-PH-2026-0929-000', accountNumber: '001381233467', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 3600000)), status: 'SUCCESS' },
-            { id: 101, ref: 'TX-PH-INIT-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 86400000)), status: 'SUCCESS' },
-            { id: 100, ref: 'TX-PH-INIT-000', accountNumber: '001981233461', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 172800000)), status: 'SUCCESS' }
-        ];
-        saveTransactionsToStorage();
-    }
-
-    renderTransactionFeed();
+    if (monitorRequest) return monitorRequest;
+    const requestToken = currentJwtToken;
     renderTransactionMonitor();
-
-    await syncBackendTransactions();
-
-    if (isManualClick) {
-        showAdminToast('Refreshed real-time transaction monitor with latest ledger records.');
-    }
+    monitorRequest = (async () => {
+        try {
+            const response = await fetch(`${API_BASE}/auth/admin/transactions/today`, {
+                headers: getAuthHeaders(), cache: 'no-store', signal: AbortSignal.timeout(15000)
+            });
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    showAdminLoginModal();
+                    throw new Error('Please sign in as an administrator to view today\'s transactions.');
+                }
+                throw new Error('Unable to load today\'s transactions. Please try Refresh Monitor.');
+            }
+            const rows = await response.json();
+            if (!Array.isArray(rows)) throw new Error('Unable to load today\'s transactions. Invalid server response.');
+            if (currentJwtToken !== requestToken) return;
+            monitorTransactions = rows;
+            monitorLoadState = 'ready';
+            monitorError = '';
+            if (isManualClick) showAdminToast('Today\'s ledger transactions refreshed.');
+        } catch (error) {
+            if (currentJwtToken !== requestToken) return;
+            monitorTransactions = [];
+            monitorLoadState = 'error';
+            monitorError = error.message?.startsWith('Please sign in') ? error.message
+                : 'Unable to load today\'s transactions. Please try Refresh Monitor.';
+        } finally {
+            renderTransactionMonitor();
+        }
+    })();
+    try { await monitorRequest; }
+    finally { monitorRequest = null; }
 }
 
 async function loadInitialAuditLogs() {
@@ -1591,6 +1597,8 @@ function setupRealtimeSync() {
 
 async function handleIncomingTransferEvent(data) {
     if (!data) return;
+    // A browser event only triggers a database refresh; its payload never enters the monitor.
+    loadRecentTransactions();
 
     const txRef = data.reference || `TX-PH-${Date.now()}`;
     const normalizedStatus = (data.status === 'SUCCESS' || data.status === 'COMPLETED') ? 'COMPLETED' : (data.status || 'COMPLETED');

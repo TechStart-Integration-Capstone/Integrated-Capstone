@@ -103,6 +103,16 @@ class OutboxPollerServiceTest {
         when(outboxRepository.save(any())).thenAnswer(inv->inv.getArgument(0));
         service.pollPendingEvents();
         assertThat(service.getTotalPublished()).isEqualTo(3L);}
+    @Test @DisplayName("pollPendingEvents: loan.* event with NULL transaction_id is keyed by aggregate_id")
+    void pollPending_loanEventWithoutTransaction_usesAggregateIdKey(){
+        OutboxEvent ev=pendingEvent(8L);
+        sf(ev,"transactionId",null);sf(ev,"aggregateId","LN-20261005-000002");sf(ev,"eventType","loan.disbursed");
+        when(outboxRepository.findPendingBatch(50)).thenReturn(List.of(ev));
+        when(kafkaTemplate.send(any(),eq("LN-20261005-000002"),anyString())).thenReturn(successFuture());
+        when(outboxRepository.save(any())).thenAnswer(inv->inv.getArgument(0));
+        service.pollPendingEvents();
+        verify(kafkaTemplate).send(any(),eq("LN-20261005-000002"),anyString());
+        assertThat(ev.getStatus()).isEqualTo("PROCESSED");}
     @Test @DisplayName("counters: initial state is all zeros")
     void counters_initialStateAllZero(){
         assertThat(service.getTotalPublished()).isZero();

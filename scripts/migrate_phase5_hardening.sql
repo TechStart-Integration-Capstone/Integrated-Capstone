@@ -2,6 +2,10 @@
 -- PayPink 2.0 — Azure SQL Phase 5 Hardening Migration Script
 -- ============================================================================
 
+-- Filtered indexes (uq_remittance_customer_idemp) require QUOTED_IDENTIFIER ON; sqlcmd defaults it to OFF.
+SET QUOTED_IDENTIFIER ON;
+GO
+
 IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.ACCOUNT') AND name = 'held_balance')
 BEGIN
     ALTER TABLE dbo.ACCOUNT ADD held_balance DECIMAL(18,4) NOT NULL DEFAULT 0.0000;

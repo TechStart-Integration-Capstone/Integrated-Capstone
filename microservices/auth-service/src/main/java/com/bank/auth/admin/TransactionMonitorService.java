@@ -33,13 +33,14 @@ public class TransactionMonitorService {
     @Transactional(readOnly = true)
     public List<Row> today() {
         LocalDate date = LocalDate.now(clock.withZone(ZONE));
-        // Ledger DATETIME2 timestamps are UTC, matching the schema's SYSUTCDATETIME default.
+        // Ledger DATETIME2 timestamps are UTC, matching the schema's GETUTCDATE default.
         LocalDateTime start = date.atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
         LocalDateTime end = date.plusDays(1).atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
         return jdbc.query("""
                 SELECT t.transaction_id, t.reference_no, t.transaction_date, a.account_number,
                        t.transaction_type,
-                       COALESCE(t.operation,
+                       COALESCE(CASE t.transaction_type WHEN 'LOAN_DISBURSEMENT' THEN 'CREDIT'
+                                                        WHEN 'LOAN_REPAYMENT' THEN 'DEBIT' END,
                            (SELECT TOP (1) JSON_VALUE(CASE WHEN ISJSON(o.payload) = 1 THEN o.payload ELSE N'{}' END, '$.operation')
                             FROM dbo.OUTBOX_EVENT o WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id),
                            CASE WHEN t.transaction_type IN ('CREDIT', 'WELCOME_GIFT', 'TRANSFER_IN') THEN 'CREDIT'
@@ -47,8 +48,14 @@ public class TransactionMonitorService {
                            END) AS operation,
                        t.amount, t.source_currency, t.status
                 FROM dbo.LEDGER_TRANSACTION t
-                JOIN dbo.ACCOUNT a ON a.account_id = t.from_account_id
+                -- A loan disbursement is one bank → borrower row: show it on the borrower's account.
+                JOIN dbo.ACCOUNT a ON a.account_id = CASE WHEN t.transaction_type = 'LOAN_DISBURSEMENT'
+                                                          THEN t.to_account_id ELSE t.from_account_id END
                 WHERE t.transaction_date >= ? AND t.transaction_date < ?
+                  AND a.account_type <> 'STRESS_TEST_ACCOUNT'
+                  AND NOT EXISTS (SELECT 1 FROM dbo.ACCOUNT target
+                                  WHERE target.account_id = t.to_account_id
+                                    AND target.account_type = 'STRESS_TEST_ACCOUNT')
                 ORDER BY t.transaction_date DESC, t.transaction_id DESC
                 """, (rs, n) -> new Row(rs.getString("transaction_id"), rs.getString("reference_no"),
                 rs.getTimestamp("transaction_date").toLocalDateTime().atOffset(ZoneOffset.UTC),

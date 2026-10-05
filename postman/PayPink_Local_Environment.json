@@ -19,6 +19,36 @@
       "value": "IDEMP-INIT-001",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "admin_password",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "admin_jwt",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "loan_apply_key",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "loan_application_ref",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "loan_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"

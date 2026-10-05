@@ -1836,6 +1836,567 @@
           ]
         }
       ]
+    },
+    {
+      "name": "11. Phase 6 — Loan Service",
+      "description": "Apply → accept → schedule → repay → EOD. Requires migrate_phase6_loans.sql and the Phase 6 seed (arosales = NORMAL band). The EOD requests need admin_password in your environment.",
+      "item": [
+        {
+          "name": "POST Login (arosales — NORMAL band, score 670)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"arosales\",\n  \"password\": \"password123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"jwt_token\", pm.response.json().token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Apply for a loan — 250,000 / 36 months (TC-LD-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{loan_apply_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNo\": \"001133218709\",\n  \"amount\": 250000.0,\n  \"termMonths\": 36\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// One key per run of this folder; the next request reuses it (TC-LD-06).",
+                  "pm.environment.set(\"loan_apply_key\", \"LOAN-APPLY-\" + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 Created\", () => pm.response.to.have.status(201));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is APPROVED\", () => pm.expect(j.decision).to.eql(\"APPROVED\"));",
+                  "pm.test(\"band is NORMAL at 18%\", () => { pm.expect(j.band).to.eql(\"NORMAL\"); pm.expect(j.offer.annualRate).to.eql(18.0); });",
+                  "pm.test(\"monthly installment is 9,038.10\", () => pm.expect(j.offer.monthlyInstallment).to.eql(9038.10));",
+                  "pm.environment.set(\"loan_application_ref\", j.referenceNo);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Apply again with the same Idempotency-Key — same application (TC-LD-06)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{loan_apply_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNo\": \"001133218709\",\n  \"amount\": 250000.0,\n  \"termMonths\": 36\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK (replayed)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"same application reference\", () => pm.expect(pm.response.json().referenceNo).to.eql(pm.environment.get(\"loan_application_ref\")));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Accept offer — disburse from PH1000000LOAN (TC-LN-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "accept-{{loan_application_ref}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications/{{loan_application_ref}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications",
+                "{{loan_application_ref}}",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 Created\", () => pm.response.to.have.status(201));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"loan is ACTIVE with full principal outstanding\", () => { pm.expect(j.status).to.eql(\"ACTIVE\"); pm.expect(j.outstandingPrincipal).to.eql(250000.00); });",
+                  "pm.test(\"T24 FT reference saved\", () => pm.expect(j.ftReference).to.match(/^FT/));",
+                  "pm.environment.set(\"loan_id\", j.loanId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Accept the same offer again — 409 already-accepted (TC-LN-02)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "accept-{{loan_application_ref}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications/{{loan_application_ref}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications",
+                "{{loan_application_ref}}",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409 Conflict\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"type is already-accepted\", () => pm.expect(pm.response.json().type).to.include(\"already-accepted\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET My loans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"list contains the new loan\", () => pm.expect(pm.response.json().map(l => l.loanId)).to.include(pm.environment.get(\"loan_id\")));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Repayment schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/{{loan_id}}/schedule",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "{{loan_id}}",
+                "schedule"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var rows = pm.response.json().installments;",
+                  "pm.test(\"36 installments\", () => pm.expect(rows.length).to.eql(36));",
+                  "pm.test(\"row 1 is 9,038.10\", () => pm.expect(rows[0].totalDue).to.eql(9038.10));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Repay one installment — 9,038.10 (TC-LN-04)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/{{loan_id}}/repayments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "{{loan_id}}",
+                "repayments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 9038.1\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 Created\", () => pm.response.to.have.status(201));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"outstanding reduced by row 1 principal (5,288.10)\", () => pm.expect(j.outstandingPrincipal).to.eql(244711.90));",
+                  "pm.test(\"repayment reference issued\", () => pm.expect(j.referenceNo).to.match(/^LRP-/));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Admin login (set admin_password in your environment)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"{{admin_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"admin_jwt\", pm.response.json().token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Run loan EOD as admin — mark overdue + 2% penalty (TC-EOD-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_jwt}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/eod/run?businessDate=2026-11-06",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "eod",
+                "run"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-11-06"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"result echoes the business date\", () => pm.expect(pm.response.json().businessDate).to.eql(\"2026-11-06\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Run loan EOD as a customer — 403 Forbidden",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/eod/run?businessDate=2026-11-06",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "eod",
+                "run"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-11-06"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 Forbidden\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Internal transfer endpoint via gateway — 404 not routed (TC-GW-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Internal-Service",
+                "value": "loan-service",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/internal/remittance/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "internal",
+                "remittance",
+                "transfer"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountNo\": \"PH1000000LOAN\",\n  \"targetAccountNo\": \"001133218709\",\n  \"amount\": 1.0,\n  \"transactionType\": \"LOAN_DISBURSEMENT\",\n  \"idempotencyKey\": \"should-never-arrive\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 404 Not Found\", () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
