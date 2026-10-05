@@ -432,6 +432,17 @@ function transferPage() {
       <aside class="transfer-guide"><span class="circle-icon">${icon('activity')}</span><h2>Your money, on the move.</h2><p>Move money from Everyday to Savings, or send to someone else with PayPink.</p><ol><li>Choose the account to pay from.</li><li>Select your receiving account or enter a PayPink account number.</li><li>Review the details and confirm.</li></ol><div class="transfer-guide-note">${icon('shield')} Double-check the receiving account number before sending.</div></aside></div>`;
 }
 
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID(); } catch (e) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 async function reviewTransfer() {
   if (state.transfer?.mode === 'external') return reviewExternalTransfer();
   const form = state.transfer;
@@ -454,7 +465,7 @@ async function reviewTransfer() {
     destination = form.recipient.accountNumber;
     if (destination === source.accountNumber) { form.error = 'Choose a different receiving account.'; renderPage(); return; }
   }
-  form.review = {sourceAccountId:source.accountId,destinationAccountNumber:destination,amount:form.amount,idempotencyKey:crypto.randomUUID()};
+  form.review = {sourceAccountId:source.accountId,destinationAccountNumber:destination,amount:form.amount,idempotencyKey:generateUUID()};
   showDialog('Review your transfer', `<p class="muted">Please check these details before sending.</p><dl class="detail-list">${detail('From',`${escapeHtml(accountName(source.accountType))} · ${escapeHtml(source.accountNumber.slice(-4))}`)}${detail('Recipient',escapeHtml(form.mode === 'own' ? state.profile.fullName : form.recipient.fullName))}${detail('Recipient account',escapeHtml(maskedNumber(destination)))}${detail('Amount',escapeHtml(money(amount)))}${detail('Transfer fee','₱0.00')}${detail('Total to deduct',`<strong>${escapeHtml(money(amount))}</strong>`)}</dl>`, '<button class="btn btn-secondary" data-action="close-dialog">Go back</button><button class="btn btn-primary" data-action="confirm-transfer">Confirm transfer</button>');
 }
 

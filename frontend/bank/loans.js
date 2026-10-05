@@ -105,7 +105,10 @@ async function applyForLoan(form) {
   const body = {accountNo:values.accountNo, amount:Number(amount.toFixed(2)), termMonths:Number(values.termMonths)};
   // Reuse the key while the request is unchanged, so a retry after a network error returns the same application.
   const fingerprint = JSON.stringify(body);
-  if (fingerprint !== loanState.applyFingerprint) { loanState.applyKey = crypto.randomUUID(); loanState.applyFingerprint = fingerprint; }
+  if (fingerprint !== loanState.applyFingerprint) {
+    loanState.applyKey = (typeof generateUUID === 'function' ? generateUUID() : 'idemp-' + Math.random().toString(36).slice(2) + Date.now());
+    loanState.applyFingerprint = fingerprint;
+  }
   const generation = state.generation;
   loanState.busy = true; renderPage();
   try {
@@ -162,7 +165,9 @@ async function payLoan(form) {
   errorBox.hidden = true;
   if (!Number.isFinite(amount) || amount <= 0) { errorBox.textContent = 'Enter a positive amount.'; errorBox.hidden = false; return; }
   const pending = loanState.payKeys[loanId];
-  const key = pending && pending.amount === amount ? pending.key : crypto.randomUUID();
+  const key = pending && pending.amount === amount
+    ? pending.key
+    : (typeof generateUUID === 'function' ? generateUUID() : 'idemp-' + Math.random().toString(36).slice(2) + Date.now());
   loanState.payKeys[loanId] = {amount, key};
   button.disabled = true; button.textContent = 'Paying…';
   try {
