@@ -1,125 +1,196 @@
 # PayPink 2.0 — Project Context
 
-_Last updated: 2026-10-05 (Admin transaction monitor connected to live Azure SQL)_
+_Owner: **dom**_
+_Last updated: 2026-10-05 (Risk Engine two-layer upgrade — rule-based + Isolation Forest ML)_
+
+---
 
 ## What it is
+
 Mobile P2P remittance app (domestic, PHP) with real-time fraud screening and T24 core banking integration.
 Built on top of the Capstone 1 ledger engine.
 
-## Status / Phases
-- [x] Phase 0: Capstone 1 Base Setup & Verification
-- [x] Phase 1: Oracle to Azure SQL DB Migration
-- [x] Phase 2: OpenTelemetry & Observability Mesh
-- [x] Phase 3: Risk Engine & Fraud Screening Service
-- [x] Phase 4: T24 Core Adapter & Simulator
-- [x] Phase 5: Remittance Orchestrator & Saga Engine Hardening (All Must-Dos & Security Fixes Complete)
-- [x] Phase 6 (Loans): loan-service — apply / accept / repay / EOD (unit-tested; not yet run end-to-end in Docker)
+---
 
-## How a transfer works
-1. App → API Gateway (JWT check, rate limit, X-Correlation-ID, unconditional header stripping of incoming untrusted X-Auth-* headers)
-2. Remittance Orchestrator checks for duplicates (Redis atomic SETNX idempotency check, 409 Conflict if in-progress)
-3. Risk Engine scores it FIRST (Python FastAPI, ≤ 200 ms SLA). Score > 0.85 → rejected before holding funds
-4. Hold funds SECOND via atomic `held_balance` UPDATE in Azure SQL & REMITTANCE row in PENDING_CORE state
-5. Remittance Ledger Service validates account ownership (caller customer ID match against source account)
-6. T24 Core Adapter posts to T24 OFS THIRD (synchronous). Response codes: 200/503/202/422
-7. Remittance Ledger Service performs short DB transaction: Debit balance, release held balance, credit target, write LEDGER_TRANSACTION + OUTBOX row
-8. Remittance Saga Worker periodically executes forward recovery for T24_POSTED sagas and resolves PROCESSING sagas
+## Phase Status
+
+| Phase | Description | Status |
+|---|---|---|
+| 0 | Capstone 1 Base Setup & Verification | Done |
+| 1 | Oracle XE → Azure SQL Migration | Done |
+| 2 | OpenTelemetry & Observability Mesh | Done |
+| 3 | Risk Engine & Fraud Screening (rule-based + Isolation Forest ML) | Done |
+| 4 | T24 Core Adapter & Simulator | Done |
+| 5 | Remittance Orchestrator & Saga Engine Hardening | Done |
+| 5b | Loans — apply / accept / disburse / repay / EOD | Implemented (unit-tested; not yet Docker end-to-end) |
+| 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Next |
+| 7 | Mobile Frontend (PWA) | Pending |
+| 8 | Chaos + Load Testing | Pending |
+
+> Phase 5b (Loans) was built alongside Phase 5 hardening and got labeled "Phase 6" in older entries. That was wrong. Phase 6 is the RISK_DECISION audit table in PostgreSQL. Loans = Phase 5b.
+
+---
+
+## How a Transfer Works (Remittance Saga)
+
+1. App sends request to API Gateway — JWT check, rate limit, X-Correlation-ID injected, untrusted X-Auth-* headers stripped
+2. Remittance Orchestrator checks for duplicates — Redis atomic SETNX idempotency (409 if in-progress)
+3. Risk Engine scores FIRST — two-layer score (rules + Isolation Forest). Score > 0.85 = REJECT before any funds are touched
+4. Hold funds SECOND — atomic held_balance UPDATE in Azure SQL + REMITTANCE row created in PENDING_CORE
+5. Ownership validated — caller customer ID must match source account customer_id (403 on mismatch)
+6. T24 Core Adapter posts THIRD — synchronous OFS call. Responses: POSTED / REJECTED / PROCESSING / timeout
+7. Ledger commit — debit source, release hold, credit target, write LEDGER_TRANSACTION + OUTBOX_EVENT in one DB transaction
+8. Saga Worker runs background forward recovery for T24_POSTED and PROCESSING timeouts
+
+---
 
 ## Stack
-- **Backend:** Spring Boot 3.2.3, Spring Cloud Gateway 2023.0.0, Python FastAPI (Risk Engine)
-- **Database (OLTP):** Azure SQL; SQL Server 2022 local Docker (`mcr.microsoft.com/mssql/server:2022-latest`) is also available. During the 2026-10-05 admin verification, the running auth-service used hosted Azure SQL database `paypink`, while checked-in Compose defaults still pointed to local SQL Server. Preserve the actual runtime connection settings when restarting/redeploying.
-- **Database (Audit):** PostgreSQL 15
-- **Cache:** Redis 7 — idempotency keys + rate limit buckets + balance cache (display only)
-- **Messaging:** Apache Kafka, topic: `ledger.transaction.events`
-- **Observability:** OTel Collector → Prometheus + Loki + Tempo → Grafana + Jaeger
-- **Frontend:** Vanilla JS SPA served by Nginx (port 3001)
+
+- Backend: Spring Boot 3.2.3, Spring Cloud Gateway 2023.0.0, Python 3.11 FastAPI (Risk Engine)
+- Primary DB: Azure SQL (SQL Server 2022) — local Docker or cloud-hosted
+- Audit DB: PostgreSQL 15
+- Cache: Redis 7 — idempotency keys, rate-limit buckets, display-only balance cache
+- Messaging: Apache Kafka — topics: ledger.transaction.events, loan.*
+- Observability: OTel Collector → Prometheus + Loki + Tempo → Grafana + Jaeger
+- Frontend: Vanilla JS SPA served by Nginx (port 3001)
+
+> The running auth-service (as of 2026-10-05) uses a hosted Azure SQL database named `paypink`. Checked-in Compose defaults still point to local SQL Server. Preserve runtime connection settings when restarting.
+
+---
 
 ## Microservices
-| Service | Internal Port | DB |
+
+| Service | Port | DB |
 |---|---|---|
 | api-gateway | 8080 (only exposed host port) | Redis |
-| auth-service | 8081 (internal only) | Azure SQL |
-| account-service | 8082 (internal only) | Azure SQL + Redis |
-| transaction-service | 8083 (internal only) | Azure SQL + Redis + Kafka |
-| notification-service | 8084 (internal only) | PostgreSQL + Kafka |
-| audit-service | 8085 (internal only) | PostgreSQL + Kafka |
-| reconciliation-service | 8086 (internal only) | Azure SQL + PostgreSQL |
-| outbox-publisher | 8087 (internal only) | Azure SQL + Kafka |
-| analytics-service | 8088 (internal only) | Kafka (in-memory) |
-| risk-engine | 8000 (internal only) | None — stateless |
-| t24-adapter | 8090 (internal only) | None — simulator |
-| loan-service | 8091 (internal only) | Azure SQL (money moves only via transaction-service) |
+| auth-service | 8081 (internal) | Azure SQL |
+| account-service | 8082 (internal) | Azure SQL + Redis |
+| transaction-service | 8083 (internal) | Azure SQL + Redis + Kafka |
+| notification-service | 8084 (internal) | PostgreSQL + Kafka |
+| audit-service | 8085 (internal) | PostgreSQL + Kafka |
+| reconciliation-service | 8086 (internal) | Azure SQL + PostgreSQL |
+| outbox-publisher | 8087 (internal) | Azure SQL + Kafka |
+| analytics-service | 8088 (internal) | Kafka (in-memory) |
+| risk-engine | 8000 (internal) | None — stateless Python |
+| t24-adapter | 8090 (internal) | None — simulator |
+| loan-service | 8091 (internal) | Azure SQL (money via transaction-service only) |
 
-## Risk Engine (Phase 3)
-- Route: `POST /api/v1/risk/score` via gateway (StripPrefix=3 → risk-engine:8000/score)
-- Health: `GET /api/v1/risk/health` (public, no JWT)
-- Threshold: score > 0.85 → REJECT
-- Rules: self-transfer +0.90, >100k +0.50, >50k +0.30, >20k +0.15, new account +0.25, high velocity +0.30, non-PHP +0.20
-- OTel: manual tracing with W3C traceparent propagation (no auto-instrumentation — pkg_resources missing in python:3.12-slim)
+---
 
-## Azure SQL Schema (as of Phase 6 Loans)
-Tables: `CUSTOMER`, `ACCOUNT`, `AUDIT_LOG`, `BANKING_FAVORITE`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT`, `REMITTANCE`, `LOAN_APPLICATION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT`
+## Risk Engine (Phase 3 — upgraded 2026-10-05 to v3.0.0)
 
-Run order on an existing database: `schema-azuresql.sql` → `scripts/migrate_phase5_hardening.sql` → `scripts/migrate_phase6_loans.sql` → `scripts/seed_demo_azure_sql.sql`.
+Architecture: two independent layers, combined with `max(rule_score, ml_score * 0.90)`. Reject threshold: > 0.85.
 
-> TRANSACTION is a reserved word in T-SQL — table is named LEDGER_TRANSACTION everywhere.
+### Layer 1 — Rule-based scorer (scorer.py)
 
-Key SQL Server rules:
-- `DECIMAL(18,4)` for balances
-- `WITH (UPDLOCK, ROWLOCK)` for pessimistic locking (with dynamic H2 dialect fallback)
-- `OFFSET 0 ROWS FETCH NEXT n ROWS ONLY` for pagination
-- `SUBSTRING()`, `+` concat, `TOP 1` in subqueries, no `FROM DUAL`
-- mssql-jdbc:12.8.1.jre11 (no jre17 on Maven Central)
+All rules now fire. Enrichment fields are queried by RiskEngineClient.java before every /score call.
+
+| Rule | Added score | Data source |
+|---|---|---|
+| self_transfer (same account ID) | +0.90 | targetAccountId in request |
+| amount > 100,000 PHP | +0.50 | request |
+| amount > 50,000 PHP | +0.30 | request |
+| amount > 20,000 PHP | +0.15 | request |
+| new account under 24h | +0.25 | accountAgeHours — ACCOUNT.created_date |
+| high velocity > 5 txns/hr | +0.30 | recentTxCount — REMITTANCE last 1h |
+| medium velocity > 2 txns/hr | +0.15 | recentTxCount — REMITTANCE last 1h |
+| amount >= 10x customer 30d avg | +0.40 | amountVsAvgRatio — REMITTANCE last 30d |
+| amount >= 5x customer 30d avg | +0.25 | amountVsAvgRatio — REMITTANCE last 30d |
+| amount >= 3x customer 30d avg | +0.10 | amountVsAvgRatio — REMITTANCE last 30d |
+| non-PHP currency | +0.20 | request |
+
+### Layer 2 — Isolation Forest ML scorer (ml_scorer.py)
+
+Unsupervised anomaly detection — no labeled fraud data required.
+- 10,000 synthetic training samples: 90% normal, 10% anomalous (4 fraud archetypes)
+- 6 features: amount_php, hour_of_day, account_age_hours, recent_tx_count, amount_vs_avg_ratio, is_new_recipient
+- Model serialized to /tmp/paypink_if_model.joblib — retrained at startup if file is missing
+- ML_WEIGHT = 0.90 so an anomaly alone cannot reject a transfer without at least one rule also firing
+
+### RiskEngineClient.java — three DB queries before every /score call
+
+- queryAccountAgeHours: SELECT created_date FROM dbo.ACCOUNT WHERE account_id = ?
+- queryRecentTxCount: SELECT COUNT(*) FROM dbo.REMITTANCE WHERE source_account_id = ? AND created_at >= DATEADD(HOUR,-1,GETUTCDATE()) AND status NOT IN ('FAILED','CANCELLED')
+- queryAmountVsAvgRatio: SELECT AVG(CAST(amount AS FLOAT)) FROM dbo.REMITTANCE WHERE source_account_id = ? AND created_at >= DATEADD(DAY,-30,GETUTCDATE()) AND status IN ('POSTED','Reserved','Authorized','Processing')
+
+### Response contract
+
+Java consumer reads RiskResult{score, decision, reasons} — unchanged. New HTTP-only fields ruleScore and mlScore are for observability only (Grafana/logs); the Java client ignores them.
+
+### Frontend visibility
+
+bank.js renders riskScore + riskDecision on the transfer receipt: "Risk evaluation: Score 0.40 (APPROVED)". No frontend changes were needed.
+
+---
+
+## Azure SQL Schema (current)
+
+Tables: CUSTOMER, ACCOUNT, AUDIT_LOG, BANKING_FAVORITE, LEDGER_TRANSACTION, OUTBOX_EVENT, REMITTANCE, LOAN_APPLICATION, LOAN, LOAN_SCHEDULE, LOAN_REPAYMENT
+
+Migration run order on an existing database:
+1. schema-azuresql.sql
+2. scripts/migrate_phase5_hardening.sql
+3. scripts/migrate_phase6_loans.sql
+4. scripts/seed_demo_azure_sql.sql
+
+Key SQL Server constraints to remember:
+- TRANSACTION is a reserved word — table is LEDGER_TRANSACTION everywhere
+- DECIMAL(18,4) for all balances
+- WITH (UPDLOCK, ROWLOCK) for pessimistic locking (dynamic H2 fallback for tests)
+- OFFSET 0 ROWS FETCH NEXT n ROWS ONLY for pagination
+- SUBSTRING(), + for concat, TOP 1 in subqueries, no FROM DUAL
+- mssql-jdbc:12.8.1.jre11 — no jre17 classifier on Maven Central
 - SQL Server Docker does NOT auto-run /docker-entrypoint-initdb.d — run schema via sqlcmd manually
 
-## Loans (Phase 6)
-- Endpoints via gateway: `POST /api/v1/loans/applications`, `POST /api/v1/loans/applications/{ref}/accept`, `GET /api/v1/loans`, `GET /api/v1/loans/{id}/schedule`, `POST /api/v1/loans/{id}/repayments`, `POST /api/v1/loans/eod/run?businessDate=` (admin only)
-- Money moves only through transaction-service `POST /internal/remittance/transfer` (header `X-Internal-Service: loan-service`, not routed by the gateway). Disbursements skip the risk engine; repayments don't.
-- Bank loan pool: `PH1000000LOAN` (`INTERNAL`, owner `paypink_bank`, ₱50,000,000). auth-service's account renumbering skips `INTERNAL` accounts.
-- Demo logins per credit band (password `password123`):
+---
+
+## Phase 5b — Loans
+
+Endpoints via gateway:
+- POST /api/v1/loans/applications
+- POST /api/v1/loans/applications/{ref}/accept
+- GET /api/v1/loans
+- GET /api/v1/loans/{id}/schedule
+- POST /api/v1/loans/{id}/repayments
+- POST /api/v1/loans/eod/run?businessDate= (admin only, ROLE_ADMIN)
+
+Money moves only through transaction-service POST /internal/remittance/transfer (header X-Internal-Service: loan-service, not gateway-routed). Disbursements skip the risk engine; repayments run through it normally.
+
+Bank loan pool: PH1000000LOAN (INTERNAL account type, owner paypink_bank, 50,000,000 PHP). auth-service account renumbering skips INTERNAL accounts.
+
+Demo credentials (password: password123):
 
 | Username | credit_score | monthly_income | Band | Max amount / rate / term |
 |---|---|---|---|---|
-| `lviernes` | 520 | 20,000 | LOW | ₱30,000 / 28% / 12 mo |
-| `arosales` | 670 | 45,000 | NORMAL | ₱250,000 / 18% / 36 mo |
-| `glim` | 800 | 150,000 | HIGH | ₱1,000,000 / 10.5% / 60 mo |
+| lviernes | 520 | 20,000 | LOW | 30,000 / 28% / 12 mo |
+| arosales | 670 | 45,000 | NORMAL | 250,000 / 18% / 36 mo |
+| glim | 800 | 150,000 | HIGH | 1,000,000 / 10.5% / 60 mo |
 
-> Note: `glim` only has a TIME_DEPOSIT account in the seed; loans still disburse into it.
+> glim only has a TIME_DEPOSIT account in the seed — loans still disburse into it.
+
+---
+
+## Admin Transaction Monitor
+
+- Endpoint: GET /api/v1/auth/admin/transactions/today (ROLE_ADMIN required)
+- Data source: dbo.LEDGER_TRANSACTION joined with dbo.ACCOUNT and dbo.OUTBOX_EVENT
+- Filtering: today only in Asia/Manila (PHT, UTC+8), newest first, STRESS_TEST_ACCOUNT rows excluded
+- Operation column reads $.operation from OUTBOX_EVENT JSON (LEDGER_TRANSACTION has no operation column)
+- Refresh: every 5 seconds while signed in; 15s timeout; no demo fallback on error
+- Validation: mvn -f microservices/auth-service/pom.xml package; node --test frontend/tests/transaction-monitor.test.cjs
+
+---
 
 ## Git
-- **Freeze tag:** `capstone1-freeze` → commit `1e51aea`
-- **Working branch (2026-10-05):** `aly-feature`
-- **Latest commit at this update:** `b6ee3e4` — Merge branch 'main' of https://github.com/TechStart-Integration-Capstone/Integrated-Capstone
-- **Admin monitor implementation:** `ba30d8d` — database-backed monitor, authentication corrections, tests, and frontend cache revalidation.
 
-## Admin transaction monitor (2026-10-05)
-- **User requirement:** Monitor Transactions must show real database transactions from today only, newest first, without placeholder rows or test data.
-- **Data path:** `frontend/src/js/app.js` calls `GET /api/v1/auth/admin/transactions/today` through the gateway. `TransactionMonitorController` and `TransactionMonitorService` in `microservices/auth-service/src/main/java/com/bank/auth/admin/` read `dbo.LEDGER_TRANSACTION`, join `dbo.ACCOUNT`, and consult `dbo.OUTBOX_EVENT`.
-- **Day and ordering:** Today is midnight to the following midnight in `Asia/Manila` (PHT, UTC+8). The backend converts these bounds to UTC for `transaction_date` (`DATETIME2`, UTC), uses an inclusive start/exclusive end, and orders by `transaction_date DESC, transaction_id DESC`. The frontend also checks the Philippine date and sorts newest first.
-- **Real data only:** Dedicated `monitorTransactions` state receives only API rows. Cached `paypink_admin_recent_transactions`, simulation rows, and browser broadcast payloads cannot populate the monitor; transfer broadcasts trigger a database refresh. Transactions with a source or destination account of type `STRESS_TEST_ACCOUNT` are excluded. This is an explicit account-type exclusion, not a general classifier for unmarked test records in ordinary accounts. Other admin simulation/audit views still have their existing separate data paths.
-- **SQL fix:** The live endpoint previously returned HTTP 500 because `LEDGER_TRANSACTION.operation` does not exist. Read `$.operation` from the first outbox event, guard malformed JSON with `ISJSON`, and fall back to known transaction types. Unknown operations remain unknown. The table displays Operation instead of invented `IDEMP-PH-*` tokens, uses stored currency/account/reference/status values, and escapes database text.
-- **Refresh and errors:** Refresh every 5 seconds while signed in, on opening the transaction tab, and through Refresh Monitor. Overlapping refreshes share one request; requests time out after 15 seconds. API responses use `Cache-Control: no-store`. Empty results show an empty state; failures clear stale rows and show an error, with no demo fallback.
-- **Authentication:** Use real admin login via `/api/v1/auth/login`. Removed automatic customer login with fabricated admin roles and the offline fake-JWT fallback. Cached customer/expired tokens cannot restore an admin session; the backend validates admin JWT access (401 for invalid authentication, 403 for non-admin users). Logout clears monitor rows, and responses from a previous token are discarded.
-- **Frontend delivery:** `frontend/index.html` uses the `20261005-db-monitor` app.js version; `frontend/nginx.conf` requires revalidation of `/src/js/app.js` to avoid serving the old demo monitor after deployment.
-- **Verified on 2026-10-05:** All 48 auth-service tests and 9 frontend monitor tests passed. The read-only browser check found 3 live Azure SQL rows and verified PHT filtering, newest-first order, matching API/table references, filters, automatic refresh, and login/logout. No ledger/test transactions were created by that check; the row count is a historical observation.
-- **Validation entry points:** `mvn -f microservices/auth-service/pom.xml package`; `node --test frontend/tests/transaction-monitor.test.cjs`; `node tests/transaction-monitor.cjs` (requires Playwright and Chrome; `PLAYWRIGHT_MODULE` can point to an existing installation).
-- **Local rollout completed:** Rebuilt the auth-service JAR, restarted the existing auth-service container to preserve its Azure connection settings, and rebuilt/recreated only the frontend with `docker compose -f docker/docker-compose.yml up -d --no-deps --build frontend`. Verified at `http://localhost:3001/`; reload and use the admin sign-in when prompted.
+- Freeze tag: capstone1-freeze → commit 1e51aea
+- Working branch (2026-10-05): aly-feature
+- Latest commit at last update: b6ee3e4 — Merge branch 'main' of https://github.com/TechStart-Integration-Capstone/Integrated-Capstone
 
-## Completed Phases
-- **Phase 0** (Completed) — Git freeze tag, baseline doc, all containers green
-- **Phase 1** (Completed) — Oracle XE → Azure SQL. All 5 services migrated, all 9 UP, precision + login tests passed
-- **Phase 2** (Completed) — X-Correlation-ID filter, Resilience4j circuit breaker on account-service, FallbackController, port isolation (only 8080+3001 exposed)
-- **Phase 3** (Completed) — Risk Engine Python FastAPI. scorer.py rules, /score + /health, manual OTel, routed via gateway
-- **Phase 4** (Completed) — T24 Core Adapter + Simulator (Spring Boot microservice in `microservices/t24-adapter/`). OfsFormatterService, T24SimulatorController sidecar (90% /1 success, 8% /-1 reject, 2% timeout), T24IdempotencyStore, routed via gateway
-- **Phase 6 Loans** (Implemented) — loan-service (decision engine, EMI schedule, accept/disburse, repay, EOD overdue job), internal transfer endpoint in transaction-service, gateway route, outbox `loan.*` events, notification messages, web Loans tab, Postman Folder 11. Mobile Loans screen deferred.
-- **Phase 5** (Completed) — Remittance Orchestrator 4-step saga engine (Hold → Risk → T24 → Commit/Release), live REMITTANCE table, Resilience4j circuit breakers, Kafka topic `remittance.events`, Postman Folder 10, post-T24 commit safety, customer-scoped idempotency, resolved account comparisons
+---
 
-## Current focus
-**Phase 6** — Immutable Audit & Risk Decision Log (`RISK_DECISION` table in PostgreSQL + `audit-service`). Phase 6 Loans was built first under the same phase number; renumber if needed.
+## Current Focus
 
-## Remaining Phases
-| Phase | Description | Risk |
-|---|---|---|
-| 6 | RISK_DECISION table in PostgreSQL | LOW |
-| 7 | Mobile Frontend (PWA) | LOW |
-| 8 | Chaos + Load Testing | MEDIUM |
+Phase 6 — Immutable Audit & Risk Decision Log.
+Add a RISK_DECISION table in PostgreSQL (append-only, one row per scored transfer).
+Consume from audit-service via Kafka. Surface in Grafana.
