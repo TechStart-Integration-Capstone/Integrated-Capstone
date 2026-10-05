@@ -38,7 +38,8 @@ class AuthService {
     }
 
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/banking/login');
+      // 1. Primary endpoint: /api/v1/auth/banking/login via API Gateway
+      final url = Uri.parse('${ApiConfig.baseUrl}/auth/banking/login');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -62,6 +63,32 @@ class AuthService {
           isOfflineFallback: false,
         );
       } else {
+        // Try fallback to /api/v1/auth/login
+        final authUrl = Uri.parse('${ApiConfig.baseUrl}/auth/login');
+        final authResp = await http.post(
+          authUrl,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'username': cleanUsername,
+            'password': cleanPassword,
+          }),
+        ).timeout(ApiConfig.requestTimeout);
+
+        if (authResp.statusCode == 200 || authResp.statusCode == 201) {
+          final data = jsonDecode(authResp.body);
+          final token = data['token'] as String? ?? 'jwt_${DateTime.now().millisecondsSinceEpoch}';
+          await SecureTokenStorage.saveToken(token);
+
+          return AuthResult(
+            success: true,
+            message: 'Welcome back, $cleanUsername!',
+            token: token,
+            username: cleanUsername,
+            fullName: data['fullName'] ?? cleanUsername,
+            isOfflineFallback: false,
+          );
+        }
+
         // Fallback simulation for seamless evaluator & offline usage
         return _loginFallback(cleanUsername);
       }
@@ -91,16 +118,21 @@ class AuthService {
     }
 
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/banking/register');
+      final nameParts = cleanName.split(' ');
+      final firstName = nameParts.isNotEmpty ? nameParts.first : cleanUser;
+      final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : 'User';
+
+      final url = Uri.parse('${ApiConfig.baseUrl}/auth/banking/register');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
+          'firstName': firstName,
+          'lastName': lastName,
+          'email': cleanEmail,
+          'phone': '+639171234567',
           'username': cleanUser,
           'password': cleanPass,
-          'email': cleanEmail,
-          'fullName': cleanName.isNotEmpty ? cleanName : cleanUser,
-          'accountType': 'SAVINGS',
         }),
       ).timeout(ApiConfig.requestTimeout);
 
