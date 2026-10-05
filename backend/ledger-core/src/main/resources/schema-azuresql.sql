@@ -3,6 +3,10 @@
 -- Translated from schema-oracle.sql for Phase 1 migration
 -- ============================================================================
 
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
 -- Drop tables in reverse dependency order (safe re-run)
 IF OBJECT_ID('dbo.OUTBOX_EVENT',  'U') IS NOT NULL DROP TABLE dbo.OUTBOX_EVENT;
 IF OBJECT_ID('dbo.LEDGER_TRANSACTION', 'U') IS NOT NULL DROP TABLE dbo.LEDGER_TRANSACTION;
