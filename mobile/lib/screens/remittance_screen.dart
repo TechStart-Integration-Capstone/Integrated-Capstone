@@ -221,13 +221,30 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }
 
   void _executeTransferBiometric(double amt, String fromAcc, String toAcc) async {
-    final refId = 'TRX-20261002-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+    final cleanDest = _selectedModeIndex == 0
+        ? (_ownTargetAccount.contains('savings') ? '8504' : '5046')
+        : _recipientController.text.replaceAll(' ', '');
 
-    // Show completion receipt modal
-    _showReceiptBottomSheet(amt, refId, fromAcc, toAcc);
+    final result = await RemittanceService.submitRemittance(
+      sourceAccountId: _sourceAccount,
+      destinationAccountNumber: cleanDest,
+      amount: amt,
+    );
 
-    // Notify parent to append transaction
-    widget.onTransferSuccess(amt, refId, fromAcc, toAcc);
+    if (!mounted) return;
+
+    if (result.success) {
+      final refId = result.referenceId ?? 'TRX-20261002-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+      _showReceiptBottomSheet(amt, refId, fromAcc, toAcc);
+      widget.onTransferSuccess(amt, refId, fromAcc, toAcc);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text(result.message),
+        ),
+      );
+    }
   }
 
   void _showReceiptBottomSheet(double amt, String refId, String fromAcc, String toAcc) {
