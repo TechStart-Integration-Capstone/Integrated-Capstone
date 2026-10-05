@@ -24,9 +24,8 @@ public class TransactionMonitorServiceTest {
         jdbc.execute("CREATE TABLE dbo.ACCOUNT(account_id BIGINT PRIMARY KEY, account_number VARCHAR(30), account_type VARCHAR(30))");
         jdbc.execute("CREATE TABLE dbo.LEDGER_TRANSACTION(transaction_id BIGINT PRIMARY KEY, reference_no VARCHAR(64), transaction_date TIMESTAMP, from_account_id BIGINT, to_account_id BIGINT, transaction_type VARCHAR(30), operation VARCHAR(10), amount DECIMAL(18,4), source_currency VARCHAR(10), status VARCHAR(20))");
         jdbc.execute("CREATE TABLE dbo.OUTBOX_EVENT(event_id BIGINT PRIMARY KEY, transaction_id BIGINT, payload VARCHAR(4000))");
-        jdbc.update("INSERT INTO dbo.ACCOUNT VALUES (10, '001181233469')");
-        jdbc.update("INSERT INTO dbo.ACCOUNT VALUES (99, 'PH1000000LOAN')");
         jdbc.update("INSERT INTO dbo.ACCOUNT VALUES (10, '001181233469', 'SAVINGS_ACCOUNT')");
+        jdbc.update("INSERT INTO dbo.ACCOUNT VALUES (99, 'PH1000000LOAN', 'INTERNAL')");
     }
 
     public static int isJson(String value) {
@@ -42,9 +41,17 @@ public class TransactionMonitorServiceTest {
         return new TransactionMonitorService(jdbc, Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
     }
 
+    private void insert(long id, String date, String type) {
+        insert(id, date, type, 10L, null);
+    }
+
+    private void insert(long id, String date, String type, long fromAccountId, Long toAccountId) {
+        jdbc.update("INSERT INTO dbo.LEDGER_TRANSACTION (transaction_id, reference_no, transaction_date, from_account_id, to_account_id, transaction_type, amount, source_currency, status) VALUES (?, ?, ?, ?, ?, ?, 15.2500, 'PHP', 'SUCCESS')",
+                id, "DB-REF-" + id, LocalDateTime.parse(date), fromAccountId, toAccountId, type);
+    }
+
     private void insert(long id, String date, String type, String operation) {
-        jdbc.update("INSERT INTO dbo.LEDGER_TRANSACTION VALUES (?, ?, ?, 10, ?, 15.2500, 'PHP', 'SUCCESS', NULL)",
-                id, "DB-REF-" + id, LocalDateTime.parse(date), type);
+        insert(id, date, type, 10L, null);
         if (operation != null) {
             jdbc.update("INSERT INTO dbo.OUTBOX_EVENT VALUES (?, ?, ?)", id + 100, id,
                     "{\"operation\":\"" + operation + "\"}");

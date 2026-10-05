@@ -24,7 +24,6 @@ public class BankingAccountNumberMigration implements ApplicationRunner {
         } catch (Exception e) {
             return;
         }
-        var accounts=jdbc.query("SELECT account_id,account_number,customer_id,account_type FROM ACCOUNT ORDER BY account_id",
         // INTERNAL accounts (e.g. the bank's PH1000000LOAN loan pool) keep their fixed numbers.
         var accounts=jdbc.query("SELECT account_id,account_number,customer_id,account_type FROM ACCOUNT WHERE account_type <> 'INTERNAL' ORDER BY account_id",
                 (rs,row) -> new Existing(rs.getLong(1),rs.getString(2),rs.getLong(3),rs.getString(4)));
