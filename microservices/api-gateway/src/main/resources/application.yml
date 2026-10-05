@@ -135,6 +135,16 @@ spring:
                 key-resolver: "#{@userKeyResolver}"
                 deny-empty-key: false
 
+        # Audit Service (Phase 6) — /api/v1/audit/** → audit-service:8085/**
+        # Exposes risk-decisions log: GET /api/v1/audit/risk-decisions
+        # Requires valid JWT (no public paths).
+        - id: audit-service
+          uri: http://${AUDIT_SERVICE_HOST:audit-service}:8085
+          predicates:
+            - Path=/api/v1/audit/**
+          filters:
+            - StripPrefix=2
+
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:
   security:

@@ -15,6 +15,7 @@ import com.bank.transaction.repository.RemittanceRepository;
 import com.bank.transaction.repository.TransactionRepository;
 import com.bank.transaction.service.RemittanceLedgerService;
 import com.bank.transaction.service.RemittanceOrchestratorService;
+import com.bank.transaction.service.RiskDecisionPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -66,7 +67,8 @@ class InternalTransferTest {
         RemittanceLedgerService ledgerService = new RemittanceLedgerService(
                 remittanceRepository, transactionRepository, outboxEventRepository, jdbcTemplate);
         orchestratorService = new RemittanceOrchestratorService(
-                remittanceRepository, ledgerService, riskEngineClient, t24AdapterClient, redisTemplate, new ObjectMapper());
+                remittanceRepository, ledgerService, riskEngineClient, t24AdapterClient, redisTemplate, new ObjectMapper(),
+                new RiskDecisionPublisher(mock(org.springframework.kafka.core.KafkaTemplate.class), new ObjectMapper()));
         controller = new InternalTransferController(orchestratorService);
 
         // Bank loan pool (account 10, owned by customer 99) and a customer savings account (account 4, customer 2)

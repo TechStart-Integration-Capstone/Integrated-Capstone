@@ -1,7 +1,7 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **dom**_
-_Last updated: 2026-10-05 (Risk Engine two-layer upgrade — rule-based + Isolation Forest ML)_
+_Last updated: 2026-10-05 (Phase 6 complete — Immutable Risk Decision Log)_
 
 ---
 
@@ -23,7 +23,7 @@ Built on top of the Capstone 1 ledger engine.
 | 4 | T24 Core Adapter & Simulator | Done |
 | 5 | Remittance Orchestrator & Saga Engine Hardening | Done |
 | 5b | Loans — apply / accept / disburse / repay / EOD | Implemented (unit-tested; not yet Docker end-to-end) |
-| 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Next |
+| 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Done |
 | 7 | Mobile Frontend (PWA) | Pending |
 | 8 | Chaos + Load Testing | Pending |
 
@@ -133,6 +133,10 @@ Migration run order on an existing database:
 3. scripts/migrate_phase6_loans.sql
 4. scripts/seed_demo_azure_sql.sql
 
+PostgreSQL migration run order (ledger_audit_db):
+1. microservices/audit-service/src/main/resources/schema-postgres.sql (full schema on new DB)
+2. scripts/migrate_phase6_risk_decision.sql (adds RISK_DECISION on existing DB — idempotent)
+
 Key SQL Server constraints to remember:
 - TRANSACTION is a reserved word — table is LEDGER_TRANSACTION everywhere
 - DECIMAL(18,4) for all balances
@@ -189,8 +193,46 @@ Demo credentials (password: password123):
 
 ---
 
+## Phase 6 — Risk Decision Log (Done)
+
+Every risk engine scoring call (APPROVE, REJECT, UNAVAILABLE) is now persisted as an append-only row in PostgreSQL.
+
+### Data flow
+```
+transaction-service RemittanceOrchestratorService
+  → evaluateRisk() returns RiskResult{score, decision, reasons, ruleScore, mlScore, latencyMs}
+  → RiskDecisionPublisher.publish(referenceNo, risk)   ← fire-and-forget, never blocks saga
+  → Kafka topic: risk.decisions
+  → audit-service RiskDecisionConsumer
+  → RISK_DECISION table in PostgreSQL (ledger_audit_db)
+```
+
+### REST endpoints (via gateway)
+- `GET /api/v1/audit/risk-decisions` — paginated list, filter by `decision` or `from`/`to`
+- `GET /api/v1/audit/risk-decisions/{referenceNo}` — single decision by reference
+- `GET /api/v1/audit/risk-decisions/stats` — last24h + last7d approval/rejection counts
+
+### Key design decisions
+- REJECT and UNAVAILABLE outcomes are captured — not just successful transfers
+- `reasons` stored as JSONB TEXT with GIN index — supports queries like "all transfers rejected due to amount_above_100k"
+- `ruleScore` and `mlScore` recorded separately from combined `score` — shows which layer triggered a rejection
+- Idempotent consumer — duplicate reference_no events are silently skipped
+
+### Rebuild after Phase 6
+```powershell
+mvn -f microservices/transaction-service/pom.xml clean package -DskipTests
+mvn -f microservices/audit-service/pom.xml clean package -DskipTests
+mvn -f microservices/api-gateway/pom.xml clean package -DskipTests
+cd docker
+docker compose up -d --build transaction-service audit-service api-gateway
+# Then run migration on PostgreSQL:
+docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f /dev/stdin < scripts/migrate_phase6_risk_decision.sql
+```
+
+---
+
 ## Current Focus
 
-Phase 6 — Immutable Audit & Risk Decision Log.
-Add a RISK_DECISION table in PostgreSQL (append-only, one row per scored transfer).
-Consume from audit-service via Kafka. Surface in Grafana.
+All planned phases complete through Phase 6. Remaining work:
+- **Phase 7** — Mobile Frontend (PWA)
+- **Phase 8** — Chaos + Load Testing

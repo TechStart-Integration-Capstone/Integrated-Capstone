@@ -14,7 +14,7 @@ For a user-assigned managed identity, set `AZURE_MANAGED_IDENTITY_CLIENT_ID` and
 
 ## Target schema and mapping
 
-Run [schema-azure-sql.sql](../backend/ledger-core/src/main/resources/schema-azure-sql.sql) against the target before migrating rows. The script is additive: it creates missing tables and indexes, does not drop objects, and does not seed demo records.
+Run [schema-azure-sql.sql](../microservices/transaction-service/src/main/resources/schema-azuresql.sql) against the target before migrating rows. The script is additive: it creates missing tables and indexes, does not drop objects, and does not seed demo records.
 
 | Oracle source | Azure SQL target | Conversion |
 |---|---|---|

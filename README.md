@@ -222,7 +222,7 @@ Get-Content .\scripts\seed_demo_azure_sql.sql | docker exec -i azure-sql-master 
 
 #### If using Cloud-Hosted Azure SQL:
 Connect to your cloud database using **Azure Portal Query Editor**, **Azure Data Studio**, or **SSMS**, and execute:
-1. `backend/ledger-core/src/main/resources/schema-azuresql.sql` (Creates all tables and indexes)
+1. `microservices/transaction-service/src/main/resources/schema-azuresql.sql` (Creates all tables and indexes)
 2. `scripts/seed_demo_azure_sql.sql` (Seeds demo customers and accounts)
 
 ### Step 4 — Connecting to Cloud-Hosted Azure SQL (Optional)
