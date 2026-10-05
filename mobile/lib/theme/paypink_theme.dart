@@ -31,6 +31,40 @@ class PayPinkTheme {
   static const Color glassBorder = Color(0xD9FFFFFF);
   static const Color glassBorderSubtle = Color(0x66FFFFFF);
 
+  // Dark Mode Tokens (Deep Midnight Amethyst & Obsidian Wine)
+  static const Color darkBg = Color(0xFF0E0A12);
+  static const Color darkPaper = Color(0xFF17101C);
+  static const Color darkCard = Color(0xFF201627);
+  static const Color darkInk = Color(0xFFF9F5F8);
+  static const Color darkMuted = Color(0xFFA89FA9);
+  static const Color darkLine = Color(0xFF2E2136);
+  static const Color darkGlassBorder = Color(0x3DF7D6E3);
+  static const Color darkGlassCardBg = Color(0xD91F1526);
+
+  static ThemeData get lightTheme => ThemeData(
+        fontFamily: 'DM Sans',
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: paper,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: wine,
+          brightness: Brightness.light,
+          surface: paper,
+        ),
+        useMaterial3: true,
+      );
+
+  static ThemeData get darkTheme => ThemeData(
+        fontFamily: 'DM Sans',
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: darkBg,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: wineLight,
+          brightness: Brightness.dark,
+          surface: darkBg,
+        ),
+        useMaterial3: true,
+      );
+
   // Typography with GoogleFonts fallback
   static TextStyle display({
     double fontSize = 16,

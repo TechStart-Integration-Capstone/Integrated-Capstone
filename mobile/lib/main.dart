@@ -7,7 +7,9 @@ import 'screens/accounts_screen.dart';
 import 'screens/remittance_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'screens/circuit_breaker_screen.dart';
+import 'screens/login_register_screen.dart';
 import 'services/circuit_breaker_client.dart';
+import 'services/auth_service.dart';
 import 'widgets/bottom_sheets.dart';
 
 void main() {
@@ -21,30 +23,81 @@ void main() {
   runApp(const PayPinkMobileApp());
 }
 
-class PayPinkMobileApp extends StatelessWidget {
-  const PayPinkMobileApp({super.key});
+class PayPinkMobileApp extends StatefulWidget {
+  final bool initialAuthenticated;
+  const PayPinkMobileApp({super.key, this.initialAuthenticated = false});
+
+  @override
+  State<PayPinkMobileApp> createState() => _PayPinkMobileAppState();
+}
+
+class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
+  late bool _isAuthenticated;
+  bool _isDarkMode = false;
+  String _currentUser = 'Trixie';
+
+  @override
+  void initState() {
+    super.initState();
+    _isAuthenticated = widget.initialAuthenticated;
+  }
+
+  void _toggleTheme() {
+    setState(() => _isDarkMode = !_isDarkMode);
+  }
+
+  void _handleLoginSuccess(String user) {
+    setState(() {
+      _currentUser = user;
+      _isAuthenticated = true;
+    });
+  }
+
+  void _handleLogout() async {
+    await AuthService.logout();
+    if (!mounted) return;
+    setState(() {
+      _isAuthenticated = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PayPink Mobile Banking',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        fontFamily: 'DM Sans',
-        scaffoldBackgroundColor: PayPinkTheme.paper,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: PayPinkTheme.wine,
-          surface: PayPinkTheme.paper,
-        ),
-        useMaterial3: true,
-      ),
-      home: const MainNavigationShell(),
+      theme: PayPinkTheme.lightTheme,
+      darkTheme: PayPinkTheme.darkTheme,
+      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      home: _isAuthenticated
+          ? MainNavigationShell(
+              isDarkMode: _isDarkMode,
+              onToggleTheme: _toggleTheme,
+              onLogout: _handleLogout,
+              currentUser: _currentUser,
+            )
+          : LoginRegisterScreen(
+              onLoginSuccess: _handleLoginSuccess,
+              isDarkMode: _isDarkMode,
+              onToggleTheme: _toggleTheme,
+            ),
     );
   }
 }
 
 class MainNavigationShell extends StatefulWidget {
-  const MainNavigationShell({super.key});
+  final bool isDarkMode;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onLogout;
+  final String currentUser;
+
+  const MainNavigationShell({
+    super.key,
+    this.isDarkMode = false,
+    required this.onToggleTheme,
+    required this.onLogout,
+    this.currentUser = 'Trixie',
+  });
 
   @override
   State<MainNavigationShell> createState() => _MainNavigationShellState();
@@ -284,11 +337,66 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     );
   }
 
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: widget.isDarkMode ? PayPinkTheme.darkCard : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.logout_rounded, color: PayPinkTheme.wine, size: 24),
+            const SizedBox(width: 10),
+            Text(
+              'Log Out',
+              style: PayPinkTheme.display(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: widget.isDarkMode ? PayPinkTheme.darkInk : PayPinkTheme.ink,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to end your secure PayPink banking session?',
+          style: PayPinkTheme.body(
+            fontSize: 13,
+            color: widget.isDarkMode ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: PayPinkTheme.body(
+                fontWeight: FontWeight.w600,
+                color: widget.isDarkMode ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.onLogout();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: PayPinkTheme.wine,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_circuitBreaker.isOpen) {
       return Container(
-        color: const Color(0xFFF0EAEF),
+        color: widget.isDarkMode ? const Color(0xFF09060B) : const Color(0xFFF0EAEF),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
@@ -304,6 +412,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     }
 
     final hasUnreadNotifs = _notifications.any((n) => n['unread'] == true);
+    final isDark = widget.isDarkMode;
 
     final screens = [
       DashboardScreen(
@@ -311,6 +420,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         onToggleHideBalances: () => setState(() => _hideBalances = !_hideBalances),
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
         transactions: _transactions,
+        userName: widget.currentUser,
       ),
       AccountsScreen(
         hideBalances: _hideBalances,
@@ -326,86 +436,136 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     ];
 
     return Container(
-      color: const Color(0xFFEFE8EC), // Elegant neutral frame background on desktop web
+      color: isDark ? const Color(0xFF09060B) : const Color(0xFFEFE8EC),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: Scaffold(
             extendBody: true,
-            backgroundColor: PayPinkTheme.paper,
+            backgroundColor: isDark ? PayPinkTheme.darkBg : PayPinkTheme.paper,
             body: SafeArea(
               bottom: false,
               child: Column(
                 children: [
-                  // App Header Bar matching mockup
+                  // App Header Bar with Theme Toggle and Logout
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: PayPinkTheme.wine,
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: PayPinkTheme.wine.withValues(alpha: 0.25),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 3),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: PayPinkTheme.wine,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: PayPinkTheme.wine.withValues(alpha: 0.25),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'p',
+                                    style: TextStyle(
+                                      fontFamily: 'Manrope',
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'PayPink®',
+                                    style: PayPinkTheme.display(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                      color: isDark ? Colors.white : PayPinkTheme.wine,
+                                      letterSpacing: -0.8,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Oct 2, 2026',
+                                    style: PayPinkTheme.body(
+                                      fontSize: 9.5,
+                                      color: isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
+                                    ),
                                   ),
                                 ],
                               ),
-                              child: const Center(
-                                child: Text(
-                                  'p',
-                                  style: TextStyle(
-                                    fontFamily: 'Manrope',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'PayPink®',
-                                  style: PayPinkTheme.display(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: PayPinkTheme.wine,
-                                    letterSpacing: -0.8,
-                                  ),
-                                ),
-                                Text(
-                                  'Fri, October 2, 2026',
-                                  style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
-                                ),
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
+                            // Dark Mode Toggle
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(),
+                              icon: Icon(
+                                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                                color: isDark ? const Color(0xFFFBBF24) : PayPinkTheme.wine,
+                                size: 19,
+                              ),
+                              tooltip: isDark ? 'Light Mode' : 'Dark Mode',
+                              onPressed: widget.onToggleTheme,
+                            ),
+                            const SizedBox(width: 4),
+                            // Log Out Button
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(),
+                              icon: Icon(
+                                Icons.logout_rounded,
+                                color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                                size: 19,
+                              ),
+                              tooltip: 'Log Out',
+                              onPressed: _confirmLogout,
+                            ),
+                            const SizedBox(width: 4),
                             // Chaos Testing Trigger Button
                             IconButton(
-                              icon: const Icon(Icons.tune_rounded, color: PayPinkTheme.wine, size: 20),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              constraints: const BoxConstraints(),
+                              icon: Icon(
+                                Icons.tune_rounded,
+                                color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                                size: 19,
+                              ),
                               tooltip: 'Chaos & Arch Controls',
                               onPressed: _showChaosEngineeringMenu,
                             ),
+                            const SizedBox(width: 4),
                             // Notification Bell with live red unread dot
                             Stack(
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.notifications_none_rounded, color: PayPinkTheme.wine, size: 22),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
+                                  icon: Icon(
+                                    Icons.notifications_none_rounded,
+                                    color: isDark ? Colors.white : PayPinkTheme.wine,
+                                    size: 20,
+                                  ),
                                   onPressed: () {
                                     PayPinkBottomSheets.showNotificationsDrawer(
                                       context,
@@ -417,11 +577,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                                 ),
                                 if (hasUnreadNotifs)
                                   Positioned(
-                                    top: 8,
-                                    right: 8,
+                                    top: 4,
+                                    right: 4,
                                     child: Container(
-                                      width: 8,
-                                      height: 8,
+                                      width: 7,
+                                      height: 7,
                                       decoration: const BoxDecoration(
                                         color: PayPinkTheme.red,
                                         shape: BoxShape.circle,
@@ -430,8 +590,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                                   ),
                               ],
                             ),
-                            const SizedBox(width: 4),
-                            // Customer Avatar TS
+                            const SizedBox(width: 6),
+                            // Customer Avatar TS (opens Hardware Vault + Logout)
                             GestureDetector(
                               onTap: () {
                                 PayPinkBottomSheets.showHardwareVault(
@@ -440,17 +600,18 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                                   circuitStatus: _circuitBreaker.isOpen ? 'OPEN (Tripped)' : 'CLOSED (Healthy)',
                                   gatewayRoute: '127.0.0.1:8080 (Reverse Proxy)',
                                   jwtToken: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0c2Ftc29uIiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxNzkxMDEwMDAwfQ',
+                                  onLogout: widget.onLogout,
                                 );
                               },
                               child: CircleAvatar(
-                                radius: 17,
-                                backgroundColor: PayPinkTheme.pink,
+                                radius: 15,
+                                backgroundColor: isDark ? PayPinkTheme.wineDark : PayPinkTheme.pink,
                                 child: Text(
-                                  'TS',
+                                  widget.currentUser.isNotEmpty ? widget.currentUser.substring(0, 1).toUpperCase() : 'T',
                                   style: PayPinkTheme.display(
-                                    fontSize: 11,
+                                    fontSize: 10.5,
                                     fontWeight: FontWeight.w800,
-                                    color: PayPinkTheme.wine,
+                                    color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                   ),
                                 ),
                               ),
@@ -478,6 +639,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   }
 
   Widget _buildDynamicBottomBar() {
+    final isDark = widget.isDarkMode;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: ClipRRect(
@@ -488,20 +650,20 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             height: 64,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.84),
+              color: isDark ? PayPinkTheme.darkGlassCardBg : Colors.white.withValues(alpha: 0.84),
               borderRadius: BorderRadius.circular(32),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.95),
+                color: isDark ? PayPinkTheme.darkGlassBorder : Colors.white.withValues(alpha: 0.95),
                 width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: PayPinkTheme.wine.withValues(alpha: 0.12),
+                  color: (isDark ? Colors.black : PayPinkTheme.wine).withValues(alpha: isDark ? 0.35 : 0.12),
                   blurRadius: 28,
                   offset: const Offset(0, 10),
                 ),
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
@@ -524,6 +686,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   Widget _buildDynamicNavItem(int index, IconData icon, String label) {
     final isSelected = _currentIndex == index;
+    final isDark = widget.isDarkMode;
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
@@ -538,12 +701,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: isSelected ? PayPinkTheme.wine : Colors.transparent,
+          color: isSelected
+              ? (isDark ? PayPinkTheme.wineLight : PayPinkTheme.wine)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(22),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: PayPinkTheme.wine.withValues(alpha: 0.28),
+                    color: PayPinkTheme.wine.withValues(alpha: isDark ? 0.45 : 0.28),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -556,7 +721,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             Icon(
               icon,
               size: 20,
-              color: isSelected ? Colors.white : PayPinkTheme.muted,
+              color: isSelected
+                  ? Colors.white
+                  : (isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted),
             ),
             AnimatedCrossFade(
               firstChild: Padding(

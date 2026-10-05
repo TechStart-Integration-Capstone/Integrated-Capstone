@@ -9,6 +9,7 @@ class DashboardScreen extends StatefulWidget {
   final VoidCallback onToggleHideBalances;
   final Function(int) onNavigateTab;
   final List<TransactionItem> transactions;
+  final String userName;
 
   const DashboardScreen({
     super.key,
@@ -16,6 +17,7 @@ class DashboardScreen extends StatefulWidget {
     required this.onToggleHideBalances,
     required this.onNavigateTab,
     required this.transactions,
+    this.userName = 'Trixie',
   });
 
   @override
@@ -35,7 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           // Greeting matching mockup
           Text(
-            'Hello, Trixie.',
+            'Hello, ${widget.userName}.',
             style: PayPinkTheme.display(
               fontSize: 26,
               fontWeight: FontWeight.w800,

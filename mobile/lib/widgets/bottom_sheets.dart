@@ -785,6 +785,7 @@ class PayPinkBottomSheets {
     String circuitStatus = 'CLOSED (Healthy)',
     String gatewayRoute = '127.0.0.1:8080 (Reverse Proxy)',
     String jwtToken = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0c2Ftc29uIiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxNzkxMDEwMDAwfQ',
+    VoidCallback? onLogout,
   }) {
     showModalBottomSheet(
       context: context,
@@ -852,6 +853,25 @@ class PayPinkBottomSheets {
                 child: const Text('Close Profile & Vault'),
               ),
             ),
+            if (onLogout != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    onLogout();
+                  },
+                  icon: const Icon(Icons.logout_rounded, color: PayPinkTheme.red, size: 18),
+                  label: const Text('Log Out of PayPink', style: TextStyle(color: PayPinkTheme.red, fontWeight: FontWeight.w700)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: PayPinkTheme.red, width: 1.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
