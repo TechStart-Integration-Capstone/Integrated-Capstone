@@ -37,13 +37,14 @@ function toast(message, error = false) {
   toastTimer = setTimeout(() => { node.hidden = true; }, 4500);
 }
 
-async function api(path, {method = 'GET', body, authenticated = true} = {}) {
-  const headers = {Accept:'application/json'};
+async function api(path, {method = 'GET', body, authenticated = true, headers: customHeaders = {}} = {}) {
+  const headers = {Accept:'application/json', ...customHeaders};
   if (body) headers['Content-Type'] = 'application/json';
   if (authenticated && state.session) headers.Authorization = `Bearer ${state.session.token}`;
   let response;
+  const targetUrl = path.startsWith('/api/') ? path : `${API}${path}`;
   try {
-    response = await fetch(`${API}${path}`, {method, headers, body:body ? JSON.stringify(body) : undefined,
+    response = await fetch(targetUrl, {method, headers, body:body ? JSON.stringify(body) : undefined,
       cache:'no-store', signal:AbortSignal.timeout(15000)});
   } catch {
     throw new Error('We couldn’t reach the bank. Check your connection and try again.');
@@ -54,9 +55,11 @@ async function api(path, {method = 'GET', body, authenticated = true} = {}) {
     throw new Error('Your session has ended. Please log in again.');
   }
   if (!response.ok) {
-    const error = new Error(data.message || (response.status === 429
-      ? 'Too many requests. Please wait a moment and try again.' : 'We couldn’t complete your request. Please try again.'));
+    const errorMsg = data.error || data.message || data.reason || (response.status === 429
+      ? 'Too many requests. Please wait a moment and try again.' : 'We couldn’t complete your request. Please try again.');
+    const error = new Error(errorMsg);
     error.status = response.status;
+    error.data = data;
     throw error;
   }
   return data;
@@ -467,12 +470,43 @@ async function sendTransfer() {
   form.sending = true; form.error = '';
   dialog.close(); renderPage();
   try {
-    const receipt = await api('/transfers',{method:'POST',body:request});
+    const idempKey = request.idempotencyKey || (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'idemp-' + Date.now());
+    const payload = {
+      sourceAccountId: String(request.sourceAccountId),
+      targetAccountId: String(request.destinationAccountNumber),
+      amount: parseFloat(request.amount),
+      currency: 'PHP'
+    };
+
+    const res = await api('/api/v1/remittance/transfer', {
+      method: 'POST',
+      body: payload,
+      headers: {
+        'Idempotency-Key': idempKey,
+        'X-Correlation-ID': 'corr-' + Date.now()
+      }
+    });
+
     if (generation !== state.generation || !state.session) return;
     delete state.session.pendingTransfer; saveSession();
+
+    const receipt = {
+      reference: res.referenceNo || ('PP-' + Date.now()),
+      ftReference: res.ftReference,
+      status: (res.status === 'POSTED' || res.status === 'COMPLETED') ? 'SUCCESS' : res.status,
+      amount: res.amount || request.amount,
+      currency: 'PHP',
+      recipientName: form.recipient ? form.recipient.fullName : (form.mode === 'own' ? state.profile.fullName : 'PayPink customer'),
+      destinationAccountNumber: request.destinationAccountNumber,
+      date: new Date().toISOString(),
+      riskScore: res.riskScore,
+      riskDecision: res.riskDecision,
+      reason: res.reason
+    };
+
     form.receipt = receipt; form.review = null;
     await refresh();
-    toast('Transfer complete. The receiving account has been credited.');
+    toast('Transfer complete. Screened by Risk Engine & posted via T24 Core.');
 
     // Real-time synchronization broadcast across banking and admin tabs
     try {
@@ -482,6 +516,7 @@ async function sendTransfer() {
       const syncEvent = {
         type: 'CUSTOMER_TRANSFER',
         reference: receipt.reference,
+        ftReference: receipt.ftReference,
         sourceAccountId: request.sourceAccountId,
         sourceAccountNumber: sourceAcc ? sourceAcc.accountNumber : '001181233469',
         sourceBeforeBalance: beforeBal,
@@ -513,8 +548,10 @@ async function sendTransfer() {
 }
 
 function transferReceipt(receipt) {
+  const ftItem = receipt.ftReference ? detail('T24 Core reference', escapeHtml(receipt.ftReference)) : '';
+  const riskItem = (receipt.riskScore !== undefined && receipt.riskScore !== null) ? detail('Risk evaluation', `Score ${escapeHtml(receipt.riskScore)} (${escapeHtml(receipt.riskDecision || 'APPROVED')})`) : '';
   return heading('All sent.', 'Your transfer is complete. Both account balances have been updated.')
-    + `<section class="transfer-receipt"><span class="receipt-check">${icon('check')}</span><h2>Transfer successful</h2><div class="receipt-amount">${escapeHtml(money(receipt.amount,receipt.currency))}</div><p class="receipt-recipient">${escapeHtml(receipt.recipientName || 'PayPink customer')}</p><p class="muted">${escapeHtml(maskedNumber(receipt.destinationAccountNumber))}</p><dl class="detail-list">${detail('Reference number',escapeHtml(receipt.reference))}${detail('Status',statusPill(receipt.status))}${detail('Transfer fee','₱0.00')}${detail('Date & time',escapeHtml(txDate({date:receipt.date}).toLocaleString('en-PH')))}</dl><div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
+    + `<section class="transfer-receipt"><span class="receipt-check">${icon('check')}</span><h2>Transfer successful</h2><div class="receipt-amount">${escapeHtml(money(receipt.amount,receipt.currency))}</div><p class="receipt-recipient">${escapeHtml(receipt.recipientName || 'PayPink customer')}</p><p class="muted">${escapeHtml(maskedNumber(receipt.destinationAccountNumber))}</p><dl class="detail-list">${detail('Reference number',escapeHtml(receipt.reference))}${ftItem}${riskItem}${detail('Status',statusPill(receipt.status))}${detail('Transfer fee','₱0.00')}${detail('Date & time',escapeHtml(txDate({date:receipt.date}).toLocaleString('en-PH')))}</dl><div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
 }
 
 function recipientPicker() {
