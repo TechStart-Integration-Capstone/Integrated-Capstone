@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source
 COPY scorer.py .
+COPY ml_scorer.py .
 COPY main.py .
 
 # Expose internal port (no host binding — accessed via ledger-net only)
