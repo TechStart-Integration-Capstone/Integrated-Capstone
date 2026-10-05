@@ -24,8 +24,13 @@ public class OutboxEvent {
     @Column(name = "event_id")
     private Long eventId;
 
-    @Column(name = "transaction_id", nullable = false)
+    // NULL for loan.* events (Phase 6), which have no ledger transaction
+    @Column(name = "transaction_id")
     private Long transactionId;
+
+    // e.g. a LOAN reference_no — used as the Kafka key when transaction_id is NULL
+    @Column(name = "aggregate_id", length = 40)
+    private String aggregateId;
 
     @Column(name = "event_type", nullable = false, length = 50)
     private String eventType;
@@ -46,6 +51,14 @@ public class OutboxEvent {
 
     public Long getEventId()         { return eventId; }
     public Long getTransactionId()   { return transactionId; }
+    public String getAggregateId()   { return aggregateId; }
+
+    /** Kafka message key: the ledger transaction id, or the aggregate id for events without one. */
+    public String kafkaKey() {
+        if (transactionId != null) return String.valueOf(transactionId);
+        if (aggregateId != null) return aggregateId;
+        return "event-" + eventId;
+    }
     public String getEventType()     { return eventType; }
     public String getPayload()       { return payload; }
     public String getStatus()        { return status; }

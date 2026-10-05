@@ -13,6 +13,7 @@ Built on top of the Capstone 1 ledger engine.
 - [x] Phase 3: Risk Engine & Fraud Screening Service
 - [x] Phase 4: T24 Core Adapter & Simulator
 - [x] Phase 5: Remittance Orchestrator & Saga Engine Hardening (All Must-Dos & Security Fixes Complete)
+- [x] Phase 6 (Loans): loan-service — apply / accept / repay / EOD (unit-tested; not yet run end-to-end in Docker)
 
 ## How a transfer works
 1. App → API Gateway (JWT check, rate limit, X-Correlation-ID, unconditional header stripping of incoming untrusted X-Auth-* headers)
@@ -47,6 +48,7 @@ Built on top of the Capstone 1 ledger engine.
 | analytics-service | 8088 (internal only) | Kafka (in-memory) |
 | risk-engine | 8000 (internal only) | None — stateless |
 | t24-adapter | 8090 (internal only) | None — simulator |
+| loan-service | 8091 (internal only) | Azure SQL (money moves only via transaction-service) |
 
 ## Risk Engine (Phase 3)
 - Route: `POST /api/v1/risk/score` via gateway (StripPrefix=3 → risk-engine:8000/score)
@@ -55,8 +57,10 @@ Built on top of the Capstone 1 ledger engine.
 - Rules: self-transfer +0.90, >100k +0.50, >50k +0.30, >20k +0.15, new account +0.25, high velocity +0.30, non-PHP +0.20
 - OTel: manual tracing with W3C traceparent propagation (no auto-instrumentation — pkg_resources missing in python:3.12-slim)
 
-## Azure SQL Schema (as of Phase 5)
-Tables: `CUSTOMER`, `ACCOUNT`, `AUDIT_LOG`, `BANKING_FAVORITE`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT`, `REMITTANCE`
+## Azure SQL Schema (as of Phase 6 Loans)
+Tables: `CUSTOMER`, `ACCOUNT`, `AUDIT_LOG`, `BANKING_FAVORITE`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT`, `REMITTANCE`, `LOAN_APPLICATION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT`
+
+Run order on an existing database: `schema-azuresql.sql` → `scripts/migrate_phase5_hardening.sql` → `scripts/migrate_phase6_loans.sql` → `scripts/seed_demo_azure_sql.sql`.
 
 > TRANSACTION is a reserved word in T-SQL — table is named LEDGER_TRANSACTION everywhere.
 
@@ -67,6 +71,20 @@ Key SQL Server rules:
 - `SUBSTRING()`, `+` concat, `TOP 1` in subqueries, no `FROM DUAL`
 - mssql-jdbc:12.8.1.jre11 (no jre17 on Maven Central)
 - SQL Server Docker does NOT auto-run /docker-entrypoint-initdb.d — run schema via sqlcmd manually
+
+## Loans (Phase 6)
+- Endpoints via gateway: `POST /api/v1/loans/applications`, `POST /api/v1/loans/applications/{ref}/accept`, `GET /api/v1/loans`, `GET /api/v1/loans/{id}/schedule`, `POST /api/v1/loans/{id}/repayments`, `POST /api/v1/loans/eod/run?businessDate=` (admin only)
+- Money moves only through transaction-service `POST /internal/remittance/transfer` (header `X-Internal-Service: loan-service`, not routed by the gateway). Disbursements skip the risk engine; repayments don't.
+- Bank loan pool: `PH1000000LOAN` (`INTERNAL`, owner `paypink_bank`, ₱50,000,000). auth-service's account renumbering skips `INTERNAL` accounts.
+- Demo logins per credit band (password `password123`):
+
+| Username | credit_score | monthly_income | Band | Max amount / rate / term |
+|---|---|---|---|---|
+| `lviernes` | 520 | 20,000 | LOW | ₱30,000 / 28% / 12 mo |
+| `arosales` | 670 | 45,000 | NORMAL | ₱250,000 / 18% / 36 mo |
+| `glim` | 800 | 150,000 | HIGH | ₱1,000,000 / 10.5% / 60 mo |
+
+> Note: `glim` only has a TIME_DEPOSIT account in the seed; loans still disburse into it.
 
 ## Git
 - **Freeze tag:** `capstone1-freeze` → commit `1e51aea`
@@ -93,10 +111,11 @@ Key SQL Server rules:
 - **Phase 2** (Completed) — X-Correlation-ID filter, Resilience4j circuit breaker on account-service, FallbackController, port isolation (only 8080+3001 exposed)
 - **Phase 3** (Completed) — Risk Engine Python FastAPI. scorer.py rules, /score + /health, manual OTel, routed via gateway
 - **Phase 4** (Completed) — T24 Core Adapter + Simulator (Spring Boot microservice in `microservices/t24-adapter/`). OfsFormatterService, T24SimulatorController sidecar (90% /1 success, 8% /-1 reject, 2% timeout), T24IdempotencyStore, routed via gateway
+- **Phase 6 Loans** (Implemented) — loan-service (decision engine, EMI schedule, accept/disburse, repay, EOD overdue job), internal transfer endpoint in transaction-service, gateway route, outbox `loan.*` events, notification messages, web Loans tab, Postman Folder 11. Mobile Loans screen deferred.
 - **Phase 5** (Completed) — Remittance Orchestrator 4-step saga engine (Hold → Risk → T24 → Commit/Release), live REMITTANCE table, Resilience4j circuit breakers, Kafka topic `remittance.events`, Postman Folder 10, post-T24 commit safety, customer-scoped idempotency, resolved account comparisons
 
 ## Current focus
-**Phase 6** — Immutable Audit & Risk Decision Log (`RISK_DECISION` table in PostgreSQL + `audit-service`)
+**Phase 6** — Immutable Audit & Risk Decision Log (`RISK_DECISION` table in PostgreSQL + `audit-service`). Phase 6 Loans was built first under the same phase number; renumber if needed.
 
 ## Remaining Phases
 | Phase | Description | Risk |

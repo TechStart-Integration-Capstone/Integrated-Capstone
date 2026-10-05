@@ -225,6 +225,75 @@ class JwtAuthFilterTest {
         assertThat(chainCalled.get()).isTrue();
     }
 
+    private String tokenWithRoles(String username, Long customerId, List<String> roles) {
+        Date now = new Date();
+        return Jwts.builder()
+                .setSubject(username)
+                .claim("customerId", customerId)
+                .claim("roles", roles)
+                .setIssuedAt(now)
+                .setExpiration(new Date(now.getTime() + 86_400_000L))
+                .signWith(signingKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    @Test
+    @DisplayName("Roles are forwarded as X-Auth-Roles; a spoofed X-Internal-Service header is stripped")
+    void rolesForwarded_internalHeaderStripped() {
+        String token = validToken("arosales", 2L);
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/api/v1/loans/applications")
+                .header("Authorization", "Bearer " + token)
+                .header("X-Auth-Roles", "ROLE_ADMIN")          // spoof attempt
+                .header("X-Internal-Service", "loan-service")  // spoof attempt
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any())).thenAnswer(inv -> {
+            ServerWebExchange captured = inv.getArgument(0);
+            assertThat(captured.getRequest().getHeaders().get("X-Auth-Roles")).containsExactly("ROLE_CUSTOMER");
+            assertThat(captured.getRequest().getHeaders().containsKey("X-Internal-Service")).isFalse();
+            chainCalled.set(true);
+            return Mono.empty();
+        });
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+        assertThat(chainCalled.get()).isTrue();
+    }
+
+    @Test
+    @DisplayName("/api/v1/loans/eod/** with a customer token: 403 Forbidden")
+    void loanEod_customerToken_returns403() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/api/v1/loans/eod/run?businessDate=2026-11-06")
+                .header("Authorization", "Bearer " + validToken("arosales", 2L))
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("/api/v1/loans/eod/** with an admin token: passes through")
+    void loanEod_adminToken_passesThrough() {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/api/v1/loans/eod/run?businessDate=2026-11-06")
+                .header("Authorization", "Bearer " + tokenWithRoles("admin", 0L, List.of("ROLE_ADMIN", "ROLE_CORE_ENGINEER")))
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, recordingChain(chainCalled))).verifyComplete();
+
+        assertThat(chainCalled.get()).isTrue();
+    }
+
     @Test
     @DisplayName("Filter ordering: JwtAuthFilter must run before other filters (order = -100)")
     void filterOrder_isNegativeHundred() {

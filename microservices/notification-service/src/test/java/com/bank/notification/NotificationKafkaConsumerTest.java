@@ -111,6 +111,78 @@ class NotificationKafkaConsumerTest {
         verify(notificationRepository, atMostOnce()).save(any());
     }
 
+    @Test @DisplayName("consume: account_id and reference_no are stored on the notification")
+    void consume_storesAccountAndReference() {
+        when(dispatcher.dispatch(anyLong(), anyString(), anyString())).thenReturn(true);
+        ArgumentCaptor<Notification> cap = ArgumentCaptor.forClass(Notification.class);
+        consumer.consume(txEvent(1L, 101L, "CREDIT", "100.00", "REF-006"));
+        verify(notificationRepository).save(cap.capture());
+        assertThat(cap.getValue().getAccountId()).isEqualTo(101L);
+        assertThat(cap.getValue().getReferenceNo()).isEqualTo("REF-006");
+    }
+
+    @Test @DisplayName("consume: a redelivered event for the same ref + account is not sent twice")
+    void consume_duplicateEvent_skipped() {
+        when(notificationRepository.existsByReferenceNoAndAccountId("REF-007", 101L)).thenReturn(true);
+        consumer.consume(txEvent(1L, 101L, "CREDIT", "100.00", "REF-007"));
+        verifyNoInteractions(dispatcher);
+        verify(notificationRepository, never()).save(any());
+    }
+
+    private Notification consumeLoanEvent(String json) {
+        when(dispatcher.dispatch(anyLong(), anyString(), anyString())).thenReturn(true);
+        ArgumentCaptor<Notification> cap = ArgumentCaptor.forClass(Notification.class);
+        consumer.consume(json);
+        verify(notificationRepository).save(cap.capture());
+        return cap.getValue();
+    }
+
+    @Test @DisplayName("loan.application.decided → 'Your loan application LAP-… has a COUNTER OFFER.'")
+    void loanDecided_message() {
+        Notification n = consumeLoanEvent("{\"eventType\":\"loan.application.decided\",\"customerId\":2,\"accountId\":4,"
+                + "\"applicationReferenceNo\":\"LAP-20261005-000014\",\"decision\":\"COUNTER_OFFER\"}");
+        assertThat(n.getMessage()).isEqualTo("Your loan application LAP-20261005-000014 has a COUNTER OFFER.");
+        assertThat(n.getReferenceNo()).isEqualTo("LAP-20261005-000014");
+        assertThat(n.getCustomerId()).isEqualTo(2L);
+        assertThat(n.getAccountId()).isEqualTo(4L);
+    }
+
+    @Test @DisplayName("loan.disbursed → '₱250,000.00 has been credited to your account. First payment due 2026-11-05.'")
+    void loanDisbursed_message() {
+        Notification n = consumeLoanEvent("{\"eventType\":\"loan.disbursed\",\"customerId\":2,\"accountId\":4,"
+                + "\"loanReferenceNo\":\"LN-20261005-000002\",\"amount\":250000.00,\"firstDueDate\":\"2026-11-05\"}");
+        assertThat(n.getMessage()).isEqualTo("₱250,000.00 has been credited to your account. First payment due 2026-11-05.");
+    }
+
+    @Test @DisplayName("loan.repayment.posted → 'Payment of ₱9,038.10 received for loan LN-…'")
+    void loanRepayment_message() {
+        Notification n = consumeLoanEvent("{\"eventType\":\"loan.repayment.posted\",\"customerId\":2,\"accountId\":4,"
+                + "\"loanReferenceNo\":\"LN-20261005-000002\",\"repaymentReferenceNo\":\"LRP-20261105-000003\",\"amount\":9038.10}");
+        assertThat(n.getMessage()).isEqualTo("Payment of ₱9,038.10 received for loan LN-20261005-000002.");
+        assertThat(n.getReferenceNo()).isEqualTo("LRP-20261105-000003");
+    }
+
+    @Test @DisplayName("loan.installment.overdue → penalty message, one alert per installment")
+    void loanOverdue_message() {
+        Notification n = consumeLoanEvent("{\"eventType\":\"loan.installment.overdue\",\"customerId\":2,\"accountId\":4,"
+                + "\"loanReferenceNo\":\"LN-20261005-000002\",\"installmentNo\":1,\"dueDate\":\"2026-11-05\",\"penalty\":180.76}");
+        assertThat(n.getMessage()).isEqualTo("Your installment due 2026-11-05 is overdue. A penalty of ₱180.76 was added.");
+        assertThat(n.getReferenceNo()).isEqualTo("LN-20261005-000002-I1");
+    }
+
+    @Test @DisplayName("loan.closed → 'Loan LN-… is fully paid. Thank you!'")
+    void loanClosed_message() {
+        Notification n = consumeLoanEvent("{\"eventType\":\"loan.closed\",\"customerId\":2,\"accountId\":4,"
+                + "\"loanReferenceNo\":\"LN-20261005-000002\"}");
+        assertThat(n.getMessage()).isEqualTo("Loan LN-20261005-000002 is fully paid. Thank you!");
+    }
+
+    @Test @DisplayName("unknown loan.* events are ignored without throwing")
+    void unknownLoanEvent_ignored() {
+        assertThatNoException().isThrownBy(() -> consumer.consume("{\"eventType\":\"loan.something.else\",\"customerId\":2}"));
+        verifyNoInteractions(dispatcher);
+    }
+
     @Test @DisplayName("consume: referenceNo appears in the saved notification message")
     void consume_referenceNoInMessage() {
         when(dispatcher.dispatch(anyLong(), anyString(), anyString())).thenReturn(true);

@@ -49,3 +49,37 @@ BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
     THROW;
 END CATCH;
+GO
+
+-- ----------------------------------------------------------------------------
+-- Phase 6 Loans. Requires scripts/migrate_phase6_loans.sql to have run first.
+-- Safe to rerun.
+-- ----------------------------------------------------------------------------
+
+-- Hardcoded credit scores (like a value received from a credit bureau) and incomes.
+UPDATE dbo.CUSTOMER SET credit_score = 520, monthly_income = 20000.0000  WHERE username = N'lviernes';  -- LOW band
+UPDATE dbo.CUSTOMER SET credit_score = 670, monthly_income = 45000.0000  WHERE username = N'arosales';  -- NORMAL band
+UPDATE dbo.CUSTOMER SET credit_score = 800, monthly_income = 150000.0000 WHERE username = N'glim';      -- HIGH band
+GO
+
+-- The bank's own loan account: holds the money PayPink lends out.
+-- paypink_bank cannot log in: its password hash is not a valid BCrypt hash.
+SET XACT_ABORT ON;
+BEGIN TRY
+    BEGIN TRANSACTION;
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.CUSTOMER WITH (UPDLOCK, HOLDLOCK) WHERE username = N'paypink_bank')
+        INSERT INTO dbo.CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status, credit_score, monthly_income)
+        VALUES (N'paypink_bank', N'!no-login', N'PayPink', N'Bank', N'loans@paypink.example.test', N'+630000000000', N'ACTIVE', 850, 0);
+
+    IF NOT EXISTS (SELECT 1 FROM dbo.ACCOUNT WITH (UPDLOCK, HOLDLOCK) WHERE account_number = N'PH1000000LOAN')
+        INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
+        SELECT customer_id, N'PH1000000LOAN', N'INTERNAL', N'PHP', 50000000.0000, N'ACTIVE'
+        FROM dbo.CUSTOMER WHERE username = N'paypink_bank';
+
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    THROW;
+END CATCH;

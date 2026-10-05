@@ -113,3 +113,49 @@ flowchart TD
 - **Latency SLA**: P95 $\le 50\text{ms}$ under peak concurrent execution.
 - **Redis Turnaround**: $\le 5\text{ms}$ per token/idempotency check.
 - **Connection Pool Isolation**: Oracle HikariCP (`maximum-pool-size=30`, `minimum-idle=5`), Postgres HikariCP (`maximum-pool-size=10`, `minimum-idle=2`).
+
+---
+
+### 7. Phase 6 — Loan Service (`microservices/loan-service`, port 8091)
+
+A customer applies for a personal loan, gets an instant decision from their **hardcoded credit score** (`CUSTOMER.credit_score`), accepts, receives the money in their account, and repays monthly.
+
+| Concern | Design |
+| :--- | :--- |
+| Routing | Gateway `/api/v1/loans/**` → `loan-service:8091/loans/**` (StripPrefix=2), same JWT filter, rate limiter and `X-Correlation-ID`. `/api/v1/loans/eod/**` requires `ROLE_ADMIN` (checked in `JwtAuthFilter`, and again in loan-service via `X-Auth-Roles`). |
+| Identity | loan-service never parses JWTs; it trusts `X-Auth-Customer-Id` / `X-Auth-Roles`, which the gateway strips from incoming requests and sets from the verified token. |
+| Money movement | **Only** through transaction-service: `POST /internal/remittance/transfer` (header `X-Internal-Service: loan-service`). That path has no gateway route, so it is reachable only on the Docker network. loan-service never updates `ACCOUNT`. |
+| Bank funds | Internal account `PH1000000LOAN` (`account_type = INTERNAL`, owner `paypink_bank`, seeded with ₱50,000,000). |
+| Risk | `LOAN_DISBURSEMENT` skips the risk engine (the bank is the sender). `LOAN_REPAYMENT` runs the normal risk → hold → T24 → ledger flow. |
+| Events | `loan.application.decided`, `loan.disbursed`, `loan.repayment.posted`, `loan.installment.overdue`, `loan.closed` — `OUTBOX_EVENT` rows with `transaction_id = NULL` and `aggregate_id` = the reference, saved in the same DB transaction as the state change. outbox-publisher keys them by `aggregate_id`. notification-service sends an SMS-style alert; audit, analytics and reconciliation ignore `loan.*`. |
+| Data | `LOAN_APPLICATION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT` in Azure SQL (see `docs/ERD.md`). Money is `BigDecimal`, rounded `HALF_EVEN` to 2 dp. |
+
+**Decision rules** (`loan:` in `application.yml`): overdue loan → DECLINED; score < 500 → DECLINED; band LOW (300–579: ₱30k, 28%, 12 mo) / NORMAL (580–719: ₱250k, 18%, 36 mo) / HIGH (720–850: ₱1M, 10.5%, 60 mo) caps amount and term; installment > 30% of monthly income → DECLINED; nothing capped → APPROVED, else COUNTER_OFFER. Offers are valid 7 days.
+
+**Accept / disburse** — one DB transaction holds a `WITH (UPDLOCK, ROWLOCK)` lock on the application while calling the orchestrator (3 s timeout), so concurrent accepts serialize:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant G as api-gateway
+    participant L as loan-service
+    participant T as transaction-service
+    participant K as T24 adapter
+    C->>G: POST /api/v1/loans/applications/{ref}/accept
+    G->>L: /loans/applications/{ref}/accept (X-Auth-Customer-Id)
+    L->>L: lock LOAN_APPLICATION (must be DECIDED, not DECLINED, not expired)
+    L->>T: POST /internal/remittance/transfer PH1000000LOAN → customer, key LOAN-DISB-{ref}
+    T->>T: hold funds (no risk call for LOAN_DISBURSEMENT)
+    T->>K: FUNDS.TRANSFER OFS
+    K-->>T: FT…/1
+    T->>T: debit/credit + LEDGER_TRANSACTION + OUTBOX
+    T-->>L: {status: POSTED, transactionId, ftReference}
+    L->>L: insert LOAN + LOAN_SCHEDULE, application ACCEPTED, outbox loan.disbursed (same transaction)
+    L-->>C: 201 loan summary
+```
+
+On `REJECTED`, `PENDING_CORE` or a timeout, loan-service rolls back and returns `503 core-unavailable`. A retry reuses the fixed transfer key, so the orchestrator replays the earlier result instead of moving money twice. The orchestrator now caches only final (`POSTED`) results in Redis, so a retry after the saga worker finishes sees `POSTED`.
+
+**Repay** — lock `LOAN`, transfer customer → `PH1000000LOAN` (`LOAN_REPAYMENT`, key `LOAN-REPAY-{Idempotency-Key}`), then apply the money to `penalty_due` first and the oldest unpaid installments (interest before principal). Insufficient balance → `422 insufficient-funds`, nothing saved. All rows paid → `CLOSED` + `loan.closed`.
+
+**EOD** — `@Scheduled(cron = "0 5 0 * * *", zone = "Asia/Manila")`, or `POST /loans/eod/run?businessDate=` (admin). Every `PENDING` installment due before the business date becomes `OVERDUE` with a one-time 2% penalty (`penalty_charged`), and the loan becomes `OVERDUE`. Running it twice for the same date changes nothing. LOAN rows are always locked before LOAN_SCHEDULE rows (same order as repayments) to avoid deadlocks.
