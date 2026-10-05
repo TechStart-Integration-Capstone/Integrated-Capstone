@@ -15,7 +15,7 @@ services:
       - azuresql_data:/var/opt/mssql
       - ./../backend/ledger-core/src/main/resources/schema-azuresql.sql:/docker-entrypoint-initdb.d/01_schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1' || exit 1"]
+      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1' || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -35,7 +35,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./../backend/event-consumers/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
+      test: [ "CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,7 +49,7 @@ services:
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     # No host port — internal only
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -102,7 +102,7 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      test: [ "CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -160,9 +160,9 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
     volumes:
       - ./../microservices/auth-service/target/auth-service.jar:/app/app.jar
@@ -181,9 +181,9 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     volumes:
@@ -205,9 +205,9 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -282,9 +282,9 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - ORACLE_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - ORACLE_DATASOURCE_USERNAME=sa
-      - ORACLE_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
@@ -306,9 +306,9 @@ services:
         condition: service_healthy
     # No host port — internal only
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - OUTBOX_POLL_INTERVAL_MS=5000
       - OUTBOX_RETRY_INTERVAL_MS=30000
@@ -351,7 +351,7 @@ services:
     depends_on:
       - otel-collector
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -411,13 +411,13 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.87.0
     container_name: otel-collector
-    command: ["--config=/etc/otel/otel-config.yaml"]
+    command: [ "--config=/etc/otel/otel-config.yaml" ]
     volumes:
       - ./otel-config.yaml:/etc/otel/otel-config.yaml:ro
     ports:
       - "4317:4317"
       - "4318:4318"
-      - "8889:8889"   # Prometheus metrics exporter (OTEL -> Prometheus scrape)
+      - "8889:8889" # Prometheus metrics exporter (OTEL -> Prometheus scrape)
     depends_on:
       - loki
       - tempo
@@ -427,7 +427,7 @@ services:
   loki:
     image: grafana/loki:2.9.0
     container_name: loki-logs
-    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    command: [ "-config.file=/etc/loki/loki-config.yaml" ]
     volumes:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki_data:/loki
@@ -439,13 +439,13 @@ services:
   tempo:
     image: grafana/tempo:2.2.0
     container_name: tempo-traces
-    command: ["-config.file=/etc/tempo.yaml"]
+    command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
       - "3200:3200"
-      - "4317"        # Internal OTLP gRPC from otel-collector (not exposed to host)
+      - "4317" # Internal OTLP gRPC from otel-collector (not exposed to host)
     networks:
       - ledger-net
 
@@ -498,7 +498,7 @@ services:
       context: ./jmeter
       dockerfile: Dockerfile
     container_name: jmeter-runner
-    profiles: ["loadtest"]
+    profiles: [ "loadtest" ]
     volumes:
       - ./jmeter:/jmeter
     networks:
