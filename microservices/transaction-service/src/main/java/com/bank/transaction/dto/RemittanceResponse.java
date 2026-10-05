@@ -16,6 +16,7 @@ public class RemittanceResponse {
     private String riskDecision;
     private String reason;
     private boolean cachedIdempotentResponse;
+    private Long transactionId;          // LEDGER_TRANSACTION id once POSTED
 
     public RemittanceResponse() {}
 
@@ -71,4 +72,7 @@ public class RemittanceResponse {
 
     public boolean isCachedIdempotentResponse() { return cachedIdempotentResponse; }
     public void setCachedIdempotentResponse(boolean cachedIdempotentResponse) { this.cachedIdempotentResponse = cachedIdempotentResponse; }
+
+    public Long getTransactionId() { return transactionId; }
+    public void setTransactionId(Long transactionId) { this.transactionId = transactionId; }
 }

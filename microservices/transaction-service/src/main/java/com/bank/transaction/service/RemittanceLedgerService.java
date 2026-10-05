@@ -133,7 +133,15 @@ public class RemittanceLedgerService {
         );
         remittance.setCallerCustomerId(callerCustomerId != null ? callerCustomerId : source.customerId());
         remittance.setIdempotencyKey(idempotencyKey);
+        remittance.setTransactionType(request.getTransactionType());
         return remittanceRepository.save(remittance);
+    }
+
+    /** LEDGER_TRANSACTION id for a POSTED remittance, or null if the ledger row is not there yet. */
+    public Long findTransactionId(String referenceNo) {
+        return transactionRepository.findByReferenceNo(referenceNo)
+                .map(TransactionRecord::getTransactionId)
+                .orElse(null);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -192,25 +200,35 @@ public class RemittanceLedgerService {
         String updateTargetSql = "UPDATE dbo.ACCOUNT SET current_balance = ? WHERE account_id = ?";
         jdbcTemplate.update(updateTargetSql, targetAfter, currentTarget.id());
 
-        // 2. Save LEDGER_TRANSACTION row
+        // 2. Save LEDGER_TRANSACTION row (plain transfers keep their existing P2P_REMITTANCE type)
+        String remittanceType = remittance.getTransactionType();
+        String ledgerType = remittanceType == null || RemittanceRequest.TYPE_TRANSFER.equals(remittanceType)
+                ? "P2P_REMITTANCE" : remittanceType;
         TransactionRecord tx = new TransactionRecord(
                 currentSource.id(),
                 currentTarget.id(),
                 amount,
                 request.getCurrency(),
                 request.getCurrency(),
-                "P2P_REMITTANCE",
+                ledgerType,
                 remittance.getReferenceNo(),
                 "SUCCESS",
                 null
         );
         TransactionRecord savedTx = transactionRepository.save(tx);
 
-        // 3. Save OUTBOX_EVENT row
+        // 3. Save OUTBOX_EVENT row. transactionId/accountId/operation/before/afterBalance describe the
+        //    debit leg so audit-service writes LEDGER_MUTATION_AUDIT and reconciliation can match it.
         String payloadJson = String.format(
-                "{\"remittanceId\":%d,\"referenceNo\":\"%s\",\"ftReference\":\"%s\",\"sourceAccountId\":%d,\"targetAccountId\":%d,\"amount\":%.4f,\"status\":\"POSTED\"}",
+                "{\"remittanceId\":%d,\"referenceNo\":\"%s\",\"ftReference\":\"%s\",\"sourceAccountId\":%d,\"targetAccountId\":%d,"
+                        + "\"amount\":%s,\"status\":\"POSTED\",\"transactionId\":%d,\"transactionType\":\"%s\","
+                        + "\"accountId\":%d,\"customerId\":%d,\"operation\":\"DEBIT\",\"currency\":\"%s\","
+                        + "\"beforeBalance\":%s,\"afterBalance\":%s}",
                 remittance.getRemittanceId(), remittance.getReferenceNo(), ftReference,
-                currentSource.id(), currentTarget.id(), amount
+                currentSource.id(), currentTarget.id(), amount.toPlainString(),
+                savedTx.getTransactionId(), ledgerType,
+                currentSource.id(), currentSource.customerId(), request.getCurrency(),
+                sourceBefore.toPlainString(), sourceAfter.toPlainString()
         );
 
         OutboxEvent event = new OutboxEvent();
@@ -232,7 +250,7 @@ public class RemittanceLedgerService {
         BigDecimal riskScore = risk != null ? risk.score() : null;
         String riskDecision = risk != null ? risk.decision() : null;
 
-        return new RemittanceResponse(
+        RemittanceResponse response = new RemittanceResponse(
                 "POSTED",
                 remittance.getReferenceNo(),
                 ftReference,
@@ -246,5 +264,7 @@ public class RemittanceLedgerService {
                 null,
                 false
         );
+        response.setTransactionId(savedTx.getTransactionId());
+        return response;
     }
 }

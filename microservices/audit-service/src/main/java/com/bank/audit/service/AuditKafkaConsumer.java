@@ -31,6 +31,12 @@ public class AuditKafkaConsumer {
         try {
             JsonNode node = objectMapper.readTree(message);
 
+            // loan.* events (Phase 6) are not ledger legs; their money movement is audited via the ledger event.
+            if (node.path("eventType").asText("").startsWith("loan.")) {
+                log.debug("[audit-service] Ignoring {} event", node.get("eventType").asText());
+                return;
+            }
+
             Long transactionId  = node.has("transactionId")  ? node.get("transactionId").asLong()  : null;
             Long accountId      = node.has("accountId")      ? node.get("accountId").asLong()      : null;
             String operation    = node.has("operation")      ? node.get("operation").asText()      : "DEBIT";

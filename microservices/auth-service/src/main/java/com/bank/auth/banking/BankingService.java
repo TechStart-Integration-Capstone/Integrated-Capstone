@@ -119,12 +119,17 @@ public class BankingService {
         Customer customer = authenticatedCustomer(authorization);
         // The outbox records the actual debit/credit operation; transaction_type can be a payment rail.
         // Only the mutated account is selected: a target ID alone does not prove a recipient credit.
+        // Exception: a LOAN_DISBURSEMENT is a single bank → borrower row, so the borrower's (target) account is the
+        // one shown, as a CREDIT; a LOAN_REPAYMENT is the borrower's DEBIT.
         return jdbc.query("SELECT t.transaction_id, a.account_id, a.account_number, t.amount, t.source_currency, "
-                        + "t.transaction_type, COALESCE((SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o "
+                        + "t.transaction_type, COALESCE(CASE t.transaction_type WHEN 'LOAN_DISBURSEMENT' THEN 'CREDIT' "
+                        + "WHEN 'LOAN_REPAYMENT' THEN 'DEBIT' END, "
+                        + "(SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o "
                         + "WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
                         + "CASE WHEN t.transaction_type IN ('DEBIT','CREDIT') THEN t.transaction_type END), "
                         + "t.reference_no, t.status, t.transaction_date, c.first_name + ' ' + c.last_name, target.account_number FROM LEDGER_TRANSACTION t "
-                        + "JOIN ACCOUNT a ON a.account_id = t.from_account_id "
+                        + "JOIN ACCOUNT a ON a.account_id = CASE WHEN t.transaction_type = 'LOAN_DISBURSEMENT' "
+                        + "THEN t.to_account_id ELSE t.from_account_id END "
                         + "LEFT JOIN ACCOUNT target ON target.account_id = t.to_account_id AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN') "
                         + "LEFT JOIN CUSTOMER c ON c.customer_id = target.customer_id WHERE a.customer_id = ? "
                         + "ORDER BY t.transaction_date DESC, t.transaction_id DESC OFFSET 0 ROWS FETCH NEXT 200 ROWS ONLY",

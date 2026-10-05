@@ -35,6 +35,11 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/actuator"
     );
 
+    // Paths that additionally require ROLE_ADMIN in the JWT
+    private static final List<String> ADMIN_PATHS = List.of(
+            "/api/v1/loans/eod"
+    );
+
     public JwtAuthFilter(
             @Value("${app.security.jwt-secret:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}") String secret) {
         this.signingKey = Keys.hmacShaKeyFor(secret.getBytes());
@@ -49,6 +54,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                             h.remove("X-Auth-Username");
                             h.remove("X-Auth-Customer-Id");
                             h.remove("X-Auth-Roles");
+                            h.remove("X-Internal-Service");
                         })
                 )
                 .build();
@@ -67,13 +73,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                             .build()
                             .parseClaimsJws(token)
                             .getBody();
-                    ServerWebExchange mutated = sanitizedExchange.mutate()
-                            .request(r -> r
-                                    .header("X-Auth-Username", claims.getSubject())
-                                    .header("X-Auth-Customer-Id", String.valueOf(claims.get("customerId")))
-                            )
-                            .build();
-                    return chain.filter(mutated);
+                    return chain.filter(withIdentity(sanitizedExchange, claims));
                 } catch (JwtException | IllegalArgumentException ignored) {}
             }
             return chain.filter(sanitizedExchange);
@@ -93,18 +93,33 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                     .parseClaimsJws(token)
                     .getBody();
 
+            if (ADMIN_PATHS.stream().anyMatch(path::startsWith) && !roles(claims).contains("ROLE_ADMIN")) {
+                sanitizedExchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                return sanitizedExchange.getResponse().setComplete();
+            }
+
             // Forward user info as headers to downstream services
-            ServerWebExchange mutated = sanitizedExchange.mutate()
-                    .request(r -> r
-                            .header("X-Auth-Username", claims.getSubject())
-                            .header("X-Auth-Customer-Id", String.valueOf(claims.get("customerId")))
-                    )
-                    .build();
-            return chain.filter(mutated);
+            return chain.filter(withIdentity(sanitizedExchange, claims));
         } catch (JwtException | IllegalArgumentException e) {
             sanitizedExchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return sanitizedExchange.getResponse().setComplete();
         }
+    }
+
+    private static ServerWebExchange withIdentity(ServerWebExchange exchange, Claims claims) {
+        return exchange.mutate()
+                .request(r -> r
+                        .header("X-Auth-Username", claims.getSubject())
+                        .header("X-Auth-Customer-Id", String.valueOf(claims.get("customerId")))
+                        .header("X-Auth-Roles", String.join(",", roles(claims)))
+                )
+                .build();
+    }
+
+    private static List<String> roles(Claims claims) {
+        return claims.get("roles") instanceof List<?> list
+                ? list.stream().map(String::valueOf).toList()
+                : List.of();
     }
 
     @Override

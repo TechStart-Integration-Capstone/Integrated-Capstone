@@ -48,6 +48,12 @@ public class AnalyticsKafkaConsumer {
         try {
             JsonNode node = objectMapper.readTree(message);
 
+            // loan.* events (Phase 6) are not ledger mutations — don't count them as transactions.
+            if (node.path("eventType").asText("").startsWith("loan.")) {
+                log.debug("[analytics-service] Ignoring {} event", node.get("eventType").asText());
+                return;
+            }
+
             AnalyticsEvent event = new AnalyticsEvent();
             event.setTransactionId(nodeAsLong(node,   "transactionId"));
             event.setReferenceNo(nodeAsString(node,   "referenceNo"));

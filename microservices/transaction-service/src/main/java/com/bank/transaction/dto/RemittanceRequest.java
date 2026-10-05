@@ -1,9 +1,14 @@
 package com.bank.transaction.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 
 public class RemittanceRequest {
+
+    public static final String TYPE_TRANSFER = "TRANSFER";
+    public static final String TYPE_LOAN_DISBURSEMENT = "LOAN_DISBURSEMENT";
+    public static final String TYPE_LOAN_REPAYMENT = "LOAN_REPAYMENT";
 
     @NotBlank(message = "Source account ID/Number is mandatory")
     private String sourceAccountId;
@@ -17,6 +22,10 @@ public class RemittanceRequest {
     private BigDecimal amount;
 
     private String currency = "PHP";
+
+    // Never read from the public request body: only the internal transfer endpoint sets a loan type.
+    @JsonIgnore
+    private String transactionType = TYPE_TRANSFER;
 
     public RemittanceRequest() {}
 
@@ -38,4 +47,9 @@ public class RemittanceRequest {
 
     public String getCurrency() { return currency; }
     public void setCurrency(String currency) { this.currency = currency; }
+
+    @JsonIgnore
+    public String getTransactionType() { return transactionType; }
+    @JsonIgnore
+    public void setTransactionType(String transactionType) { this.transactionType = transactionType; }
 }
