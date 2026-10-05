@@ -49,6 +49,7 @@ public class RemittanceOrchestratorService {
     private final T24AdapterClient t24AdapterClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final RiskDecisionPublisher riskDecisionPublisher;
 
     public RemittanceOrchestratorService(
             RemittanceRepository remittanceRepository,
@@ -56,14 +57,16 @@ public class RemittanceOrchestratorService {
             RiskEngineClient riskEngineClient,
             T24AdapterClient t24AdapterClient,
             StringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RiskDecisionPublisher riskDecisionPublisher) {
 
-        this.remittanceRepository = remittanceRepository;
-        this.ledgerService = ledgerService;
-        this.riskEngineClient = riskEngineClient;
-        this.t24AdapterClient = t24AdapterClient;
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
+        this.remittanceRepository   = remittanceRepository;
+        this.ledgerService          = ledgerService;
+        this.riskEngineClient       = riskEngineClient;
+        this.t24AdapterClient       = t24AdapterClient;
+        this.redisTemplate          = redisTemplate;
+        this.objectMapper           = objectMapper;
+        this.riskDecisionPublisher  = riskDecisionPublisher;
     }
 
     /** Public customer transfer: always a plain TRANSFER with full risk screening and ownership check. */
@@ -245,6 +248,8 @@ public class RemittanceOrchestratorService {
 
                 if ("UNAVAILABLE".equalsIgnoreCase(risk.decision())) {
                     log.warn("[remittance-orchestrator] Risk screening UNAVAILABLE ref={}", referenceNo);
+                    // Publish UNAVAILABLE decision to audit log before aborting
+                    riskDecisionPublisher.publish(referenceNo, risk);
                     try {
                         ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
                                 Remittance.STEP_FRAUD_CHECK, "Risk screening service unavailable", risk, "risk-engine");
@@ -256,12 +261,17 @@ public class RemittanceOrchestratorService {
                 if ("REJECT".equalsIgnoreCase(risk.decision()) || (risk.score() != null && risk.score().doubleValue() > 0.85)) {
                     String reason = "Transfer rejected by fraud risk screening: " + String.join(", ", risk.reasons());
                     log.warn("[remittance-orchestrator] Transfer REJECTED by Risk Engine! ref={} score={}", referenceNo, risk.score());
+                    // Publish REJECT decision to audit log before aborting — captures rejected transfers too
+                    riskDecisionPublisher.publish(referenceNo, risk);
                     try {
                         ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
                                 Remittance.STEP_FRAUD_CHECK, reason, risk, "risk-engine");
                     } catch (Exception ignored) {}
                     throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
                 }
+
+                // APPROVE — publish to audit log and proceed with the saga
+                riskDecisionPublisher.publish(referenceNo, risk);
             }
 
             // ── Step 5: Limit Check (For funds transfers within bank) ────────────────

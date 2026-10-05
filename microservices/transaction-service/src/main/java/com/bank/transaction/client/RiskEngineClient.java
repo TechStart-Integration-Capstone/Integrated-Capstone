@@ -99,15 +99,23 @@ public class RiskEngineClient {
             return new RiskResult(BigDecimal.ONE, "REJECT", List.of("empty_risk_engine_response"));
         }
 
-        double       scoreVal = ((Number) response.get("score")).doubleValue();
-        String       decision = (String) response.get("decision");
+        double       scoreVal   = ((Number) response.get("score")).doubleValue();
+        String       decision   = (String) response.get("decision");
         @SuppressWarnings("unchecked")
-        List<String> reasons  = (List<String>) response.get("reasons");
+        List<String> reasons    = (List<String>) response.get("reasons");
 
-        log.info("[risk-client] Result score={} decision={} reasons={} corrId={}",
-                scoreVal, decision, reasons, correlationId);
+        // ruleScore / mlScore / latencyMs are populated by risk engine v3.0.0+
+        BigDecimal ruleScore  = response.get("ruleScore")  != null
+                ? BigDecimal.valueOf(((Number) response.get("ruleScore")).doubleValue())  : null;
+        BigDecimal mlScore    = response.get("mlScore")    != null
+                ? BigDecimal.valueOf(((Number) response.get("mlScore")).doubleValue())    : null;
+        Double     latencyMs  = response.get("latencyMs")  != null
+                ? ((Number) response.get("latencyMs")).doubleValue()                      : null;
 
-        return new RiskResult(BigDecimal.valueOf(scoreVal), decision, reasons);
+        log.info("[risk-client] Result score={} ruleScore={} mlScore={} decision={} reasons={} corrId={}",
+                scoreVal, ruleScore, mlScore, decision, reasons, correlationId);
+
+        return new RiskResult(BigDecimal.valueOf(scoreVal), decision, reasons, ruleScore, mlScore, latencyMs);
     }
 
     public RiskResult riskEngineFallback(

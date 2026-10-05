@@ -13,6 +13,7 @@ import com.bank.transaction.repository.RemittanceRepository;
 import com.bank.transaction.repository.TransactionRepository;
 import com.bank.transaction.service.RemittanceLedgerService;
 import com.bank.transaction.service.RemittanceOrchestratorService;
+import com.bank.transaction.service.RiskDecisionPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -78,7 +79,8 @@ class RemittanceSagaTest {
                 riskEngineClient,
                 t24AdapterClient,
                 redisTemplate,
-                objectMapper
+                objectMapper,
+                new RiskDecisionPublisher(mock(org.springframework.kafka.core.KafkaTemplate.class), objectMapper)
         );
 
         controller = new RemittanceController(orchestratorService);

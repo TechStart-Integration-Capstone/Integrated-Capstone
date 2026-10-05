@@ -2,8 +2,8 @@
 
 Generated from the current code:
 
-- **Azure SQL (OLTP):** `backend/ledger-core/src/main/resources/schema-azuresql.sql` (+ `scripts/migrate_phase5_hardening.sql`, `scripts/migrate_phase6_loans.sql`, `BankingFavoritesSchema.java`)
-- **PostgreSQL (audit):** `backend/event-consumers/src/main/resources/schema-postgres.sql`, `backend/notification-service/src/main/resources/schema-postgres.sql`
+- **Azure SQL (OLTP):** `microservices/transaction-service/src/main/resources/schema-azuresql.sql` (+ `scripts/migrate_phase5_hardening.sql`, `scripts/migrate_phase6_loans.sql`, `BankingFavoritesSchema.java`)
+- **PostgreSQL (audit):** `microservices/audit-service/src/main/resources/schema-postgres.sql` (+ `scripts/migrate_phase6_risk_decision.sql`), `backend/notification-service/src/main/resources/schema-postgres.sql`
 
 Solid lines are enforced foreign keys. Dotted lines are logical references with no FK constraint. These include every Azure SQL → PostgreSQL link, because the two databases are separate and kept in sync through Kafka events.
 
@@ -198,6 +198,18 @@ erDiagram
         timestamptz updated_date "nullable"
     }
 
+    RISK_DECISION {
+        bigserial decision_id PK
+        varchar reference_no "logical ref to REMITTANCE.reference_no"
+        numeric score "5,4 - combined score 0.0000-1.0000"
+        numeric rule_score "5,4 - Layer 1 rule score (nullable)"
+        numeric ml_score "5,4 - Layer 2 IF score (nullable)"
+        varchar decision "APPROVE, REJECT, UNAVAILABLE"
+        text reasons "JSONB array - e.g. amount_above_50k, anomaly_off_hours_02h"
+        int latency_ms "end-to-end scoring latency"
+        timestamptz scored_at
+    }
+
     %% ---------- Enforced FKs (Azure SQL) ----------
     CUSTOMER ||--o{ ACCOUNT : owns
     CUSTOMER ||--o{ AUDIT_LOG : "is audited in"
@@ -227,6 +239,7 @@ erDiagram
     LEDGER_TRANSACTION ||..o{ NOTIFICATION : "reference_no"
     CUSTOMER ||..o{ NOTIFICATION : receives
     ACCOUNT ||..o{ NOTIFICATION : "about"
+    REMITTANCE ||..o{ RISK_DECISION : "scored as (reference_no)"
 ```
 
 ## Notes and drift found in the code
