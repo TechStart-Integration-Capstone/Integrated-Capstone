@@ -14,7 +14,7 @@ void main() {
     // Verify Navigation items
     expect(find.text('Overview'), findsOneWidget);
     expect(find.text('Accounts'), findsOneWidget);
-    expect(find.text('Transfers'), findsOneWidget);
+    expect(find.text('Transfer'), findsOneWidget);
     expect(find.text('Activity'), findsOneWidget);
   });
 }

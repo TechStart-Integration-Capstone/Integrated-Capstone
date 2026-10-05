@@ -219,7 +219,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 },
               ),
             ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 90),
         ],
       ),
     );

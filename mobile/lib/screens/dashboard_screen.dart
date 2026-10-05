@@ -136,19 +136,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Your money, in view.',
-                              style: PayPinkTheme.body(
-                                color: PayPinkTheme.pink,
-                                fontSize: 11,
+                            Flexible(
+                              child: Text(
+                                'Your money, in view.',
+                                style: PayPinkTheme.body(
+                                  color: PayPinkTheme.pink,
+                                  fontSize: 11,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 8),
                             GestureDetector(
                               onTap: () => widget.onNavigateTab(1), // Go to accounts
                               child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    'View accounts',
+                                    'View all',
                                     style: PayPinkTheme.body(
                                       color: Colors.white,
                                       fontSize: 11.5,
@@ -345,20 +350,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.donut_large_rounded, color: PayPinkTheme.wine, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Spending Patterns & Insights',
-                          style: PayPinkTheme.display(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                            color: PayPinkTheme.ink,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.donut_large_rounded, color: PayPinkTheme.wine, size: 18),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Spending Patterns',
+                              style: PayPinkTheme.display(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: PayPinkTheme.ink,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
@@ -395,28 +406,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 10),
                 // Legend
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.spaceBetween,
                   children: [
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(width: 8, height: 8, decoration: const BoxDecoration(color: PayPinkTheme.wine, shape: BoxShape.circle)),
                         const SizedBox(width: 4),
-                        Text('Transfers (60%)', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                        Text('Transfers 60%', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
                       ],
                     ),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(width: 8, height: 8, decoration: const BoxDecoration(color: PayPinkTheme.green, shape: BoxShape.circle)),
                         const SizedBox(width: 4),
-                        Text('Bills & Utilities (25%)', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                        Text('Bills 25%', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
                       ],
                     ),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(width: 8, height: 8, decoration: const BoxDecoration(color: PayPinkTheme.indigo, shape: BoxShape.circle)),
                         const SizedBox(width: 4),
-                        Text('Services (15%)', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                        Text('Services 15%', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
                       ],
                     ),
                   ],
@@ -427,18 +443,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.security_rounded, size: 13, color: PayPinkTheme.green),
-                        const SizedBox(width: 5),
-                        Text(
-                          'Risk Score: 0.12 (Safe) · KYC L3',
-                          style: PayPinkTheme.mono(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
-                        ),
-                      ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.security_rounded, size: 13, color: PayPinkTheme.green),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              'Risk Score: 0.12 (Safe)',
+                              style: PayPinkTheme.mono(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
-                      'Security vault →',
+                      'Vault →',
                       style: PayPinkTheme.body(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -457,11 +479,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Your accounts',
                     style: PayPinkTheme.display(
-                      fontSize: 16,
+                      fontSize: 15.5,
                       fontWeight: FontWeight.w700,
                       color: PayPinkTheme.ink,
                     ),
@@ -488,7 +511,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               GestureDetector(
                 onTap: () => widget.onNavigateTab(1),
                 child: Text(
-                  'Manage view →',
+                  'Manage →',
                   style: PayPinkTheme.body(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
@@ -602,12 +625,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Available balance',
-                      style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                    Flexible(
+                      child: Text(
+                        'Available balance',
+                        style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+                    const SizedBox(width: 6),
                     Text(
-                      'Account details →',
+                      'Details →',
                       style: PayPinkTheme.body(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -708,12 +735,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Available balance',
-                      style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                    Flexible(
+                      child: Text(
+                        'Available balance',
+                        style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
+                    const SizedBox(width: 6),
                     Text(
-                      'Account details →',
+                      'Details →',
                       style: PayPinkTheme.body(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -796,24 +827,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.hideBalances ? '••••••' : '₱45,000.00',
-                          style: PayPinkTheme.display(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.hideBalances ? '••••••' : '₱45,000.00',
+                            style: PayPinkTheme.display(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Remaining loan balance',
-                          style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
-                        ),
-                      ],
+                          const SizedBox(height: 2),
+                          Text(
+                            'Remaining loan balance',
+                            style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -980,7 +1014,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 90),
         ],
       ),
     );

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'theme/paypink_theme.dart';
@@ -53,11 +54,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
   bool _hideBalances = false;
   final CircuitBreakerClient _circuitBreaker = CircuitBreakerClient();
-
-  // Dynamic Island simulation state
-  String _islandMessage = 'PayPink Online';
-  String _islandIcon = '⚡';
-  bool _isIslandExpanded = false;
 
   // In-App Notifications state
   final List<Map<String, dynamic>> _notifications = [
@@ -134,22 +130,30 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     setState(() {});
   }
 
-  void _triggerDynamicIsland(String message, String icon) {
-    setState(() {
-      _islandMessage = message;
-      _islandIcon = icon;
-      _isIslandExpanded = true;
-    });
-
-    Future.delayed(const Duration(seconds: 4), () {
-      if (mounted) {
-        setState(() {
-          _isIslandExpanded = false;
-          _islandMessage = 'PayPink Online';
-          _islandIcon = '⚡';
-        });
-      }
-    });
+  void _triggerStatusToast(String message, String icon) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: PayPinkTheme.wine,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        content: Row(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: PayPinkTheme.body(color: Colors.white, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _handleTransferSuccess(double amount, String refId, String source, String recipient) {
@@ -181,7 +185,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       _currentIndex = 0; // Return to dashboard
     });
 
-    _triggerDynamicIsland('Sent ₱${amount.toStringAsFixed(2)}', '✅');
+    _triggerStatusToast('Sent ₱${amount.toStringAsFixed(2)} to $recipient', '✅');
   }
 
   void _markAllNotificationsRead() {
@@ -241,7 +245,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               onTap: () {
                 Navigator.pop(ctx);
                 _circuitBreaker.tripBreaker();
-                _triggerDynamicIsland('Circuit Breaker: OPEN', '⚡');
+                _triggerStatusToast('Circuit Breaker: OPEN', '⚡');
               },
             ),
             ListTile(
@@ -250,7 +254,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               subtitle: const Text('Redis token-bucket rate limiter (>10 req/s simulation)', style: TextStyle(fontSize: 11)),
               onTap: () {
                 Navigator.pop(ctx);
-                _triggerDynamicIsland('Edge Rate Limit: HTTP 429', '⚠️');
+                _triggerStatusToast('Edge Rate Limit: HTTP 429', '⚠️');
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     backgroundColor: PayPinkTheme.amber,
@@ -283,11 +287,19 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   @override
   Widget build(BuildContext context) {
     if (_circuitBreaker.isOpen) {
-      return CircuitBreakerScreen(
-        onRecover: () {
-          setState(() {});
-          _triggerDynamicIsland('Circuit Breaker: CLOSED', '🛡️');
-        },
+      return Container(
+        color: const Color(0xFFF0EAEF),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: CircuitBreakerScreen(
+              onRecover: () {
+                setState(() {});
+                _triggerStatusToast('Circuit Breaker: CLOSED', '🛡️');
+              },
+            ),
+          ),
+        ),
       );
     }
 
@@ -313,261 +325,256 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       ),
     ];
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Top Status & Dynamic Island Bar matching mockup
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 6.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Container(
+      color: const Color(0xFFEFE8EC), // Elegant neutral frame background on desktop web
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Scaffold(
+            extendBody: true,
+            backgroundColor: PayPinkTheme.paper,
+            body: SafeArea(
+              bottom: false,
+              child: Column(
                 children: [
-                  Text(
-                    '9:41',
-                    style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700),
-                  ),
-                  // Dynamic Island
-                  GestureDetector(
-                    onTap: () => _triggerDynamicIsland('PayPink Core Ledger 127.0.0.1:8080 Active', '🟢'),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: _isIslandExpanded ? 14 : 10,
-                        vertical: _isIslandExpanded ? 6 : 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF222222),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '$_islandIcon $_islandMessage',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Status Icons
-                  Row(
-                    children: [
-                      Text(
-                        '5G',
-                        style: PayPinkTheme.display(fontSize: 10, fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.signal_cellular_alt_rounded, size: 14),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.battery_full_rounded, size: 16),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // App Header Bar matching mockup
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: PayPinkTheme.wine,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: PayPinkTheme.wine.withValues(alpha: 0.25),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'p',
-                            style: TextStyle(
-                              fontFamily: 'Manrope',
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'PayPink®',
-                            style: PayPinkTheme.display(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: PayPinkTheme.wine,
-                              letterSpacing: -0.8,
-                            ),
-                          ),
-                          Text(
-                            'Fri, October 2, 2026',
-                            style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      // Chaos Testing Trigger Button
-                      IconButton(
-                        icon: const Icon(Icons.tune_rounded, color: PayPinkTheme.wine, size: 20),
-                        tooltip: 'Chaos & Arch Controls',
-                        onPressed: _showChaosEngineeringMenu,
-                      ),
-                      // Notification Bell with live red unread dot
-                      Stack(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.notifications_none_rounded, color: PayPinkTheme.wine, size: 22),
-                            onPressed: () {
-                              PayPinkBottomSheets.showNotificationsDrawer(
-                                context,
-                                notifications: _notifications,
-                                onMarkAllRead: _markAllNotificationsRead,
-                                onDismiss: _dismissNotification,
-                              );
-                            },
-                          ),
-                          if (hasUnreadNotifs)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: PayPinkTheme.red,
-                                  shape: BoxShape.circle,
+                  // App Header Bar matching mockup
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: PayPinkTheme.wine,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: PayPinkTheme.wine.withValues(alpha: 0.25),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'p',
+                                  style: TextStyle(
+                                    fontFamily: 'Manrope',
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    fontStyle: FontStyle.italic,
+                                  ),
                                 ),
                               ),
                             ),
-                        ],
-                      ),
-                      const SizedBox(width: 4),
-                      // Customer Avatar TS
-                      GestureDetector(
-                        onTap: () {
-                          PayPinkBottomSheets.showHardwareVault(
-                            context,
-                            hardwareKeyId: 'secp256r1-keychain-hardware-tsamson',
-                            circuitStatus: _circuitBreaker.isOpen ? 'OPEN (Tripped)' : 'CLOSED (Healthy)',
-                            gatewayRoute: '127.0.0.1:8080 (Reverse Proxy)',
-                            jwtToken: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0c2Ftc29uIiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxNzkxMDEwMDAwfQ',
-                          );
-                        },
-                        child: CircleAvatar(
-                          radius: 17,
-                          backgroundColor: PayPinkTheme.pink,
-                          child: Text(
-                            'TS',
-                            style: PayPinkTheme.display(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: PayPinkTheme.wine,
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PayPink®',
+                                  style: PayPinkTheme.display(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: PayPinkTheme.wine,
+                                    letterSpacing: -0.8,
+                                  ),
+                                ),
+                                Text(
+                                  'Fri, October 2, 2026',
+                                  style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
+                                ),
+                              ],
                             ),
-                          ),
+                          ],
                         ),
-                      ),
-                    ],
+                        Row(
+                          children: [
+                            // Chaos Testing Trigger Button
+                            IconButton(
+                              icon: const Icon(Icons.tune_rounded, color: PayPinkTheme.wine, size: 20),
+                              tooltip: 'Chaos & Arch Controls',
+                              onPressed: _showChaosEngineeringMenu,
+                            ),
+                            // Notification Bell with live red unread dot
+                            Stack(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.notifications_none_rounded, color: PayPinkTheme.wine, size: 22),
+                                  onPressed: () {
+                                    PayPinkBottomSheets.showNotificationsDrawer(
+                                      context,
+                                      notifications: _notifications,
+                                      onMarkAllRead: _markAllNotificationsRead,
+                                      onDismiss: _dismissNotification,
+                                    );
+                                  },
+                                ),
+                                if (hasUnreadNotifs)
+                                  Positioned(
+                                    top: 8,
+                                    right: 8,
+                                    child: Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: PayPinkTheme.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(width: 4),
+                            // Customer Avatar TS
+                            GestureDetector(
+                              onTap: () {
+                                PayPinkBottomSheets.showHardwareVault(
+                                  context,
+                                  hardwareKeyId: 'secp256r1-keychain-hardware-tsamson',
+                                  circuitStatus: _circuitBreaker.isOpen ? 'OPEN (Tripped)' : 'CLOSED (Healthy)',
+                                  gatewayRoute: '127.0.0.1:8080 (Reverse Proxy)',
+                                  jwtToken: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0c2Ftc29uIiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxNzkxMDEwMDAwfQ',
+                                );
+                              },
+                              child: CircleAvatar(
+                                radius: 17,
+                                backgroundColor: PayPinkTheme.pink,
+                                child: Text(
+                                  'TS',
+                                  style: PayPinkTheme.display(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: PayPinkTheme.wine,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Scrollable Active View Screen
+                  Expanded(
+                    child: screens[_currentIndex],
                   ),
                 ],
               ),
             ),
 
-            // Scrollable Active View Screen
-            Expanded(
-              child: screens[_currentIndex],
-            ),
-          ],
+            // Dynamic Glassmorphism Floating Bottom Navigation Bar
+            bottomNavigationBar: _buildDynamicBottomBar(),
+          ),
         ),
       ),
+    );
+  }
 
-      // Floating Glass Bottom Navigation Bar
-      bottomNavigationBar: Container(
+  Widget _buildDynamicBottomBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: 64,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.84),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.95),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: PayPinkTheme.wine.withValues(alpha: 0.12),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildDynamicNavItem(0, Icons.grid_view_rounded, 'Overview'),
+                _buildDynamicNavItem(1, Icons.account_balance_wallet_rounded, 'Accounts'),
+                _buildDynamicNavItem(2, Icons.swap_horiz_rounded, 'Transfer'),
+                _buildDynamicNavItem(3, Icons.receipt_long_rounded, 'Activity'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDynamicNavItem(int index, IconData icon, String label) {
+    final isSelected = _currentIndex == index;
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        setState(() => _currentIndex = index);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        padding: EdgeInsets.symmetric(
+          horizontal: isSelected ? 15 : 10,
+          vertical: 8,
+        ),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.95),
-          boxShadow: [
-            BoxShadow(
-              color: PayPinkTheme.wine.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
+          color: isSelected ? PayPinkTheme.wine : Colors.transparent,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: PayPinkTheme.wine.withValues(alpha: 0.28),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected ? Colors.white : PayPinkTheme.muted,
+            ),
+            AnimatedCrossFade(
+              firstChild: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Text(
+                  label,
+                  style: PayPinkTheme.body(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              secondChild: const SizedBox.shrink(),
+              crossFadeState: isSelected ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+              duration: const Duration(milliseconds: 200),
             ),
           ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (index) => setState(() => _currentIndex = index),
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            selectedItemColor: PayPinkTheme.wine,
-            unselectedItemColor: PayPinkTheme.muted,
-            selectedLabelStyle: PayPinkTheme.body(fontWeight: FontWeight.w800, fontSize: 10),
-            unselectedLabelStyle: PayPinkTheme.body(fontSize: 10),
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.home_outlined),
-                activeIcon: Icon(Icons.home_rounded),
-                label: 'Overview',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.account_balance_wallet_outlined),
-                activeIcon: Icon(Icons.account_balance_wallet_rounded),
-                label: 'Accounts',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.swap_horiz_rounded),
-                activeIcon: Icon(Icons.swap_horiz_rounded),
-                label: 'Transfers',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.receipt_long_outlined),
-                activeIcon: Icon(Icons.receipt_long_rounded),
-                label: 'Activity',
-              ),
-            ],
-          ),
         ),
       ),
     );
