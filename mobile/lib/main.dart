@@ -10,6 +10,7 @@ import 'screens/circuit_breaker_screen.dart';
 import 'screens/login_register_screen.dart';
 import 'services/circuit_breaker_client.dart';
 import 'services/auth_service.dart';
+import 'services/account_service.dart';
 import 'widgets/bottom_sheets.dart';
 
 void main() {
@@ -167,10 +168,26 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     ),
   ];
 
+  UserProfile? _userProfile;
+
   @override
   void initState() {
     super.initState();
     _circuitBreaker.addListener(_onCircuitBreakerChange);
+    _loadLiveDatabaseData();
+  }
+
+  void _loadLiveDatabaseData() async {
+    final profile = await AccountService.fetchProfile(fallbackUsername: widget.currentUser);
+    final txs = await AccountService.fetchTransactions();
+    if (!mounted) return;
+    setState(() {
+      _userProfile = profile;
+      if (txs.isNotEmpty) {
+        _transactions.clear();
+        _transactions.addAll(txs);
+      }
+    });
   }
 
   @override
@@ -210,6 +227,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   }
 
   void _handleTransferSuccess(double amount, String refId, String source, String recipient) {
+    _loadLiveDatabaseData();
     setState(() {
       _transactions.insert(
         0,
@@ -420,12 +438,15 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         onToggleHideBalances: () => setState(() => _hideBalances = !_hideBalances),
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
         transactions: _transactions,
-        userName: widget.currentUser,
+        userName: _userProfile?.firstName.isNotEmpty == true ? _userProfile!.firstName : widget.currentUser,
+        accounts: _userProfile?.accounts,
+        totalBalance: _userProfile?.totalBalance,
       ),
       AccountsScreen(
         hideBalances: _hideBalances,
         onToggleHideBalances: () => setState(() => _hideBalances = !_hideBalances),
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
+        accounts: _userProfile?.accounts,
       ),
       RemittanceScreen(
         onTransferSuccess: _handleTransferSuccess,
@@ -436,7 +457,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     ];
 
     return Container(
-      color: isDark ? const Color(0xFF140D1E) : const Color(0xFFEFE8EC),
+      color: isDark ? const Color(0xFF121828) : const Color(0xFFEFE8EC),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),

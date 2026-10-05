@@ -3,17 +3,20 @@ import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
+import '../services/account_service.dart';
 
 class AccountsScreen extends StatefulWidget {
   final bool hideBalances;
   final VoidCallback onToggleHideBalances;
   final Function(int)? onNavigateTab;
+  final List<BankAccount>? accounts;
 
   const AccountsScreen({
     super.key,
     required this.hideBalances,
     required this.onToggleHideBalances,
     this.onNavigateTab,
+    this.accounts,
   });
 
   @override
@@ -21,12 +24,19 @@ class AccountsScreen extends StatefulWidget {
 }
 
 class _AccountsScreenState extends State<AccountsScreen> {
+  final Set<int> _unmaskedAccountIds = {};
   bool _maskEveryday = true;
   bool _maskSavings = false;
   bool _maskLoan = true;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final hasLiveAccounts = widget.accounts != null && widget.accounts!.isNotEmpty;
+    final totalLinked = hasLiveAccounts ? widget.accounts!.length : 3;
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -38,14 +48,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
             style: PayPinkTheme.display(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: PayPinkTheme.ink,
+              color: textInk,
               letterSpacing: -0.8,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Your accounts, together. Select an account to see its details.',
-            style: PayPinkTheme.body(fontSize: 12.5, color: PayPinkTheme.muted),
+            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
           ),
           const SizedBox(height: 20),
 
@@ -60,23 +70,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     style: PayPinkTheme.display(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: PayPinkTheme.ink,
+                      color: textInk,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                     decoration: BoxDecoration(
-                      color: PayPinkTheme.pinkSubtle,
+                      color: isDark ? PayPinkTheme.darkCard : PayPinkTheme.pinkSubtle,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: PayPinkTheme.pink),
+                      border: Border.all(color: isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink),
                     ),
                     child: Text(
-                      '3 linked',
+                      '$totalLinked linked',
                       style: PayPinkTheme.body(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.wine,
+                        color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                       ),
                     ),
                   ),
@@ -91,7 +101,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           ? Icons.visibility_off_rounded
                           : Icons.visibility_rounded,
                       size: 14,
-                      color: PayPinkTheme.wine,
+                      color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                     ),
                     const SizedBox(width: 5),
                     Text(
@@ -99,7 +109,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       style: PayPinkTheme.body(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.wine,
+                        color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                       ),
                     ),
                   ],
@@ -109,59 +119,116 @@ class _AccountsScreenState extends State<AccountsScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Everyday Account Card
-          _buildAccountFullCard(
-            context,
-            name: 'Everyday account',
-            maskedNumber: _maskEveryday ? '•••• •••• 5046' : '001 1 5046 8001',
-            fullNumber: '001 1 5046 8001',
-            isMasked: _maskEveryday,
-            onToggleMask: () => setState(() => _maskEveryday = !_maskEveryday),
-            balance: 50.00,
-            heldBalance: 0.00,
-            interestRate: 0.25,
-            type: 'EVERYDAY_ACCOUNT',
-            status: 'Active',
-            ledgerId: 'everyday-5046',
-            icon: Icons.account_balance_wallet_rounded,
-            iconColor: PayPinkTheme.green,
-            iconBg: PayPinkTheme.greenBg,
-          ),
-          const SizedBox(height: 14),
+          // Dynamic Live Database Accounts or Fallbacks
+          if (hasLiveAccounts) ...[
+            ...widget.accounts!.map((account) {
+              final isMasked = !_unmaskedAccountIds.contains(account.accountId);
+              final isSavings = account.accountType == 'SAVINGS_ACCOUNT';
+              final isChecking = account.accountType == 'CHECKING_ACCOUNT';
+              final isEveryday = account.accountType == 'EVERYDAY_ACCOUNT';
 
-          // Savings Account Card
-          _buildAccountFullCard(
-            context,
-            name: 'Savings account',
-            maskedNumber: _maskSavings ? '•••• •••• 8504' : '001 1 5968504 7',
-            fullNumber: '001 1 5968504 7',
-            isMasked: _maskSavings,
-            onToggleMask: () => setState(() => _maskSavings = !_maskSavings),
-            balance: 0.00,
-            heldBalance: 0.00,
-            interestRate: 1.50,
-            type: 'SAVINGS_ACCOUNT',
-            status: 'Active',
-            ledgerId: 'savings-8504',
-            icon: Icons.savings_rounded,
-            iconColor: PayPinkTheme.wine,
-            iconBg: PayPinkTheme.pinkSubtle,
-          ),
-          const SizedBox(height: 14),
+              final IconData icon = isSavings
+                  ? Icons.savings_rounded
+                  : (isChecking
+                      ? Icons.business_center_rounded
+                      : (isEveryday ? Icons.account_balance_wallet_rounded : Icons.credit_card_rounded));
 
-          // Personal Loan Account Card
-          _buildLoanCard(
-            context,
-            name: 'Personal Loan',
-            maskedNumber: _maskLoan ? '•••• •••• 9921' : '001 9 9921 4410',
-            fullNumber: '001 9 9921 4410',
-            isMasked: _maskLoan,
-            onToggleMask: () => setState(() => _maskLoan = !_maskLoan),
-            remainingBalance: 45000.00,
-            amortization: 3750.00,
-            dueDate: 'Oct 25, 2026',
-            status: 'Current',
-          ),
+              final Color iconColor = isSavings
+                  ? PayPinkTheme.wine
+                  : (isChecking
+                      ? PayPinkTheme.indigo
+                      : (isEveryday ? PayPinkTheme.green : PayPinkTheme.amber));
+
+              final Color iconBg = isSavings
+                  ? PayPinkTheme.pinkSubtle
+                  : (isChecking
+                      ? PayPinkTheme.indigoBg
+                      : (isEveryday ? PayPinkTheme.greenBg : PayPinkTheme.amberBg));
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14.0),
+                child: _buildAccountFullCard(
+                  context,
+                  name: account.displayName,
+                  maskedNumber: isMasked ? account.maskedNumber : account.formattedNumber,
+                  fullNumber: account.formattedNumber,
+                  isMasked: isMasked,
+                  onToggleMask: () {
+                    setState(() {
+                      if (_unmaskedAccountIds.contains(account.accountId)) {
+                        _unmaskedAccountIds.remove(account.accountId);
+                      } else {
+                        _unmaskedAccountIds.add(account.accountId);
+                      }
+                    });
+                  },
+                  balance: account.currentBalance,
+                  heldBalance: 0.00,
+                  interestRate: isSavings ? 1.50 : 0.25,
+                  type: account.accountType,
+                  status: account.status.toLowerCase() == 'active' ? 'Active' : account.status,
+                  ledgerId: account.accountNumber,
+                  icon: icon,
+                  iconColor: iconColor,
+                  iconBg: iconBg,
+                ),
+              );
+            }),
+          ] else ...[
+            // Everyday Account Card
+            _buildAccountFullCard(
+              context,
+              name: 'Everyday account',
+              maskedNumber: _maskEveryday ? '•••• •••• 5046' : '001 1 5046 8001',
+              fullNumber: '001 1 5046 8001',
+              isMasked: _maskEveryday,
+              onToggleMask: () => setState(() => _maskEveryday = !_maskEveryday),
+              balance: 50.00,
+              heldBalance: 0.00,
+              interestRate: 0.25,
+              type: 'EVERYDAY_ACCOUNT',
+              status: 'Active',
+              ledgerId: 'everyday-5046',
+              icon: Icons.account_balance_wallet_rounded,
+              iconColor: PayPinkTheme.green,
+              iconBg: PayPinkTheme.greenBg,
+            ),
+            const SizedBox(height: 14),
+
+            // Savings Account Card
+            _buildAccountFullCard(
+              context,
+              name: 'Savings account',
+              maskedNumber: _maskSavings ? '•••• •••• 8504' : '001 1 5968504 7',
+              fullNumber: '001 1 5968504 7',
+              isMasked: _maskSavings,
+              onToggleMask: () => setState(() => _maskSavings = !_maskSavings),
+              balance: 0.00,
+              heldBalance: 0.00,
+              interestRate: 1.50,
+              type: 'SAVINGS_ACCOUNT',
+              status: 'Active',
+              ledgerId: 'savings-8504',
+              icon: Icons.savings_rounded,
+              iconColor: PayPinkTheme.wine,
+              iconBg: PayPinkTheme.pinkSubtle,
+            ),
+            const SizedBox(height: 14),
+
+            // Personal Loan Account Card
+            _buildLoanCard(
+              context,
+              name: 'Personal Loan',
+              maskedNumber: _maskLoan ? '•••• •••• 9921' : '001 9 9921 4410',
+              fullNumber: '001 9 9921 4410',
+              isMasked: _maskLoan,
+              onToggleMask: () => setState(() => _maskLoan = !_maskLoan),
+              remainingBalance: 45000.00,
+              amortization: 3750.00,
+              dueDate: 'Oct 25, 2026',
+              status: 'Current',
+            ),
+          ],
           const SizedBox(height: 20),
 
           // Discretion note card matching mockup

@@ -31,15 +31,15 @@ class PayPinkTheme {
   static const Color glassBorder = Color(0xD9FFFFFF);
   static const Color glassBorderSubtle = Color(0x66FFFFFF);
 
-  // Dark Mode Tokens (Deep Royal Violet & Luminous Lilac Palette)
-  static const Color darkBg = Color(0xFF1B1229); // Rich Deep Royal Violet
-  static const Color darkPaper = Color(0xFF241836); // Deep Amethyst Paper
-  static const Color darkCard = Color(0xFF2D1F44); // Elevated Royal Violet Card
-  static const Color darkInk = Color(0xFFFAF7FD); // Luminous Pearl White (Maximum Readability)
-  static const Color darkMuted = Color(0xFFCBBED9); // Bright Lilac Mist (Crisp Secondary Text)
-  static const Color darkLine = Color(0xFF3E2B5C); // Distinct Violet Divider Line
-  static const Color darkGlassBorder = Color(0x59F7D6E3); // Luminous Rose Frosted Hairline Border
-  static const Color darkGlassCardBg = Color(0xD9281B3D); // Deep Frosted Royal Violet Glass
+  // Dark Mode Tokens (Luminous Midnight Navy & Soft Rose Palette)
+  static const Color darkBg = Color(0xFF1B243B); // Rich Midnight Navy (Visibly vibrant blue, not black)
+  static const Color darkPaper = Color(0xFF232D4B); // Elevated Navy Paper
+  static const Color darkCard = Color(0xFF2C395E); // Floating Card Navy with distinct elevation
+  static const Color darkInk = Color(0xFFFFFFFF); // Pure Luminous White (Maximum Readability)
+  static const Color darkMuted = Color(0xFFB5C5E6); // Soft Cerulean Mist (Crisp, High-Legibility Secondary Text)
+  static const Color darkLine = Color(0xFF384770); // Distinct Navy Divider Line
+  static const Color darkGlassBorder = Color(0x66FF85B3); // Frosted Rose-Pink Hairline Border
+  static const Color darkGlassCardBg = Color(0xE6243054); // Deep Frosted Midnight Glass
 
   static ThemeData get lightTheme => ThemeData(
         fontFamily: 'DM Sans',
@@ -58,7 +58,7 @@ class PayPinkTheme {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: darkBg,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF9D3B6C),
+          seedColor: const Color(0xFF3B82F6),
           brightness: Brightness.dark,
           surface: darkBg,
         ),

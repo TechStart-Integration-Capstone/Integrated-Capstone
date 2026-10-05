@@ -3,6 +3,7 @@ import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
 import 'transactions_screen.dart';
+import '../services/account_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool hideBalances;
@@ -10,6 +11,8 @@ class DashboardScreen extends StatefulWidget {
   final Function(int) onNavigateTab;
   final List<TransactionItem> transactions;
   final String userName;
+  final List<BankAccount>? accounts;
+  final double? totalBalance;
 
   const DashboardScreen({
     super.key,
@@ -18,6 +21,8 @@ class DashboardScreen extends StatefulWidget {
     required this.onNavigateTab,
     required this.transactions,
     this.userName = 'Trixie',
+    this.accounts,
+    this.totalBalance,
   });
 
   @override
@@ -119,22 +124,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        Text(
-                          widget.hideBalances ? '••••••' : '₱50.00',
-                          style: PayPinkTheme.display(
-                            fontSize: 38,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: -1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Across 2 accounts. All yours.',
-                          style: PayPinkTheme.body(
-                            color: const Color(0xFFE2B4CB),
-                            fontSize: 11.5,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final double effectiveBalance = widget.totalBalance ??
+                                (widget.accounts != null && widget.accounts!.isNotEmpty
+                                    ? widget.accounts!.fold<double>(0.0, (double sum, a) => sum + a.currentBalance)
+                                    : 50.00);
+                            final accountCount = (widget.accounts != null && widget.accounts!.isNotEmpty)
+                                ? widget.accounts!.length
+                                : 2;
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.hideBalances
+                                      ? '••••••'
+                                      : '₱${effectiveBalance.toStringAsFixed(2)}',
+                                  style: PayPinkTheme.display(
+                                    fontSize: 38,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: -1.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Across $accountCount account${accountCount == 1 ? '' : 's'}. All yours.',
+                                  style: PayPinkTheme.body(
+                                    color: const Color(0xFFE2B4CB),
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 18),
                         Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
