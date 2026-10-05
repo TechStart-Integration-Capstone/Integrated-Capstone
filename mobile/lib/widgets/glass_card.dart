@@ -22,18 +22,39 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveBg = backgroundColor ?? (isDark ? PayPinkTheme.darkGlassCardBg : PayPinkTheme.glassCardBg);
+    final effectiveBorder = borderColor ?? (isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.glassBorder);
+
     Widget content = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
         child: Container(
           padding: padding,
-          decoration: PayPinkTheme.glassCardDecoration(
-            bg: backgroundColor ?? PayPinkTheme.glassCardBg,
-            radius: radius,
-            borderColor: borderColor,
+          decoration: BoxDecoration(
+            color: effectiveBg,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: effectiveBorder, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: (isDark ? Colors.black : PayPinkTheme.wine).withValues(alpha: isDark ? 0.35 : 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 10),
+              ),
+              BoxShadow(
+                color: isDark ? const Color(0x1AFFFFFF) : const Color(0x55FFFFFF),
+                blurRadius: 0,
+                spreadRadius: 1,
+              ),
+            ],
           ),
-          child: child,
+          child: DefaultTextStyle.merge(
+            style: TextStyle(
+              color: isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink,
+            ),
+            child: child,
+          ),
         ),
       ),
     );

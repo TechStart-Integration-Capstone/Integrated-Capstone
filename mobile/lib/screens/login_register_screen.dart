@@ -147,7 +147,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
     final borderColor = isDark ? PayPinkTheme.darkGlassBorder : Colors.white;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF09060B) : const Color(0xFFEFE8EC),
+      backgroundColor: isDark ? const Color(0xFF140D1E) : const Color(0xFFEFE8EC),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),

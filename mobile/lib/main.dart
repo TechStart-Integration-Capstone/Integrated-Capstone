@@ -436,7 +436,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     ];
 
     return Container(
-      color: isDark ? const Color(0xFF09060B) : const Color(0xFFEFE8EC),
+      color: isDark ? const Color(0xFF140D1E) : const Color(0xFFEFE8EC),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),

@@ -29,6 +29,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
@@ -41,14 +45,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: PayPinkTheme.display(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: PayPinkTheme.ink,
+              color: textInk,
               letterSpacing: -0.8,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             "Your everyday, at a glance. It's good to have you here.",
-            style: PayPinkTheme.body(fontSize: 12.5, color: PayPinkTheme.muted),
+            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
           ),
           const SizedBox(height: 18),
 
@@ -222,21 +226,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: PayPinkTheme.display(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.ink,
+                        color: textInk,
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                        color: isDark ? PayPinkTheme.darkCard : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(6),
+                        border: isDark ? Border.all(color: PayPinkTheme.darkGlassBorder) : null,
                       ),
                       child: Text(
                         'Oct 2026',
                         style: PayPinkTheme.body(
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
-                          color: PayPinkTheme.muted,
+                          color: textMuted,
                         ),
                       ),
                     ),
@@ -357,7 +362,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: PayPinkTheme.display(
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
-                                color: PayPinkTheme.ink,
+                                color: textInk,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -482,7 +487,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: PayPinkTheme.display(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w700,
-                      color: PayPinkTheme.ink,
+                      color: textInk,
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -895,7 +900,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: PayPinkTheme.display(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: PayPinkTheme.ink,
+                  color: textInk,
                 ),
               ),
               GestureDetector(
@@ -1023,6 +1028,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isPrimary = false,
     required VoidCallback onTap,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -1033,20 +1041,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: BoxDecoration(
               gradient: isPrimary
                   ? const LinearGradient(
-                      colors: [Color(0xFF7A204C), Color(0xFF551633)],
+                      colors: [Color(0xFF8A2754), Color(0xFF551633)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     )
                   : null,
-              color: isPrimary ? null : Colors.white.withValues(alpha: 0.9),
+              color: isPrimary ? null : (isDark ? PayPinkTheme.darkCard : Colors.white.withValues(alpha: 0.9)),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: isPrimary ? Colors.white.withValues(alpha: 0.3) : Colors.white,
+                color: isPrimary ? Colors.white.withValues(alpha: 0.3) : (isDark ? PayPinkTheme.darkGlassBorder : Colors.white),
                 width: 1.4,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: (isPrimary ? PayPinkTheme.wine : Colors.black).withValues(alpha: 0.1),
+                  color: (isPrimary ? PayPinkTheme.wine : Colors.black).withValues(alpha: isDark ? 0.35 : 0.1),
                   blurRadius: 14,
                   offset: const Offset(0, 5),
                 ),
@@ -1054,7 +1062,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             child: Icon(
               icon,
-              color: isPrimary ? Colors.white : PayPinkTheme.wine,
+              color: isPrimary ? Colors.white : (isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
               size: 22,
             ),
           ),
@@ -1064,7 +1072,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: PayPinkTheme.body(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
-              color: PayPinkTheme.ink,
+              color: textInk,
             ),
           ),
         ],
