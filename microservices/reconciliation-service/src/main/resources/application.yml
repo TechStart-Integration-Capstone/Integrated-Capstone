@@ -11,13 +11,13 @@ spring:
       - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
   datasource:
     oracle:
-      jdbc-url: ${ORACLE_DATASOURCE_URL:jdbc:oracle:thin:@localhost:1521/XE}
-      driver-class-name: oracle.jdbc.OracleDriver
-      username: ${ORACLE_DATASOURCE_USERNAME:ledger_master}
-      password: ${ORACLE_DATASOURCE_PASSWORD:MasterSecretPassword123}
+      jdbc-url: ${ORACLE_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+      username: ${ORACLE_DATASOURCE_USERNAME:sa}
+      password: ${ORACLE_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
       hikari:
         maximum-pool-size: 10
-        pool-name: ReconOraclePool
+        pool-name: ReconSqlServerPool
     postgres:
       jdbc-url: ${POSTGRES_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ledger_audit_db}
       driver-class-name: org.postgresql.Driver

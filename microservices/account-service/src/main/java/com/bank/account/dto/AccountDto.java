@@ -13,6 +13,7 @@ public class AccountDto {
     private String formattedBalance;
     private String status;
     private LocalDateTime createdDate;
+    private boolean mayBeStale = false; // true when value comes from Redis cache, not live DB
 
     public AccountDto() {}
     public AccountDto(Long accountId, Long customerId, String accountNumber, String accountType,
@@ -32,4 +33,6 @@ public class AccountDto {
     public String getFormattedBalance() { return formattedBalance; }
     public String getStatus() { return status; }
     public LocalDateTime getCreatedDate() { return createdDate; }
+    public boolean isMayBeStale() { return mayBeStale; }
+    public void setMayBeStale(boolean mayBeStale) { this.mayBeStale = mayBeStale; }
 }

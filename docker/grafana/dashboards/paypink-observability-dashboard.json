@@ -498,7 +498,7 @@
     },
     {
       "id": 301,
-      "title": "Oracle XE Database (Primary Ledger)",
+      "title": "Azure SQL Database (Primary Ledger)",
       "type": "stat",
       "gridPos": {
         "h": 4,

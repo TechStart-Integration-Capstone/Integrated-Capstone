@@ -96,14 +96,14 @@ class AuthServiceTest {
         assertThat(t1).isNotEqualTo(t2);
     }
 
-    @Test @DisplayName("getDemoToken: delegates to authenticate with lviernes")
-    void getDemoToken_delegatesToAuthenticate() {
+    @Test @DisplayName("authenticate: authenticates valid user credentials")
+    void authenticate_validUserCredentials() {
         Customer demo = new Customer("lviernes", "$2a$10$h", "Luis", "Viernes", "lv@paypink.ph", "09179999999");
         try { var f2 = Customer.class.getDeclaredField("customerId"); f2.setAccessible(true); f2.set(demo, 2L); } catch (Exception ignored) {}
         when(customerRepository.findByUsername("lviernes")).thenReturn(Optional.of(demo));
         when(passwordEncoder.matches("password123", demo.getPasswordHash())).thenReturn(true);
         when(jwtTokenProvider.generateToken(anyLong(), anyString(), anyList())).thenReturn("demo.token");
-        AuthResponse r = authService.getDemoToken();
+        AuthResponse r = authService.authenticate(new AuthRequest("lviernes", "password123"));
         assertThat(r.getToken()).isEqualTo("demo.token");
         verify(customerRepository).findByUsername("lviernes");
     }

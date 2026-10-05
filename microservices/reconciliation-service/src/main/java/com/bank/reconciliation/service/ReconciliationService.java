@@ -39,7 +39,7 @@ public class ReconciliationService {
     }
 
     // Real-time reconciliation triggered by Kafka event
-    @KafkaListener(topics = "ledger.transaction.events", groupId = "reconciliation-service-group")
+    @KafkaListener(topics = {"remittance.events", "ledger.transaction.events"}, groupId = "reconciliation-service-group")
     public void onTransactionEvent(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);

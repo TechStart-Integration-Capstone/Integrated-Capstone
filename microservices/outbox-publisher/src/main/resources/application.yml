@@ -8,16 +8,16 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:oracle:thin:@localhost:1521/XE}
-    driver-class-name: oracle.jdbc.OracleDriver
-    username: ${SPRING_DATASOURCE_USERNAME:ledger_master}
-    password: ${SPRING_DATASOURCE_PASSWORD:MasterSecretPassword123}
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
     hikari:
       maximum-pool-size: 5
       minimum-idle: 2
       pool-name: OutboxPublisherHikariPool
   jpa:
-    database-platform: org.hibernate.dialect.OracleDialect
+    database-platform: org.hibernate.dialect.SQLServerDialect
     hibernate:
       ddl-auto: none
     show-sql: false

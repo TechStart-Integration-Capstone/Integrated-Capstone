@@ -36,7 +36,7 @@ public class NotificationKafkaConsumer {
         this.objectMapper           = objectMapper;
     }
 
-    @KafkaListener(topics = "ledger.transaction.events", groupId = "notification-service-group")
+    @KafkaListener(topics = {"remittance.events", "ledger.transaction.events"}, groupId = "notification-service-group")
     @Transactional
     public void consume(String message) {
         try {

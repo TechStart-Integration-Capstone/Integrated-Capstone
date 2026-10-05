@@ -1,8 +1,7 @@
-import http.server, json, smtplib, ssl
-from email.mime.text import MIMEText
+import os
 
-GMAIL_USER = 'jonlevi.jlv@gmail.com'
-GMAIL_PASS = 'ffaeorqwvupclnrc'
+GMAIL_USER = os.environ.get('SPRING_MAIL_USERNAME', 'notifications@paypink.ph')
+GMAIL_PASS = os.environ.get('PAYPINK_GMAIL_APP_PASSWORD', '')
 
 class EmailRelayHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):

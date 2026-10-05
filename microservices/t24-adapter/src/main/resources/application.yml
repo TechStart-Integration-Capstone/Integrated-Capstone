@@ -1,0 +1,21 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: t24-adapter
+
+app:
+  t24:
+    simulator-url: ${T24_SIMULATOR_URL:http://localhost:8090/ofs/process}
+    connect-timeout-ms: 1000
+    read-timeout-ms: 2000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always

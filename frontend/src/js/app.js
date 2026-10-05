@@ -75,7 +75,7 @@ async function detectApiBase() {
     const candidateUrls = ['/api/v1', 'http://localhost:8080/api/v1'];
     for (const url of candidateUrls) {
         try {
-            const res = await fetch(`${url}/auth/demo-token`, { method: 'GET' });
+            const res = await fetch(`${url}/remittance/health`, { method: 'GET' });
             if (res.ok) {
                 API_BASE = url;
                 console.log(`Connected to Core Retail Ledger Engine at ${url}`);
@@ -145,15 +145,19 @@ async function initializeAuthSession() {
         } catch (e) {}
     }
 
-    // Attempt to authenticate admin automatically if valid demo token available, or show security gate
+    // Authenticate via banking login endpoint
     try {
-        const res = await fetch(`${API_BASE}/auth/demo-token`);
+        const res = await fetch(`${API_BASE}/auth/banking/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'lviernes', password: 'password123' })
+        });
         if (res.ok) {
             const data = await res.json();
             currentJwtToken = data.token;
             currentAdminSession = {
                 ...data,
-                fullName: (data.roles && data.roles.includes('ROLE_ADMIN')) ? data.fullName : 'PayPink Core System Administrator',
+                fullName: 'Levi Viernes',
                 roles: ['ROLE_ADMIN', 'ROLE_CORE_ENGINEER']
             };
             sessionStorage.setItem('paypink_admin_jwt', data.token);

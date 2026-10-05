@@ -25,7 +25,7 @@ public class AuditKafkaConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "ledger.transaction.events", groupId = "audit-service-group")
+    @KafkaListener(topics = {"remittance.events", "ledger.transaction.events"}, groupId = "audit-service-group")
     @Transactional
     public void consume(String message) {
         try {

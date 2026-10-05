@@ -10,6 +10,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -180,15 +181,45 @@ class JwtAuthFilterTest {
     }
 
     @Test
-    @DisplayName("Public path /api/v1/auth/demo-token: passes through without token")
-    void publicPath_demoToken_noTokenRequired() {
-        AtomicBoolean chainCalled = new AtomicBoolean(false);
+    @DisplayName("Protected path /api/v1/auth/demo-token: 401 Unauthorized returned without token")
+    void demoToken_requiresToken_returns401() {
         MockServerHttpRequest request = MockServerHttpRequest
                 .get("/api/v1/auth/demo-token")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
 
-        StepVerifier.create(filter.filter(exchange, recordingChain(chainCalled)))
+        StepVerifier.create(filter.filter(exchange, chain))
+                .verifyComplete();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    @DisplayName("Header forgery attempt: incoming client X-Auth-Customer-Id is stripped and replaced with JWT claim")
+    void incomingSpoofedHeader_isStrippedAndReplaced() {
+        String token = validToken("jdelacruz", 100L); // Valid token for customer 100
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/api/v1/accounts")
+                .header("Authorization", "Bearer " + token)
+                .header("X-Auth-Customer-Id", "999") // Client trying to spoof customerId 999
+                .header("X-Auth-Username", "hacker")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        when(chain.filter(any())).thenAnswer(inv -> {
+            ServerWebExchange captured = inv.getArgument(0);
+            // Verify that spoofed headers were overridden with valid token claims
+            assertThat(captured.getRequest().getHeaders().getFirst("X-Auth-Customer-Id")).isEqualTo("100");
+            assertThat(captured.getRequest().getHeaders().getFirst("X-Auth-Username")).isEqualTo("jdelacruz");
+            chainCalled.set(true);
+            return Mono.empty();
+        });
+
+        StepVerifier.create(filter.filter(exchange, chain))
                 .verifyComplete();
 
         assertThat(chainCalled.get()).isTrue();
