@@ -25,7 +25,11 @@ public class OutboxEvent {
     public String getEventType() { return eventType; }
     public String getPayload() { return payload; }
     public String getStatus() { return status; }
+    public void setTransactionId(Long transactionId) { this.transactionId = transactionId; }
+    public void setEventType(String eventType) { this.eventType = eventType; }
+    public void setPayload(String payload) { this.payload = payload; }
     public void setStatus(String status) { this.status = status; }
+    public void setCreatedDate(LocalDateTime createdDate) { this.createdDate = createdDate; }
     public void setProcessedDate(LocalDateTime processedDate) { this.processedDate = processedDate; }
     public LocalDateTime getCreatedDate() { return createdDate; }
 }

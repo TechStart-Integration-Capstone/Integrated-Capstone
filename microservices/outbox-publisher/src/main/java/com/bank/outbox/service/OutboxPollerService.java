@@ -45,7 +45,7 @@ public class OutboxPollerService {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxPollerService.class);
 
-    static final String TOPIC = "ledger.transaction.events";
+    static final String TOPIC = "remittance.events";
 
     private final OutboxEventRepository outboxRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;

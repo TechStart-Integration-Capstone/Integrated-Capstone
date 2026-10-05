@@ -19,9 +19,4 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
         return ResponseEntity.ok(authService.authenticate(request));
     }
-
-    @GetMapping("/demo-token")
-    public ResponseEntity<AuthResponse> getDemoToken() {
-        return ResponseEntity.ok(authService.getDemoToken());
-    }
 }

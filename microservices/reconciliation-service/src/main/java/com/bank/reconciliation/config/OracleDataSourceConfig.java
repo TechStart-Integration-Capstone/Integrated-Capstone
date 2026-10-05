@@ -52,7 +52,7 @@ public class OracleDataSourceConfig {
             @Qualifier("entityManagerFactoryBuilder") EntityManagerFactoryBuilder builder,
             @Qualifier("oracleDataSource") DataSource dataSource) {
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.dialect", "org.hibernate.dialect.OracleDialect");
+        props.put("hibernate.dialect", "org.hibernate.dialect.SQLServerDialect");
         props.put("hibernate.hbm2ddl.auto", "none");
         return builder
                 .dataSource(dataSource)

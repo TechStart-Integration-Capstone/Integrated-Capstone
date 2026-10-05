@@ -22,9 +22,9 @@ public class BankingFavoritesSchema implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments arguments) {
         try {
-            // Check if table already exists in Oracle's data dictionary before creating
+            // Check if table already exists using SQL Server's INFORMATION_SCHEMA
             Integer count = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM user_tables WHERE table_name = 'BANKING_FAVORITE'",
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'BANKING_FAVORITE'",
                 Integer.class
             );
 
@@ -33,14 +33,16 @@ public class BankingFavoritesSchema implements ApplicationRunner {
                 return;
             }
 
+            // Table does not exist — create it (T-SQL syntax)
             jdbc.execute(
                 "CREATE TABLE BANKING_FAVORITE (" +
-                "  customer_id  NUMBER(19) NOT NULL, " +
-                "  account_id   NUMBER(19) NOT NULL, " +
-                "  created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, " +
-                "  CONSTRAINT pk_banking_favorite PRIMARY KEY (customer_id, account_id), " +
+                "  favorite_id  BIGINT IDENTITY(1,1) PRIMARY KEY, " +
+                "  customer_id  BIGINT NOT NULL, " +
+                "  account_id   BIGINT NOT NULL, " +
+                "  created_date DATETIME2 NOT NULL DEFAULT GETUTCDATE(), " +
                 "  CONSTRAINT fk_favorite_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER(customer_id), " +
-                "  CONSTRAINT fk_favorite_account  FOREIGN KEY (account_id)  REFERENCES ACCOUNT(account_id)" +
+                "  CONSTRAINT fk_favorite_account  FOREIGN KEY (account_id)  REFERENCES ACCOUNT(account_id), " +
+                "  CONSTRAINT uq_fav_customer_account UNIQUE (customer_id, account_id)" +
                 ")"
             );
             log.info("[auth-service] BANKING_FAVORITE table created successfully.");
