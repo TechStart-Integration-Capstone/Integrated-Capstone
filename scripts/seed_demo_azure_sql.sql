@@ -43,6 +43,21 @@ BEGIN TRY
     ) AS seed(username, account_number, account_type, opening_balance)
     JOIN @new_customers AS customer ON customer.username = seed.username;
 
+    -- Ensure legacy aliases are in AUDIT_LOG for backward compatibility
+    INSERT INTO dbo.AUDIT_LOG (customer_id, action, entity, details)
+    SELECT a.customer_id, N'ACCOUNT_RENUMBERED', CONCAT(N'ACCOUNT:', a.account_id), legacy.old_number
+    FROM (VALUES
+        (N'001181233469', N'ACC-PH-1001-8842'),
+        (N'001381233467', N'ACC-PH-1001-9921'),
+        (N'001981233461', N'ACC-PH-1001-7714'),
+        (N'001133218709', N'ACC-PH-2002-3311'),
+        (N'001428928483', N'ACC-PH-3003-4422')
+    ) AS legacy(account_number, old_number)
+    JOIN dbo.ACCOUNT a ON a.account_number = legacy.account_number
+    WHERE NOT EXISTS (
+        SELECT 1 FROM dbo.AUDIT_LOG l WHERE l.action = N'ACCOUNT_RENUMBERED' AND l.details = legacy.old_number
+    );
+
     COMMIT TRANSACTION;
 END TRY
 BEGIN CATCH

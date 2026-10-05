@@ -147,15 +147,25 @@ INSERT INTO dbo.CUSTOMER (username, password_hash, first_name, last_name, email,
 VALUES ('glim', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Gill', 'Lim', 'gill.lim@paypink.ph', '+63 920 333 4567', 'ACTIVE');
 GO
 
--- Accounts with initial balances
+-- Accounts with initial balances (12-digit Luhn standard, matching BankingIdentifiers & README)
 INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (1, 'ACC-PH-1001-8842', 'SAVINGS_ACCOUNT',   'PHP', 125450.0000, 'ACTIVE');
+VALUES (1, '001181233469', 'SAVINGS_ACCOUNT',     'PHP', 125450.0000, 'ACTIVE');
 INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (1, 'ACC-PH-1001-9921', 'CHECKING_ACCOUNT',  'PHP',  50000.0000, 'ACTIVE');
+VALUES (1, '001381233467', 'CHECKING_ACCOUNT',    'PHP',  50000.0000, 'ACTIVE');
 INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (1, 'ACC-PH-1001-7714', 'STRESS_TEST_ACCOUNT','PHP',     60.0000, 'ACTIVE');
+VALUES (1, '001981233461', 'STRESS_TEST_ACCOUNT', 'PHP',     60.0000, 'ACTIVE');
 INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (2, 'ACC-PH-2002-3311', 'SAVINGS_ACCOUNT',   'PHP',  84320.5000, 'ACTIVE');
+VALUES (2, '001133218709', 'SAVINGS_ACCOUNT',     'PHP',  84320.5000, 'ACTIVE');
 INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, currency, current_balance, status)
-VALUES (3, 'ACC-PH-3003-4422', 'TIME_DEPOSIT',      'PHP', 350000.0000, 'ACTIVE');
+VALUES (3, '001428928483', 'TIME_DEPOSIT',        'PHP', 350000.0000, 'ACTIVE');
+GO
+
+-- Legacy account number aliases for backward compatibility
+INSERT INTO dbo.AUDIT_LOG (customer_id, action, entity, details)
+VALUES
+(1, 'ACCOUNT_RENUMBERED', 'ACCOUNT:1', 'ACC-PH-1001-8842'),
+(1, 'ACCOUNT_RENUMBERED', 'ACCOUNT:2', 'ACC-PH-1001-9921'),
+(1, 'ACCOUNT_RENUMBERED', 'ACCOUNT:3', 'ACC-PH-1001-7714'),
+(2, 'ACCOUNT_RENUMBERED', 'ACCOUNT:4', 'ACC-PH-2002-3311'),
+(3, 'ACCOUNT_RENUMBERED', 'ACCOUNT:5', 'ACC-PH-3003-4422');
 GO
