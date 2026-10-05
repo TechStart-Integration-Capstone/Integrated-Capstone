@@ -120,6 +120,21 @@ spring:
                 key-resolver: "#{@userKeyResolver}"
                 deny-empty-key: false
 
+        # Loan Service (Phase 6) — /api/v1/loans/** → loan-service:8091/loans/**
+        # /api/v1/loans/eod/** is admin-only (ROLE_ADMIN checked in JwtAuthFilter).
+        # transaction-service's /internal/** transfer endpoint is deliberately NOT routed.
+        - id: loan-service
+          uri: http://${LOAN_SERVICE_HOST:loan-service}:8091
+          predicates:
+            - Path=/api/v1/loans/**
+          filters:
+            - StripPrefix=2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+                deny-empty-key: false
+
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:
   security:

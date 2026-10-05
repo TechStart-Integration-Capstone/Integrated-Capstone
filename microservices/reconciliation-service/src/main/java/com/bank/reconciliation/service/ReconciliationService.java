@@ -43,6 +43,8 @@ public class ReconciliationService {
     public void onTransactionEvent(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);
+            // loan.* events (Phase 6) carry no ledger leg; the transfer itself is reconciled from LEDGER_TRANSACTION.
+            if (node.path("eventType").asText("").startsWith("loan.")) return;
             Long transactionId = node.has("transactionId") ? node.get("transactionId").asLong() : null;
             if (transactionId != null) {
                 transactionRepository.findById(transactionId).ifPresent(tx -> saveReconLog(tx));

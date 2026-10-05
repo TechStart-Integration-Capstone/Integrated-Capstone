@@ -1,5 +1,6 @@
 package com.bank.transaction.model;
 
+import com.bank.transaction.dto.RemittanceRequest;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -55,6 +56,9 @@ public class Remittance {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
+    @Column(name = "transaction_type", nullable = false, length = 30)
+    private String transactionType = RemittanceRequest.TYPE_TRANSFER; // TRANSFER, LOAN_DISBURSEMENT, LOAN_REPAYMENT
+
     public Remittance() {}
 
     public Remittance(String referenceNo, Long sourceAccountId, Long targetAccountId, BigDecimal amount, String currency, String status) {
@@ -106,6 +110,9 @@ public class Remittance {
 
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
+
+    public String getTransactionType() { return transactionType; }
+    public void setTransactionType(String transactionType) { this.transactionType = transactionType; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

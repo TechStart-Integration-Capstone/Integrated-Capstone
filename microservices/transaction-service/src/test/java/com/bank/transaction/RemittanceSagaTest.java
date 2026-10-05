@@ -184,6 +184,16 @@ class RemittanceSagaTest {
         request.setTargetAccountId("2");
         request.setAmount(new BigDecimal("500.00"));
 
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
         when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
                 .thenReturn(new RiskResult(new BigDecimal("0.95"), "REJECT", List.of("High risk velocity")));
 
