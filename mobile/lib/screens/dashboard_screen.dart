@@ -180,9 +180,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 18),
 
-          // Quick Action Capsules matching mockup exactly
+          // Quick Action Capsules
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildQuickAction(
                 context,
@@ -196,12 +196,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: Icons.south_west_rounded,
                 label: 'Request',
                 onTap: () => PayPinkBottomSheets.showRequestQr(context),
-              ),
-              _buildQuickAction(
-                context,
-                icon: Icons.qr_code_scanner_rounded,
-                label: 'Scan QR',
-                onTap: () => PayPinkBottomSheets.showScanQr(context),
               ),
               _buildQuickAction(
                 context,
