@@ -22,6 +22,8 @@ erDiagram
         datetime2 created_date
         int credit_score "default 650 - CHECK 300..850 (Phase 6)"
         decimal monthly_income "18,4 - default 30000 (Phase 6)"
+        decimal daily_transfer_limit "18,4 - default 50000.0000 (Phase 7 Monitoring)"
+        decimal per_tx_limit "18,4 - default 25000.0000 (Phase 7 Monitoring)"
     }
 
     ACCOUNT {
@@ -86,7 +88,9 @@ erDiagram
         bigint target_account_id FK
         decimal amount "18,4"
         nvarchar currency "default PHP"
-        nvarchar status "PENDING_CORE, POSTED, REJECTED, PROCESSING"
+        nvarchar status "Initiated, Authorized, Reserved, Processing, Posted, Failed, Cancelled"
+        nvarchar internal_status "nullable - 11-step pipeline code (Phase 7 Monitoring)"
+        nvarchar current_service "nullable - executing microservice name (Phase 7 Monitoring)"
         decimal risk_score "5,4 - nullable"
         nvarchar risk_decision "APPROVE, REJECT"
         nvarchar ft_reference "T24 FT ref - nullable"

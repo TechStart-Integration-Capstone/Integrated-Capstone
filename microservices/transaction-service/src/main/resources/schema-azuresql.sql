@@ -114,7 +114,10 @@ CREATE TABLE dbo.REMITTANCE (
     target_account_id BIGINT        NOT NULL,
     amount            DECIMAL(18,4) NOT NULL,
     currency          NVARCHAR(10)  NOT NULL DEFAULT 'PHP',
-    status            NVARCHAR(30)  NOT NULL, -- PENDING_CORE, POSTED, REJECTED, PROCESSING
+    status            NVARCHAR(30)  NOT NULL, -- Initiated, Authorized, Processing, Posted, Failed, Reserved, Cancelled
+    internal_status   NVARCHAR(40)  NULL,     -- 11-step granular lifecycle
+    current_service   NVARCHAR(40)  NULL,
+    transaction_type  NVARCHAR(30)  NOT NULL DEFAULT 'TRANSFER',
     risk_score        DECIMAL(5,4)  NULL,
     risk_decision     NVARCHAR(20)  NULL,
     ft_reference      NVARCHAR(64)  NULL,

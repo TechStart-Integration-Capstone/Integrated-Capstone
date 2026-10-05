@@ -1338,6 +1338,131 @@ function escapeMonitorText(value) {
     }[char]));
 }
 
+function normalizeDashboardStatus(raw) {
+    if (!raw) return 'Initiated';
+    const s = String(raw).trim();
+    const upper = s.toUpperCase();
+    if (upper === 'SUCCESS' || upper === 'COMPLETED' || upper === 'POSTED' || upper === 'LEDGER_UPDATE' || upper === 'NOTIFICATION' || upper === 'RECONCILIATION') return 'Posted';
+    if (upper === 'PENDING' || upper === 'RESERVED' || upper === 'PENDING_CORE') return 'Reserved';
+    if (upper === 'AUTHORIZED') return 'Authorized';
+    if (upper === 'PROCESSING' || upper === 'T24_POSTED' || upper === 'IN_PROGRESS') return 'Processing';
+    if (upper === 'FAILED' || upper === 'REJECTED' || upper === 'INSUFFICIENT_FUNDS' || upper === 'LIMIT_EXCEEDED' || upper === 'FRAUD_REJECTED' || upper === 'ERROR') return 'Failed';
+    if (upper === 'CANCELLED' || upper === 'CANCELED' || upper === 'ROLLBACK' || upper === 'REVERSED') return 'Cancelled';
+    if (upper === 'INITIATED' || upper === 'VALIDATED' || upper === 'AUTHENTICATED') return 'Initiated';
+    if (['Initiated', 'Authorized', 'Processing', 'Posted', 'Failed', 'Reserved', 'Cancelled'].includes(s)) return s;
+    return 'Processing';
+}
+
+function matchesStatusFilter(txStatus, filter) {
+    if (!filter || filter === 'ALL') return true;
+    const normalized = normalizeDashboardStatus(txStatus);
+    if (normalized.toUpperCase() === filter.toUpperCase()) return true;
+    if (String(txStatus).toUpperCase() === filter.toUpperCase()) return true;
+    if (filter.toUpperCase() === 'SUCCESS' && normalized === 'Posted') return true;
+    if (filter.toUpperCase() === 'PENDING' && normalized === 'Reserved') return true;
+    if (filter.toUpperCase() === 'COMPLETED' && normalized === 'Posted') return true;
+    return false;
+}
+
+function getStatusTagClass(status) {
+    const s = String(status || '').toLowerCase();
+    switch (s) {
+        case 'initiated': return 'tag-initiated';
+        case 'authorized': return 'tag-authorized';
+        case 'processing': return 'tag-processing';
+        case 'posted':
+        case 'success':
+        case 'completed': return 'tag-posted';
+        case 'failed':
+        case 'error': return 'tag-failed';
+        case 'reserved':
+        case 'pending': return 'tag-reserved';
+        case 'cancelled':
+        case 'canceled': return 'tag-cancelled';
+        default: return 'tag-processing';
+    }
+}
+
+const PIPELINE_STEPS = [
+    {
+        key: 'INITIATED',
+        num: 1,
+        title: 'Initiated',
+        service: 'api-gateway / transaction-service',
+        desc: 'Transfer request received at gateway perimeter; idempotency key locked & transaction ID generated.'
+    },
+    {
+        key: 'VALIDATED',
+        num: 2,
+        title: 'Validated',
+        service: 'transaction-service',
+        desc: 'JSR-380 payload verification; source and destination account formats & positive amount validated.'
+    },
+    {
+        key: 'AUTHENTICATED',
+        num: 3,
+        title: 'Authenticated',
+        service: 'auth-service',
+        desc: 'Cryptographic JWT claim validation; perimeter customer authentication & active role verification.'
+    },
+    {
+        key: 'FRAUD_CHECK',
+        num: 4,
+        title: 'Fraud Check',
+        service: 'fraud-detection-service',
+        desc: 'Velocity check & behavioral pattern analysis; blacklist and AML fraud rule evaluation.'
+    },
+    {
+        key: 'LIMIT_CHECK',
+        num: 5,
+        title: 'Limit Check',
+        service: 'transaction-service',
+        desc: 'Per-transaction ceiling (₱25,000) and daily cumulative limit (₱50,000) verification prior to funds reservation.'
+    },
+    {
+        key: 'FUNDS_CHECK',
+        num: 6,
+        title: 'Funds Check',
+        service: 'transaction-service',
+        desc: 'Source account available balance verification: (current_balance - held_balance) >= amount.'
+    },
+    {
+        key: 'AUTHORIZED',
+        num: 7,
+        title: 'Authorized',
+        service: 'transaction-service',
+        desc: 'Saga reserve hold: atomically reserves funds in held_balance with expiration TTL; status Reserved.'
+    },
+    {
+        key: 'POSTED',
+        num: 8,
+        title: 'Posted',
+        service: 't24-adapter',
+        desc: 'Core Banking host adapter execution: mock T24 posting payload emitted and host response validated.'
+    },
+    {
+        key: 'LEDGER_UPDATE',
+        num: 9,
+        title: 'Ledger Update',
+        service: 'transaction-service',
+        desc: 'ACID double-entry ledger mutation: atomically deducts source, credits destination, and commits audit trail.'
+    },
+    {
+        key: 'NOTIFICATION',
+        num: 10,
+        title: 'Notification',
+        service: 'notification-service',
+        desc: 'Asynchronous outbox event published: customer debit/credit alert dispatched via notification queue.'
+    },
+    {
+        key: 'RECONCILIATION',
+        num: 11,
+        title: 'Reconciliation',
+        service: 'settlement-service',
+        desc: 'End-of-day batch settlement matching core host journal with Azure SQL ACID double-entry ledger.'
+    }
+];
+
 function renderTransactionMonitor() {
     const tbody = document.getElementById('monitor-transactions-body');
     if (!tbody) return;
@@ -1354,7 +1479,7 @@ function renderTransactionMonitor() {
     const today = monitorDateKey(new Date());
     const list = monitorTransactions.filter(tx => {
         if (monitorDateKey(tx.transactionDate) !== today) return false;
-        if (statusFilter !== 'ALL' && tx.status !== statusFilter) return false;
+        if (!matchesStatusFilter(tx.status, statusFilter)) return false;
         if (typeFilter === 'TRANSFER' && !/TRANSFER|^EXT_/.test(tx.transactionType || '')) return false;
         if ((typeFilter === 'CREDIT' || typeFilter === 'DEBIT') && tx.operation !== typeFilter) return false;
         return true;
@@ -1370,6 +1495,7 @@ function renderTransactionMonitor() {
         const isCredit = tx.operation === 'CREDIT';
         const sign = isCredit ? '+' : tx.operation === 'DEBIT' ? '-' : '';
         const currency = tx.currency === 'PHP' ? '₱' : `${escapeMonitorText(tx.currency)} `;
+        const displayStatus = normalizeDashboardStatus(tx.status);
         return `
         <tr>
             <td><code>${escapeMonitorText(tx.referenceNo)}</code></td>
@@ -1378,9 +1504,123 @@ function renderTransactionMonitor() {
             <td><span class="badge-chip">${escapeMonitorText(tx.transactionType)}</span></td>
             <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${sign}${currency}${formatCurrency(tx.amount)}</strong></td>
             <td>${escapeMonitorText(tx.operation || '—')}</td>
-            <td><span class="status-tag ${tx.status === 'SUCCESS' || tx.status === 'COMPLETED' ? 'tag-success' : 'tag-error'}">${escapeMonitorText(tx.status)}</span></td>
+            <td>
+                <div style="display: inline-flex; align-items: center; gap: 8px;">
+                    <span class="status-tag ${getStatusTagClass(displayStatus)}">${escapeMonitorText(displayStatus)}</span>
+                    <button class="btn-lifecycle" onclick="showTransactionLifecycle('${escapeMonitorText(tx.referenceNo)}')" title="Trace 11-Step Pipeline">Trace</button>
+                </div>
+            </td>
         </tr>
     `}).join('');
+}
+
+function showTransactionLifecycle(referenceNo) {
+    const tx = monitorTransactions.find(t => t.referenceNo === referenceNo)
+        || recentTransactions.find(t => t.ref === referenceNo);
+    if (!tx) {
+        alert('Transaction details not found for reference: ' + referenceNo);
+        return;
+    }
+
+    const modal = document.getElementById('modal-transaction-lifecycle');
+    if (!modal) return;
+
+    const displayStatus = normalizeDashboardStatus(tx.status);
+    const internalStatus = (tx.internalStatus || '').toUpperCase();
+    const currentService = tx.currentService || 'transaction-service';
+    const reason = tx.reason || '';
+
+    // Render metadata box
+    const metaEl = document.getElementById('lifecycle-metadata');
+    if (metaEl) {
+        metaEl.innerHTML = `
+            <div><strong>Reference:</strong> <code>${escapeMonitorText(tx.referenceNo || tx.ref)}</code></div>
+            <div><strong>Dashboard Status:</strong> <span class="status-tag ${getStatusTagClass(displayStatus)}">${escapeMonitorText(displayStatus)}</span></div>
+            <div><strong>Amount:</strong> <strong style="font-family: 'JetBrains Mono', monospace; color: var(--primary-rose);">₱${formatCurrency(tx.amount)}</strong></div>
+            <div><strong>Source Account:</strong> <code>${escapeMonitorText(formatAccountNumber(tx.accountNumber))}</code></div>
+            <div><strong>Target Account:</strong> <code>${escapeMonitorText(formatAccountNumber(tx.targetAccountNumber || 'Internal Transfer'))}</code></div>
+            <div><strong>Executing Service:</strong> <span class="badge-chip">${escapeMonitorText(currentService)}</span></div>
+            <div><strong>Internal State:</strong> <code>${escapeMonitorText(internalStatus || (displayStatus === 'Posted' ? 'RECONCILIATION' : displayStatus.toUpperCase()))}</code></div>
+            <div><strong>Timestamp:</strong> <span style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;">${escapeMonitorText(formatPhilippineDateTime(tx.transactionDate || tx.date))}</span></div>
+            ${reason ? `<div style="grid-column: 1 / -1; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 8px 12px; color: #991b1b; font-size: 0.82rem;"><strong>Failure / Termination Reason:</strong> ${escapeMonitorText(reason)}</div>` : ''}
+        `;
+    }
+
+    // Determine lifecycle state per step
+    let activeIdx = -1;
+    let failedIdx = -1;
+
+    if (displayStatus === 'Posted') {
+        activeIdx = 10;
+    } else if (displayStatus === 'Failed' || displayStatus === 'Cancelled') {
+        const found = PIPELINE_STEPS.findIndex(s => s.key === internalStatus);
+        failedIdx = found >= 0 ? found : (internalStatus === 'LIMIT_CHECK' ? 4 : 5);
+    } else if (displayStatus === 'Processing') {
+        activeIdx = 8;
+    } else if (displayStatus === 'Authorized' || displayStatus === 'Reserved') {
+        activeIdx = 6;
+    } else if (displayStatus === 'Initiated') {
+        activeIdx = 0;
+    } else {
+        activeIdx = 7;
+    }
+
+    const stepperEl = document.getElementById('lifecycle-stepper-container');
+    if (stepperEl) {
+        stepperEl.innerHTML = PIPELINE_STEPS.map((step, idx) => {
+            let stateClass = '';
+            let nodeIcon = `${step.num}`;
+            let extraBadge = '';
+            let extraDesc = '';
+
+            if (failedIdx >= 0) {
+                if (idx < failedIdx) {
+                    stateClass = 'completed';
+                    nodeIcon = '✓';
+                } else if (idx === failedIdx) {
+                    stateClass = 'failed';
+                    nodeIcon = '✕';
+                    extraBadge = `<span class="badge-chip pill-danger" style="font-size: 0.65rem; background: #fef2f2; color: #b91c1c; border-color: #fca5a5;">${displayStatus === 'Cancelled' ? 'Cancelled' : 'Failed'}</span>`;
+                    if (reason) {
+                        extraDesc = `<div style="margin-top: 6px; padding: 6px 10px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; font-size: 0.78rem; color: #991b1b; font-weight: 600;">Reason: ${escapeMonitorText(reason)}</div>`;
+                    }
+                } else {
+                    stateClass = '';
+                    extraDesc = `<div style="font-size: 0.75rem; color: #94a3b8; font-style: italic; margin-top: 2px;">Skipped due to pipeline failure at Step ${failedIdx + 1}</div>`;
+                }
+            } else if (displayStatus === 'Posted') {
+                stateClass = 'completed';
+                nodeIcon = '✓';
+            } else {
+                if (idx < activeIdx) {
+                    stateClass = 'completed';
+                    nodeIcon = '✓';
+                } else if (idx === activeIdx) {
+                    stateClass = 'active';
+                    extraBadge = `<span class="badge-chip pill-primary" style="font-size: 0.65rem;">Active</span>`;
+                } else {
+                    stateClass = '';
+                }
+            }
+
+            return `
+                <div class="stepper-step ${stateClass}">
+                    <div class="step-node">${nodeIcon}</div>
+                    <div class="step-content">
+                        <div class="step-title">
+                            ${step.num}. ${escapeMonitorText(step.title)}
+                            <span class="step-service-badge">${escapeMonitorText(step.service)}</span>
+                            ${extraBadge}
+                        </div>
+                        <div class="step-desc">${escapeMonitorText(step.desc)}</div>
+                        ${extraDesc}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.classList.add('active');
 }
 
 function renderTransactionFeed() {
@@ -2097,4 +2337,6 @@ window.triggerScheduledReconciliation = triggerScheduledReconciliation;
 window.handleTransferSubmit = handleTransferSubmit;
 window.selectAccount = selectAccount;
 window.formatAccountNumber = formatAccountNumber;
+window.showTransactionLifecycle = showTransactionLifecycle;
+window.normalizeDashboardStatus = normalizeDashboardStatus;
 

@@ -9,7 +9,17 @@ function app() {
     const elements = {
         'monitor-transactions-body': { innerHTML: '' },
         'monitor-status-filter': { value: 'ALL' },
-        'monitor-type-filter': { value: 'ALL' }
+        'monitor-type-filter': { value: 'ALL' },
+        'modal-transaction-lifecycle': {
+            classList: {
+                classes: new Set(),
+                add(c) { this.classes.add(c); },
+                remove(c) { this.classes.delete(c); },
+                contains(c) { return this.classes.has(c); }
+            }
+        },
+        'lifecycle-metadata': { innerHTML: '' },
+        'lifecycle-stepper-container': { innerHTML: '' }
     };
     const context = vm.createContext({
         window: {}, console, AbortSignal, atob,
@@ -148,3 +158,130 @@ test('a cached customer token cannot masquerade as an administrator session', as
     assert.equal(a.run('currentJwtToken'), null);
     assert.equal(a.session.has('paypink_admin_jwt'), false);
 });
+
+test('dashboard status normalization and filtering for the 7 statuses', async () => {
+    const a = app();
+    // Test direct normalization function
+    assert.equal(a.run("normalizeDashboardStatus('SUCCESS')"), 'Posted');
+    assert.equal(a.run("normalizeDashboardStatus('COMPLETED')"), 'Posted');
+    assert.equal(a.run("normalizeDashboardStatus('RESERVED')"), 'Reserved');
+    assert.equal(a.run("normalizeDashboardStatus('PENDING')"), 'Reserved');
+    assert.equal(a.run("normalizeDashboardStatus('AUTHORIZED')"), 'Authorized');
+    assert.equal(a.run("normalizeDashboardStatus('PROCESSING')"), 'Processing');
+    assert.equal(a.run("normalizeDashboardStatus('FAILED')"), 'Failed');
+    assert.equal(a.run("normalizeDashboardStatus('CANCELLED')"), 'Cancelled');
+    assert.equal(a.run("normalizeDashboardStatus('INITIATED')"), 'Initiated');
+
+    // Test row rendering and filtering
+    const rows = [
+        { transactionId: '1', referenceNo: 'TX-INIT', transactionDate: new Date().toISOString(), accountNumber: '001181233469', transactionType: 'TRANSFER', operation: 'DEBIT', amount: 100, currency: 'PHP', status: 'Initiated' },
+        { transactionId: '2', referenceNo: 'TX-AUTH', transactionDate: new Date().toISOString(), accountNumber: '001181233469', transactionType: 'TRANSFER', operation: 'DEBIT', amount: 200, currency: 'PHP', status: 'Authorized' },
+        { transactionId: '3', referenceNo: 'TX-RESV', transactionDate: new Date().toISOString(), accountNumber: '001181233469', transactionType: 'TRANSFER', operation: 'DEBIT', amount: 300, currency: 'PHP', status: 'Reserved' },
+        { transactionId: '4', referenceNo: 'TX-PROC', transactionDate: new Date().toISOString(), accountNumber: '001181233469', transactionType: 'TRANSFER', operation: 'DEBIT', amount: 400, currency: 'PHP', status: 'Processing' },
+        { transactionId: '5', referenceNo: 'TX-POST', transactionDate: new Date().toISOString(), accountNumber: '001181233469', transactionType: 'TRANSFER', operation: 'DEBIT', amount: 500, currency: 'PHP', status: 'Posted' },
+        { transactionId: '6', referenceNo: 'TX-FAIL', transactionDate: new Date().toISOString(), accountNumber: '001181233469', transactionType: 'TRANSFER', operation: 'DEBIT', amount: 600, currency: 'PHP', status: 'Failed' },
+        { transactionId: '7', referenceNo: 'TX-CANC', transactionDate: new Date().toISOString(), accountNumber: '001181233469', transactionType: 'TRANSFER', operation: 'DEBIT', amount: 700, currency: 'PHP', status: 'Cancelled' }
+    ];
+    a.context.fetch = async () => ({ ok: true, json: async () => rows });
+    await a.run('loadRecentTransactions()');
+
+    // All 7 should be rendered
+    assert.match(a.html(), /TX-INIT/);
+    assert.match(a.html(), /TX-AUTH/);
+    assert.match(a.html(), /TX-RESV/);
+    assert.match(a.html(), /TX-PROC/);
+    assert.match(a.html(), /TX-POST/);
+    assert.match(a.html(), /TX-FAIL/);
+    assert.match(a.html(), /TX-CANC/);
+
+    // Filter by Failed
+    a.elements['monitor-status-filter'].value = 'Failed';
+    a.run('renderTransactionMonitor()');
+    assert.match(a.html(), /TX-FAIL/);
+    assert.doesNotMatch(a.html(), /TX-POST|TX-AUTH|TX-INIT|TX-RESV/);
+
+    // Filter by Posted
+    a.elements['monitor-status-filter'].value = 'Posted';
+    a.run('renderTransactionMonitor()');
+    assert.match(a.html(), /TX-POST/);
+    assert.doesNotMatch(a.html(), /TX-FAIL|TX-AUTH/);
+});
+
+test('11-step lifecycle trace displays complete microservice attribution and failure reasons', async () => {
+    const a = app();
+    const rows = [
+        {
+            transactionId: '101',
+            referenceNo: 'TX-PH-FAILED-LIMIT',
+            transactionDate: new Date().toISOString(),
+            accountNumber: '001181233469',
+            targetAccountNumber: '001181233470',
+            transactionType: 'TRANSFER',
+            operation: 'DEBIT',
+            amount: 30000,
+            currency: 'PHP',
+            status: 'Failed',
+            internalStatus: 'LIMIT_CHECK',
+            currentService: 'transaction-service',
+            reason: 'Per-transaction limit of ₱25,000.00 exceeded'
+        },
+        {
+            transactionId: '102',
+            referenceNo: 'TX-PH-POSTED-OK',
+            transactionDate: new Date().toISOString(),
+            accountNumber: '001181233469',
+            targetAccountNumber: '001181233470',
+            transactionType: 'TRANSFER',
+            operation: 'DEBIT',
+            amount: 5000,
+            currency: 'PHP',
+            status: 'Posted',
+            internalStatus: 'RECONCILIATION',
+            currentService: 'settlement-service'
+        }
+    ];
+    a.context.fetch = async () => ({ ok: true, json: async () => rows });
+    await a.run('loadRecentTransactions()');
+
+    // 1. Trace the Failed transaction
+    a.run("showTransactionLifecycle('TX-PH-FAILED-LIMIT')");
+    const metaHtml = a.elements['lifecycle-metadata'].innerHTML;
+    const stepperHtml = a.elements['lifecycle-stepper-container'].innerHTML;
+
+    assert.equal(a.elements['modal-transaction-lifecycle'].classList.contains('active'), true);
+    assert.match(metaHtml, /TX-PH-FAILED-LIMIT/);
+    assert.match(metaHtml, /Per-transaction limit of ₱25,000\.00 exceeded/);
+    assert.match(metaHtml, /LIMIT_CHECK/);
+
+    // Stepper must contain all 11 steps
+    assert.match(stepperHtml, /1\. Initiated/);
+    assert.match(stepperHtml, /2\. Validated/);
+    assert.match(stepperHtml, /3\. Authenticated/);
+    assert.match(stepperHtml, /4\. Fraud Check/);
+    assert.match(stepperHtml, /5\. Limit Check/);
+    assert.match(stepperHtml, /6\. Funds Check/);
+    assert.match(stepperHtml, /7\. Authorized/);
+    assert.match(stepperHtml, /8\. Posted/);
+    assert.match(stepperHtml, /9\. Ledger Update/);
+    assert.match(stepperHtml, /10\. Notification/);
+    assert.match(stepperHtml, /11\. Reconciliation/);
+
+    // Service attributions must be displayed
+    assert.match(stepperHtml, /api-gateway \/ transaction-service/);
+    assert.match(stepperHtml, /fraud-detection-service/);
+    assert.match(stepperHtml, /t24-adapter/);
+    assert.match(stepperHtml, /settlement-service/);
+
+    // Limit check (step 5) must be marked as failed with reason, and subsequent skipped
+    assert.match(stepperHtml, /stepper-step failed/);
+    assert.match(stepperHtml, /Reason: Per-transaction limit of ₱25,000\.00 exceeded/);
+    assert.match(stepperHtml, /Skipped due to pipeline failure at Step 5/);
+
+    // 2. Trace the Posted transaction
+    a.run("showTransactionLifecycle('TX-PH-POSTED-OK')");
+    const okStepperHtml = a.elements['lifecycle-stepper-container'].innerHTML;
+    // None should be failed, all steps completed
+    assert.doesNotMatch(okStepperHtml, /stepper-step failed/);
+    assert.doesNotMatch(okStepperHtml, /Skipped/);
+});
+

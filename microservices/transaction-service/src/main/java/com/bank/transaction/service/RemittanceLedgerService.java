@@ -129,11 +129,98 @@ public class RemittanceLedgerService {
                 target.id(),
                 request.getAmount(),
                 request.getCurrency(),
-                "PENDING_CORE"
+                Remittance.STATUS_RESERVED
         );
         remittance.setCallerCustomerId(callerCustomerId != null ? callerCustomerId : source.customerId());
         remittance.setIdempotencyKey(idempotencyKey);
         remittance.setTransactionType(request.getTransactionType());
+        remittance.setInternalStatus(Remittance.STEP_AUTHORIZED);
+        remittance.setCurrentService("transaction-service");
+        return remittanceRepository.save(remittance);
+    }
+
+    public record CustomerLimits(BigDecimal dailyLimit, BigDecimal perTxLimit) {}
+
+    public CustomerLimits getCustomerLimits(Long customerId) {
+        BigDecimal daily = new BigDecimal("50000.0000");
+        BigDecimal perTx = new BigDecimal("25000.0000");
+        if (customerId == null) return new CustomerLimits(daily, perTx);
+        try {
+            String sql = "SELECT daily_transfer_limit, per_tx_limit FROM dbo.CUSTOMER WHERE customer_id = ?";
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, customerId);
+            if (!rows.isEmpty()) {
+                Object d = getValue(rows.get(0), "daily_transfer_limit");
+                Object p = getValue(rows.get(0), "per_tx_limit");
+                if (d != null) daily = new BigDecimal(d.toString());
+                if (p != null) perTx = new BigDecimal(p.toString());
+            }
+        } catch (Exception ex) {
+            log.warn("[ledger-service] Could not fetch limits for customerId={}, using defaults: {}", customerId, ex.getMessage());
+        }
+        return new CustomerLimits(daily, perTx);
+    }
+
+    public BigDecimal getTodayCumulativeTransferAmount(Long customerId) {
+        if (customerId == null) return BigDecimal.ZERO;
+        try {
+            String sql = """
+                SELECT COALESCE(SUM(amount), 0)
+                FROM dbo.REMITTANCE
+                WHERE caller_customer_id = ?
+                  AND created_at >= CAST(CAST(SWITCHOFFSET(GETUTCDATE(), '+08:00') AS DATE) AS DATETIME2)
+                  AND status IN ('Posted', 'POSTED', 'Reserved', 'Authorized', 'Processing', 'PENDING_CORE', 'T24_POSTED')
+            """;
+            BigDecimal sum = jdbcTemplate.queryForObject(sql, BigDecimal.class, customerId);
+            return sum != null ? sum : BigDecimal.ZERO;
+        } catch (Exception ex) {
+            log.warn("[ledger-service] Failed to query cumulative transfer amount: {}", ex.getMessage());
+            return BigDecimal.ZERO;
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Remittance recordFailedRemittance(
+            RemittanceRequest request,
+            String referenceNo,
+            String idempotencyKey,
+            Long callerCustomerId,
+            String internalStep,
+            String failureReason,
+            RiskResult risk,
+            String serviceName) {
+
+        Long srcId = null;
+        Long tgtId = null;
+        try {
+            srcId = resolveAccount(request.getSourceAccountId()).id();
+        } catch (Exception ignored) {}
+        try {
+            tgtId = resolveAccount(request.getTargetAccountId()).id();
+        } catch (Exception ignored) {}
+
+        final Long resolvedSrcId = srcId;
+        final Long resolvedTgtId = tgtId;
+        Remittance remittance = remittanceRepository.findByReferenceNo(referenceNo).orElseGet(() -> {
+            Remittance r = new Remittance();
+            r.setReferenceNo(referenceNo);
+            r.setCallerCustomerId(callerCustomerId != null ? callerCustomerId : 0L);
+            r.setIdempotencyKey(idempotencyKey);
+            r.setSourceAccountId(resolvedSrcId != null ? resolvedSrcId : 0L);
+            r.setTargetAccountId(resolvedTgtId != null ? resolvedTgtId : 0L);
+            r.setAmount(request.getAmount() != null ? request.getAmount() : BigDecimal.ZERO);
+            r.setCurrency(request.getCurrency() != null ? request.getCurrency() : "PHP");
+            r.setTransactionType(request.getTransactionType() != null ? request.getTransactionType() : RemittanceRequest.TYPE_TRANSFER);
+            return r;
+        });
+
+        remittance.setStatus(Remittance.STATUS_FAILED);
+        remittance.setInternalStatus(internalStep);
+        remittance.setCurrentService(serviceName != null ? serviceName : "transaction-service");
+        remittance.setReason(failureReason);
+        if (risk != null) {
+            remittance.setRiskScore(risk.score());
+            remittance.setRiskDecision(risk.decision());
+        }
         return remittanceRepository.save(remittance);
     }
 
@@ -146,22 +233,25 @@ public class RemittanceLedgerService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordRejection(Remittance remittance, String reason, RiskResult risk) {
-        remittance.setStatus("REJECTED");
+        remittance.setStatus(Remittance.STATUS_FAILED);
         remittance.setReason(reason);
+        remittance.setCurrentService("transaction-service");
         if (risk != null) {
             remittance.setRiskScore(risk.score());
             remittance.setRiskDecision(risk.decision());
         }
         remittanceRepository.save(remittance);
-        log.info("[ledger-service] Remittance ref={} marked REJECTED: {}", remittance.getReferenceNo(), reason);
+        log.info("[ledger-service] Remittance ref={} marked FAILED: {}", remittance.getReferenceNo(), reason);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordT24Posted(Remittance remittance, String ftReference) {
-        remittance.setStatus("T24_POSTED");
+        remittance.setStatus(Remittance.STATUS_PROCESSING);
+        remittance.setInternalStatus(Remittance.STEP_POSTED);
+        remittance.setCurrentService("t24-adapter");
         remittance.setFtReference(ftReference);
         remittanceRepository.save(remittance);
-        log.info("[ledger-service] Remittance ref={} state updated to T24_POSTED with ftRef={}",
+        log.info("[ledger-service] Remittance ref={} state updated to Processing (T24_POSTED) with ftRef={}",
                 remittance.getReferenceNo(), ftReference);
     }
 
@@ -171,7 +261,9 @@ public class RemittanceLedgerService {
             String releaseSql = "UPDATE dbo.ACCOUNT SET held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END WHERE account_id = ?";
             jdbcTemplate.update(releaseSql, amount, amount, sourceAccountId);
         }
-        remittance.setStatus("REJECTED");
+        remittance.setStatus(Remittance.STATUS_FAILED);
+        remittance.setInternalStatus(Remittance.STEP_POSTED);
+        remittance.setCurrentService("t24-adapter");
         remittance.setReason(reason);
         remittanceRepository.save(remittance);
         log.info("[ledger-service] Held funds released for sourceAcc={} ref={}", sourceAccountId, remittance.getReferenceNo());
@@ -240,7 +332,9 @@ public class RemittanceLedgerService {
         outboxEventRepository.save(event);
 
         // 4. Update REMITTANCE status to POSTED
-        remittance.setStatus("POSTED");
+        remittance.setStatus(Remittance.STATUS_POSTED);
+        remittance.setInternalStatus(Remittance.STEP_LEDGER_UPDATE);
+        remittance.setCurrentService("transaction-service");
         remittance.setFtReference(ftReference);
         remittanceRepository.save(remittance);
 

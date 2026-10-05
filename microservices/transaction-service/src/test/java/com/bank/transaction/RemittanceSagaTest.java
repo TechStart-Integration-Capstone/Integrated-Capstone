@@ -348,4 +348,111 @@ class RemittanceSagaTest {
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.CONFLICT);
     }
+
+    @Test
+    @DisplayName("Exceeding per-transaction limit throws 422 and records LIMIT_CHECK failure")
+    void perTransactionLimitExceeded_throws422() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("30000.00")); // exceeds default 25,000.00
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("100000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        assertThatThrownBy(() -> orchestratorService.processRemittance(request, "limit-key-1", "corr-1", 1L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("exceeds per-transaction limit")
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+
+        verify(remittanceRepository, atLeastOnce()).save(argThat(r ->
+                Remittance.STATUS_FAILED.equals(r.getStatus()) &&
+                Remittance.STEP_LIMIT_CHECK.equals(r.getInternalStatus())
+        ));
+    }
+
+    @Test
+    @DisplayName("Exceeding daily cumulative limit throws 422 and records LIMIT_CHECK failure")
+    void dailyLimitExceeded_throws422() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("20000.00"));
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("100000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        // Cumulative today is already 40,000; + 20,000 exceeds 50,000 daily limit
+        when(jdbcTemplate.queryForObject(anyString(), eq(BigDecimal.class), eq(1L)))
+                .thenReturn(new BigDecimal("40000.00"));
+
+        assertThatThrownBy(() -> orchestratorService.processRemittance(request, "daily-limit-key", "corr-1", 1L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Daily transfer limit")
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+
+        verify(remittanceRepository, atLeastOnce()).save(argThat(r ->
+                Remittance.STATUS_FAILED.equals(r.getStatus()) &&
+                Remittance.STEP_LIMIT_CHECK.equals(r.getInternalStatus())
+        ));
+    }
+
+    @Test
+    @DisplayName("Insufficient funds check throws 422 and records FUNDS_CHECK failure")
+    void insufficientFunds_throws422() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("5000.00"));
+
+        // Account only has 1,000 balance
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        assertThatThrownBy(() -> orchestratorService.processRemittance(request, "funds-key", "corr-1", 1L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Insufficient available funds")
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+
+        verify(remittanceRepository, atLeastOnce()).save(argThat(r ->
+                Remittance.STATUS_FAILED.equals(r.getStatus()) &&
+                Remittance.STEP_FUNDS_CHECK.equals(r.getInternalStatus())
+        ));
+    }
 }
