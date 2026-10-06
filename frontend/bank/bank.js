@@ -155,7 +155,65 @@ function overview() {
         <div class="flow-row"><span class="circle-icon">${icon('down')}</span><div><small>Money in</small><strong>${balance(incoming)}</strong></div></div>
         <div class="flow-row"><span class="circle-icon">${icon('up')}</span><div><small>Money out</small><strong>${balance(outgoing)}</strong></div></div><p>Based on your latest 200 transactions.</p></section></div>
       <section aria-labelledby="accounts-title"><div class="section-heading"><h2 id="accounts-title">Your accounts <small>${accounts.length} in one place</small></h2><button class="btn btn-subtle" data-action="navigate" data-page="accounts">Manage your view ${icon('arrow')}</button></div><div class="accounts-grid">${accounts.slice(0,3).map(accountCard).join('') || empty('Your accounts will appear here.','No accounts are linked to this profile yet.','wallet')}</div></section>
+      <div class="insights-grid">${spendingPattern()}${beneficiaries()}</div>
       <section class="activity-panel" aria-labelledby="recent-title"><div class="activity-toolbar"><h2 id="recent-title">Recent activity</h2><button class="btn btn-subtle" data-action="navigate" data-page="activity">View all transactions ${icon('arrow')}</button></div>${transactionTable(state.activity.slice(0,5))}</section>`;
+}
+
+// Money out that leaves the customer: moving money between their own accounts is not spending.
+const isSpending = tx => isSuccess(tx) && tx.operation === 'DEBIT'
+  && !(['TRANSFER_OUT','TRANSFER'].includes(tx.type) && tx.counterpartyName && tx.counterpartyName === state.profile.fullName);
+const spendingCategory = tx => tx.type?.startsWith('EXT_') || ['INSTAPAY','PESONET'].includes(tx.type) ? 'InstaPay & PESONet'
+  : ['TRANSFER_OUT','TRANSFER','P2P_REMITTANCE'].includes(tx.type) ? 'Transfers to others'
+  : tx.type === 'LOAN_REPAYMENT' ? 'Loan payments' : tx.type === 'WITHDRAWAL' ? 'Withdrawals' : 'Payments';
+
+function spendingPattern() {
+  const now = new Date();
+  const months = Array.from({length:6}, (_, i) => new Date(now.getFullYear(), now.getMonth() - 5 + i, 1));
+  const key = d => `${d.getFullYear()}-${d.getMonth()}`;
+  const totals = new Map(months.map(m => [key(m), 0]));
+  const categories = new Map();
+  for (const tx of state.activity.filter(isSpending)) {
+    const date = txDate(tx), k = key(date);
+    if (totals.has(k)) totals.set(k, totals.get(k) + Number(tx.amount));
+    if (k === key(now)) categories.set(spendingCategory(tx), (categories.get(spendingCategory(tx)) || 0) + Number(tx.amount));
+  }
+  const values = months.map(m => totals.get(key(m)));
+  const peak = Math.max(...values, 1);
+  const thisMonth = values[5], lastMonth = values[4];
+  const change = lastMonth > 0 ? Math.round((thisMonth - lastMonth) / lastMonth * 100) : null;
+  const average = values.slice(0,5).reduce((a,b) => a + b, 0) / 5;
+  const monthTotal = [...categories.values()].reduce((a,b) => a + b, 0);
+  const bars = months.map((m, i) => `<div class="spend-bar${i === 5 ? ' current' : ''}"><span class="spend-bar-track"><span class="spend-bar-fill" style="height:${Math.max(values[i] / peak * 100, values[i] > 0 ? 4 : 0).toFixed(1)}%"></span></span><small>${escapeHtml(m.toLocaleDateString('en-PH',{month:'short'}))}</small><span class="sr-only">${escapeHtml(money(values[i]))}</span></div>`).join('');
+  const breakdown = [...categories.entries()].sort((a,b) => b[1] - a[1]).map(([name, amount]) => `<li><span>${escapeHtml(name)}</span><span class="spend-share"><span style="width:${(amount / monthTotal * 100).toFixed(1)}%"></span></span><strong>${balance(amount)}</strong></li>`).join('');
+  return `<section class="insight-card" aria-labelledby="spending-title"><div class="section-heading"><h2 id="spending-title">Spending pattern <small>Last 6 months</small></h2></div>
+    <div class="spend-summary"><div><small>Spent this month</small><strong>${balance(thisMonth)}</strong></div>
+      <div><small>vs last month</small><strong class="${change == null ? '' : change > 0 ? 'spend-up' : 'spend-down'}">${change == null ? '—' : `${change > 0 ? '▲' : change < 0 ? '▼' : ''} ${Math.abs(change)}%`}</strong></div>
+      <div><small>5-month average</small><strong>${balance(average)}</strong></div></div>
+    <div class="spend-chart" role="img" aria-label="Money spent per month: ${escapeHtml(months.map((m, i) => `${m.toLocaleDateString('en-PH',{month:'long'})} ${money(values[i])}`).join(', '))}">${bars}</div>
+    ${breakdown ? `<h3 class="spend-subtitle">Where it went this month</h3><ul class="spend-breakdown">${breakdown}</ul>` : '<p class="muted spend-note">No spending yet this month.</p>'}
+    <p class="spend-note">Transfers between your own accounts aren’t counted. Based on your latest 200 transactions.</p></section>`;
+}
+
+function beneficiaries() {
+  const directory = state.recipients || {favorites:[],recent:[]};
+  const sent = new Map();
+  for (const tx of state.activity) {
+    if (!isSuccess(tx) || tx.operation !== 'DEBIT' || !tx.counterpartyAccountNumber) continue;
+    const entry = sent.get(tx.counterpartyAccountNumber) || {count:0, total:0, last:null};
+    entry.count++; entry.total += Number(tx.amount);
+    if (!entry.last || txDate(tx) > entry.last) entry.last = txDate(tx);
+    sent.set(tx.counterpartyAccountNumber, entry);
+  }
+  const favoriteNumbers = new Set(directory.favorites.map(r => r.accountNumber));
+  const row = recipient => {
+    const stats = sent.get(recipient.accountNumber);
+    return `<li class="beneficiary"><span class="avatar">${escapeHtml(recipient.fullName.slice(0,1))}</span><span class="beneficiary-name"><strong>${escapeHtml(recipient.fullName)}${recipient.favorite ? ` <span class="beneficiary-star" aria-label="Favorite">${icon('star-filled')}</span>` : ''}</strong><small>${escapeHtml(maskedNumber(recipient.accountNumber))}${stats ? ` · ${stats.count} ${stats.count === 1 ? 'transfer' : 'transfers'} · ${balance(stats.total)} sent` : ''}</small></span><button class="btn btn-secondary" type="button" data-action="send-to-recipient" data-number="${escapeHtml(recipient.accountNumber)}" aria-label="Send money to ${escapeHtml(recipient.fullName)}">Send</button></li>`;
+  };
+  const recent = directory.recent.filter(r => !favoriteNumbers.has(r.accountNumber)).slice(0, 4);
+  const body = directory.error ? `<p class="form-error">${escapeHtml(directory.error)} Use Refresh to try again.</p>`
+    : `<h3 class="spend-subtitle">Favorites</h3>${directory.favorites.length ? `<ul class="beneficiary-list">${directory.favorites.map(row).join('')}</ul>` : '<p class="muted spend-note">Tap the star when you send money to save someone here.</p>'}
+       <h3 class="spend-subtitle">Recently paid</h3>${recent.length ? `<ul class="beneficiary-list">${recent.map(row).join('')}</ul>` : '<p class="muted spend-note">People you send money to will appear here.</p>'}`;
+  return `<section class="insight-card" aria-labelledby="beneficiaries-title"><div class="section-heading"><h2 id="beneficiaries-title">Your people <small>${directory.favorites.length} ${directory.favorites.length === 1 ? 'favorite' : 'favorites'}</small></h2><button class="btn btn-subtle" data-action="navigate" data-page="transfer">Transfer money ${icon('arrow')}</button></div>${body}</section>`;
 }
 
 function accountCard(account) {
@@ -323,7 +381,17 @@ document.addEventListener('click', async event => {
     case 'transfer-mode': state.transfer.mode = button.dataset.mode; state.transfer.error = ''; renderPage(); if (state.transfer.mode === 'other' && state.transfer.number) await lookupRecipient(); break;
     case 'confirm-transfer': await sendTransfer(); break;
     case 'retry-transfer': await sendTransfer(); break;
+<<<<<<< Updated upstream
     case 'new-transfer': state.transfer = null; state.page = 'transfer'; renderPage(); break;
+=======
+    case 'cancel-transfer-now': await cancelActiveTransfer(button.dataset.ref); break;
+    case 'new-transfer': if (cancelCountdownInterval) clearInterval(cancelCountdownInterval); state.transfer = null; state.page = 'transfer'; renderPage(); break;
+    case 'send-to-recipient':
+      if (state.transfer?.cancellation) { state.page = 'transfer'; renderPage(); break; }
+      state.transfer = null; state.page = 'transfer'; renderPage(); // initialises the transfer form
+      Object.assign(state.transfer, {mode:'other', number:button.dataset.number, recipient:null, error:''});
+      renderPage(); document.querySelector('#main').focus({preventScroll:true}); window.scrollTo(0,0); await lookupRecipient(); break;
+>>>>>>> Stashed changes
     case 'choose-recipient': state.transfer.number = button.dataset.number; state.transfer.recipient = null; renderPage(); await lookupRecipient(); break;
     case 'favorite-recipient': await toggleFavorite(button.dataset.number,button.dataset.saved === 'true',button); break;
     case 'save-receipt': saveReceipt(state.transfer?.receipt); break;
