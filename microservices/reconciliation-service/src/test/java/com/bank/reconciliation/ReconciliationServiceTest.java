@@ -46,17 +46,12 @@ class ReconciliationServiceTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private TransactionRecord oracleTx(long id, String status, BigDecimal amount) {
-        TransactionRecord tx = new TransactionRecord();
-        sf(tx,"transactionId",id); sf(tx,"status",status); sf(tx,"amount",amount);
-        sf(tx,"referenceNo","REF-"+id); return tx;
+        return new TransactionRecord(id, status, amount, "REF-" + id);
     }
 
     private LedgerMutationAudit pgAudit(long txId, BigDecimal amount) {
-        LedgerMutationAudit a = new LedgerMutationAudit();
-        sf(a,"transactionId",txId); sf(a,"amount",amount); return a;
+        return new LedgerMutationAudit(txId, amount);
     }
-
-    private void sf(Object o,String n,Object v){try{var x=o.getClass().getDeclaredField(n);x.setAccessible(true);x.set(o,v);}catch(Exception e){throw new RuntimeException(e);}}
 
     // ── MATCHED: Oracle SUCCESS + Postgres amount matches ────────────────────
     @Test @DisplayName("reconcile: Oracle SUCCESS + matching Postgres audit = MATCHED")
