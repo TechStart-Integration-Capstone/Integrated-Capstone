@@ -161,72 +161,105 @@ Make sure these are installed before you start:
 
 The full stack runs entirely in Docker. Every microservice must be compiled into a JAR first — Docker just copies the built artifact into the image. There is no pre-built registry; you build locally.
 
+> [!NOTE]
+> **OpenTelemetry Java Agent (`opentelemetry-javaagent.jar`):**
+> Each Java microservice Dockerfile copies `opentelemetry-javaagent.jar` into the container image. Ensure a copy exists in each `microservices/<service>` directory (and `microservices/`).
+
 ### Step 1 — Build all microservice JARs
 
-Run from the workspace root (`FSE-Capstone/` folder). Each service has its own `pom.xml`:
+Run from the workspace root folder. Choose one of the following methods:
 
+**Option A (Recommended — dedicated script):**
 ```powershell
-cd microservices\api-gateway
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\auth-service
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\account-service
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\transaction-service
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\notification-service
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\audit-service
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\reconciliation-service
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\outbox-publisher
-mvn clean package -DskipTests
-cd ..\..
-cd microservices\analytics-service
-mvn clean package -DskipTests
-cd ..\..```
+.\scripts\build-all.ps1
+```
+
+**Option B (Single-line PowerShell command):**
+```powershell
+$services = @("api-gateway", "auth-service", "account-service", "transaction-service", "notification-service", "audit-service", "reconciliation-service", "outbox-publisher", "analytics-service", "t24-adapter"); foreach ($s in $services) { Write-Host "===> Building $s..." -ForegroundColor Cyan; mvn -f "microservices/$s/pom.xml" clean package -DskipTests }
+```
+
+**Option C (Manual per-service build):**
+```powershell
+mvn -f microservices/api-gateway/pom.xml clean package -DskipTests
+mvn -f microservices/auth-service/pom.xml clean package -DskipTests
+mvn -f microservices/account-service/pom.xml clean package -DskipTests
+mvn -f microservices/transaction-service/pom.xml clean package -DskipTests
+mvn -f microservices/notification-service/pom.xml clean package -DskipTests
+mvn -f microservices/audit-service/pom.xml clean package -DskipTests
+mvn -f microservices/reconciliation-service/pom.xml clean package -DskipTests
+mvn -f microservices/outbox-publisher/pom.xml clean package -DskipTests
+mvn -f microservices/analytics-service/pom.xml clean package -DskipTests
+mvn -f microservices/t24-adapter/pom.xml clean package -DskipTests
+```
 
 ### Step 2 — Start the full stack
 
 ```powershell
 cd docker
-docker compose up -d
+docker compose up -d --build
 ```
 
-All 19 containers start in the correct dependency order. Oracle XE takes the longest (~60–90 seconds) to pass its health check. Other services that depend on it wait automatically via `depends_on` + `condition: service_healthy`.
+All containers start in the correct dependency order. Azure SQL and Kafka take the longest (~30–60 seconds) to pass their health checks. Other services that depend on them wait automatically via `depends_on` + `condition: service_healthy`.
 
-### Step 3 — Verify everything is running
+### Step 3 — Database Initialization & Seeding
+
+> [!IMPORTANT]
+> **Does `docker compose up` automatically seed the database?**
+> - **PostgreSQL (`postgres-immutable-audit`):** **YES** — the audit schema runs automatically from `/docker-entrypoint-initdb.d/01_schema.sql` on first start.
+> - **Azure SQL (`azure-sql-master` / Cloud):** **NO** — Microsoft SQL Server does not execute entrypoint init scripts automatically, and JPA `ddl-auto` is set to `none`. You must run the schema and seed scripts manually.
+
+#### If using Local Docker Azure SQL:
+Once the `azure-sql-master` container is healthy, run these two commands from the root repository:
+
+```powershell
+# 1. Create tables and schema
+docker exec -i azure-sql-master /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -d master -i /docker-entrypoint-initdb.d/01_schema.sql
+
+# 2. Seed demo customers and opening balances
+Get-Content .\scripts\seed_demo_azure_sql.sql | docker exec -i azure-sql-master /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -d master
+```
+
+#### If using Cloud-Hosted Azure SQL:
+Connect to your cloud database using **Azure Portal Query Editor**, **Azure Data Studio**, or **SSMS**, and execute:
+1. `microservices/transaction-service/src/main/resources/schema-azuresql.sql` (Creates all tables and indexes)
+2. `scripts/seed_demo_azure_sql.sql` (Seeds demo customers and accounts)
+
+### Step 4 — Connecting to Cloud-Hosted Azure SQL (Optional)
+
+If your Azure SQL database is hosted in the cloud:
+1. **Azure Firewall:** Add your client IP under Azure Portal > SQL Server > Networking.
+2. **Verify Connectivity:**
+   ```powershell
+   .\scripts\verify_azure_sql_connection.ps1 -JdbcUrl "jdbc:sqlserver://<server>.database.windows.net:1433;databaseName=<db>;user=<user>;password=<password>;encrypt=true;trustServerCertificate=false;"
+   ```
+3. **Configure Docker Services:** In `docker/docker-compose.yml`, update `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` (and `ORACLE_DATASOURCE_*` for `reconciliation-service`) to point to your cloud instance, and remove or comment out `depends_on: azure-sql: condition: service_healthy`.
+
+### Step 5 — Verify everything is running
 
 ```powershell
 docker compose ps
 ```
 
-All containers should show `running` status. In Docker Desktop, all should have a green dot. The two most likely to need extra time are `oracle-xe` and `kafka`.
+All containers should show `running` or `healthy` status.
 
 Check logs for any specific container:
-
 ```powershell
 docker logs <container-name> --tail 50
 ```
 
-### Step 4 — Open the app
+### Step 6 — Open the app
 
-Go to **http://localhost:3001** in your browser.
+- **PayPink Personal Banking Web UI:** **http://localhost:3001/bank/**
+- **Admin & Simulation Portal:** **http://localhost:3001/**
 
-Default demo credentials (auto-seeded on first startup by `DataInitializer`):
+Default demo credentials (password is `password123` for all):
 
-| Username | Password |
-|---|---|
-| `lviernes` | `password123` |
-| `arosales`| `password123` |
+| Username | Name | Sample Account | Balance |
+|---|---|---|---|
+| `lviernes` | Levi Viernes | `001181233469` (Savings) | PHP 125,450.00 |
+| `arosales` | Aly Rosales | `001133218709` (Savings) | PHP 84,320.50 |
+| `glim` | Gill Lim | `001428928483` (Time Deposit) | PHP 350,000.00 |
 
 To get a JWT token via the API:
 
@@ -235,7 +268,7 @@ POST http://localhost:8080/api/v1/auth/login
 Content-Type: application/json
 
 {
-  "username": "alice",
+  "username": "lviernes",
   "password": "password123"
 }
 ```

@@ -41,12 +41,18 @@ public class AnalyticsKafkaConsumer {
     }
 
     @KafkaListener(
-            topics   = "ledger.transaction.events",
+            topics   = {"remittance.events", "ledger.transaction.events"},
             groupId  = "analytics-service-group"
     )
     public void consume(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);
+
+            // loan.* events (Phase 6) are not ledger mutations — don't count them as transactions.
+            if (node.path("eventType").asText("").startsWith("loan.")) {
+                log.debug("[analytics-service] Ignoring {} event", node.get("eventType").asText());
+                return;
+            }
 
             AnalyticsEvent event = new AnalyticsEvent();
             event.setTransactionId(nodeAsLong(node,   "transactionId"));

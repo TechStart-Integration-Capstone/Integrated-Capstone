@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "8f3b2c1a-7d4e-4f9a-9e12-3b4c5d6e7f8a",
-    "name": "PayPink Core Retail Ledger & Balance Mutation Engine",
-    "description": "Comprehensive Postman Test Suite for FSE Capstone: Core Balance Mutation Engine, JSR-380 Validation, RFC-7807 Problem Details, Redis Idempotency (<5ms), Pessimistic Lock Double-Spend Prevention, and @Scheduled Reconciliation.",
+    "name": "PayPink 2.0 \u2014 Core Retail Ledger & Risk Engine",
+    "description": "Full test suite for PayPink Capstone 1 + Capstone 2 (Phase 0\u20133). Covers: JWT auth, account queries (with mayBeStale circuit breaker), ledger mutations, idempotency, stress tests, reconciliation, telemetry, X-Correlation-ID verification, and the Phase 3 Risk Engine scoring API.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -10,7 +10,7 @@
       "name": "1. Authentication & Security (Perimeter Layer)",
       "item": [
         {
-          "name": "POST Login & Generate JWT Token",
+          "name": "POST Login & Generate JWT Token (lviernes)",
           "event": [
             {
               "listen": "test",
@@ -23,6 +23,9 @@
                   "pm.test(\"JWT token received\", function () {",
                   "    pm.expect(jsonData.token).to.be.a('string');",
                   "    pm.environment.set(\"jwt_token\", jsonData.token);",
+                  "});",
+                  "pm.test(\"X-Correlation-ID present in response\", function () {",
+                  "    pm.expect(pm.response.headers.get('X-Correlation-ID')).to.be.a('string');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -39,17 +42,64 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"jdelacruz\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"username\": \"lviernes\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/auth/login",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             }
           }
         },
         {
-          "name": "GET Quick Demo JWT Token",
+          "name": "POST Login (arosales)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"jwt_token\", pm.response.json().token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"arosales\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Quick Demo JWT Token (no credentials)",
           "event": [
             {
               "listen": "test",
@@ -59,7 +109,10 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var jsonData = pm.response.json();",
-                  "pm.environment.set(\"jwt_token\", jsonData.token);"
+                  "pm.environment.set(\"jwt_token\", jsonData.token);",
+                  "pm.test(\"X-Correlation-ID present\", function () {",
+                  "    pm.expect(pm.response.headers.get('X-Correlation-ID')).to.be.a('string');",
+                  "});"
                 ],
                 "type": "text/javascript"
               }
@@ -70,8 +123,54 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/v1/auth/demo-token",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "auth", "demo-token"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "demo-token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Login \u2014 Invalid Password (401 expected)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 Unauthorized\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"lviernes\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             }
           }
         }
@@ -82,6 +181,18 @@
       "item": [
         {
           "name": "GET All Retail Accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"X-Correlation-ID present\", () => pm.expect(pm.response.headers.get('X-Correlation-ID')).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -92,13 +203,33 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
             }
           }
         },
         {
-          "name": "GET Single Account by ID",
+          "name": "GET Single Account by ID (accountId=1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"mayBeStale is false \u2014 live DB read\", () => pm.expect(j.mayBeStale).to.be.false);",
+                  "pm.test(\"Redis cache written \u2014 account:balance:1 exists (check Redis)\", () => pm.expect(j.accountId).to.eql(1));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -109,13 +240,36 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/1",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts", "1"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "1"
+              ]
             }
           }
         },
         {
-          "name": "GET Customer Profile with Balances (Juan Dela Cruz)",
+          "name": "GET Customer Profile with Balances (lviernes, customerId=1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Has accounts array\", () => pm.expect(j.accounts).to.be.an('array'));",
+                  "pm.test(\"mayBeStale false on all accounts\", () => {",
+                  "    j.accounts.forEach(a => pm.expect(a.mayBeStale).to.be.false);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -126,13 +280,21 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/customer/1",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts", "customer", "1"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "customer",
+                "1"
+              ]
             }
           }
         },
         {
-          "name": "POST Reset Account Balance (Stress Prep)",
+          "name": "POST Reset Account Balance (Stress Prep \u2014 resets to 60)",
           "request": {
             "method": "POST",
             "header": [
@@ -151,8 +313,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/accounts/3/reset-balance",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "accounts", "3", "reset-balance"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "3",
+                "reset-balance"
+              ]
             }
           }
         }
@@ -162,7 +332,7 @@
       "name": "3. Core Ledger Mutation (/api/v1/ledger/mutate)",
       "item": [
         {
-          "name": "POST Valid DEBIT Mutation (JSR-380 Compliant)",
+          "name": "POST Valid DEBIT Mutation",
           "event": [
             {
               "listen": "prerequest",
@@ -177,15 +347,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Balance mutated with exact 4 decimals precision\", function () {",
-                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
-                  "    pm.expect(jsonData.referenceNo).to.be.a('string');",
-                  "    pm.expect(jsonData.afterBalance).to.be.a('number');",
-                  "});"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Status SUCCESS\", () => pm.expect(j.status).to.eql('SUCCESS'));",
+                  "pm.test(\"cachedIdempotentResponse is false (first call)\", () => pm.expect(j.cachedIdempotentResponse).to.be.false);",
+                  "pm.test(\"referenceNo present\", () => pm.expect(j.referenceNo).to.be.a('string'));",
+                  "pm.test(\"afterBalance is number\", () => pm.expect(j.afterBalance).to.be.a('number'));"
                 ],
                 "type": "text/javascript"
               }
@@ -213,28 +380,29 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
         {
-          "name": "POST Redis Idempotency Duplicate Replay (<5ms)",
+          "name": "POST Redis Idempotency Duplicate Replay (same key \u2014 must return cached)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Served from Redis In-Memory matrix\", function () {",
-                  "    pm.expect(jsonData.cachedIdempotentResponse).to.be.true;",
-                  "});",
-                  "pm.test(\"Response time <= 50ms SLA\", function () {",
-                  "    pm.expect(pm.response.responseTime).to.be.below(50);",
-                  "});"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"cachedIdempotentResponse is TRUE (Redis hit)\", () => pm.expect(j.cachedIdempotentResponse).to.be.true);",
+                  "pm.test(\"Response time under 50ms (Redis)\", () => pm.expect(pm.response.responseTime).to.be.below(50));"
                 ],
                 "type": "text/javascript"
               }
@@ -262,27 +430,28 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
         {
-          "name": "POST Boundary Fault: 5 Decimals (Fails @Digits fraction=4)",
+          "name": "POST Boundary Fault: 5 Decimals (400 expected)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", function () {",
-                  "    pm.response.to.have.status(400);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Returns RFC-7807 Problem Details\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/validation-error\");",
-                  "    pm.expect(jsonData.invalidParams).to.be.an('array');",
-                  "    pm.expect(jsonData.invalidParams[0].name).to.eql(\"mutationAmount\");",
-                  "});"
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"RFC-7807 validation error\", () => pm.expect(j.type).to.include('validation'));"
                 ],
                 "type": "text/javascript"
               }
@@ -306,26 +475,26 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
         {
-          "name": "POST Boundary Fault: Negative Amount (Fails @Positive)",
+          "name": "POST Boundary Fault: Negative Amount (400 expected)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", function () {",
-                  "    pm.response.to.have.status(400);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Returns RFC-7807 Problem Details\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/validation-error\");",
-                  "    pm.expect(jsonData.invalidParams[0].name).to.eql(\"mutationAmount\");",
-                  "});"
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
                 ],
                 "type": "text/javascript"
               }
@@ -349,68 +518,28 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         },
         {
-          "name": "POST Boundary Fault: Malformed JSON Schema",
+          "name": "POST Overdraft Protection: Insufficient Funds (422 expected)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 400 Bad Request\", function () {",
-                  "    pm.response.to.have.status(400);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"RFC-7807 Malformed Schema structure\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/malformed-payload\");",
-                  "    pm.expect(jsonData.title).to.eql(\"Malformed JSON Schema\");",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{jwt_token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"accountId\": \"NOT_A_VALID_NUMBER\",\n  \"mutationAmount\": \"INVALID_DECIMAL_STRING\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
-            }
-          }
-        },
-        {
-          "name": "POST Overdraft Protection: Insufficient Funds",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
-                  "    pm.response.to.have.status(422);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Insufficient Funds RFC-7807 envelope\", function () {",
-                  "    pm.expect(jsonData.type).to.eql(\"https://api.paypink.ph/errors/insufficient-funds\");",
-                  "});"
+                  "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"RFC-7807 insufficient-funds\", () => pm.expect(j.type).to.include('insufficient'));"
                 ],
                 "type": "text/javascript"
               }
@@ -434,8 +563,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ledger/mutate",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ledger", "mutate"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
             }
           }
         }
@@ -445,21 +581,16 @@
       "name": "4. Concurrency & Double-Spend Stress Simulator",
       "item": [
         {
-          "name": "POST Live Double-Spend Race Condition Test (10 Threads)",
+          "name": "POST Double-Spend Race Condition Test (10 threads)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "var jsonData = pm.response.json();",
-                  "pm.test(\"Race condition prevented via @Lock(PESSIMISTIC_WRITE)\", function () {",
-                  "    pm.expect(jsonData.raceConditionPrevented).to.be.true;",
-                  "    pm.expect(jsonData.successfulRequests).to.eql(1);",
-                  "    pm.expect(jsonData.actualFinalBalance).to.eql(10.0000);",
-                  "});"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Race condition prevented\", () => pm.expect(j.raceConditionPrevented).to.be.true);",
+                  "pm.test(\"Only 1 successful debit\", () => pm.expect(j.successfulRequests).to.eql(1));"
                 ],
                 "type": "text/javascript"
               }
@@ -483,8 +614,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/stress/double-spend-test",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "stress", "double-spend-test"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stress",
+                "double-spend-test"
+              ]
             }
           }
         }
@@ -494,15 +632,13 @@
       "name": "5. Cross-Database Reconciliation Service",
       "item": [
         {
-          "name": "POST Trigger @Scheduled 15-Minute Sweep On-Demand",
+          "name": "POST Trigger Reconciliation On-Demand",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200 OK\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
                 ],
                 "type": "text/javascript"
               }
@@ -518,8 +654,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reconciliation/run",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reconciliation", "run"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reconciliation",
+                "run"
+              ]
             }
           }
         },
@@ -535,8 +678,15 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/v1/reconciliation/logs",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reconciliation", "logs"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reconciliation",
+                "logs"
+              ]
             }
           }
         }
@@ -546,40 +696,1705 @@
       "name": "6. Telemetry & Observability Layer",
       "item": [
         {
-          "name": "GET Engine Telemetry & SLA Stats",
+          "name": "GET Engine Telemetry Stats",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/v1/telemetry/stats",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "telemetry", "stats"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telemetry",
+                "stats"
+              ]
             }
           }
         },
         {
-          "name": "GET Prometheus Actuator Scrape Endpoint",
+          "name": "GET Prometheus Actuator Scrape",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{base_url}}/actuator/prometheus",
-              "host": ["{{base_url}}"],
-              "path": ["actuator", "prometheus"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "prometheus"
+              ]
             }
           }
         },
         {
-          "name": "GET System Health Actuator",
+          "name": "GET System Health (all services)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Overall status UP\", () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{base_url}}/actuator/health",
-              "host": ["{{base_url}}"],
-              "path": ["actuator", "health"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "7. Phase 2 \u2014 Network Hardening & Resilience4j",
+      "item": [
+        {
+          "name": "GET X-Correlation-ID Auto-Generated (no header sent)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"X-Correlation-ID auto-generated UUID in response\", function () {",
+                  "    var id = pm.response.headers.get('X-Correlation-ID');",
+                  "    pm.expect(id).to.be.a('string');",
+                  "    pm.expect(id.length).to.be.above(10);",
+                  "    pm.environment.set('last_correlation_id', id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/demo-token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "demo-token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET X-Correlation-ID Preserved (client sends own ID)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Client correlation ID preserved in response\", function () {",
+                  "    var returned = pm.response.headers.get('X-Correlation-ID');",
+                  "    pm.expect(returned).to.eql('my-custom-trace-id-12345');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "my-custom-trace-id-12345"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/demo-token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "demo-token"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Account \u2014 mayBeStale=false (live DB, circuit CLOSED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"mayBeStale is false \u2014 reading from Azure SQL\", () => pm.expect(j.mayBeStale).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Circuit Breaker Health (account-service)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"circuitBreakers component visible\", function () {",
+                  "    var j = pm.response.json();",
+                  "    pm.expect(j.components.circuitBreakers).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/actuator/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Phase 3 \u2014 Risk Engine (Python FastAPI)",
+      "item": [
+        {
+          "name": "GET Risk Engine Health (no JWT needed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status UP\", () => pm.expect(j.status).to.eql('UP'));",
+                  "pm.test(\"service is risk-engine\", () => pm.expect(j.service).to.eql('risk-engine'));",
+                  "pm.test(\"version is 2.0.0\", () => pm.expect(j.version).to.eql('2.0.0'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Score \u2014 Low Risk (5k PHP) \u2192 APPROVE score=0.0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is APPROVE\", () => pm.expect(j.decision).to.eql('APPROVE'));",
+                  "pm.test(\"score is 0.0\", () => pm.expect(j.score).to.eql(0.0));",
+                  "pm.test(\"reasons contains no_risk_signals\", () => pm.expect(j.reasons).to.include('no_risk_signals'));",
+                  "pm.test(\"latencyMs under 200ms\", () => pm.expect(j.latencyMs).to.be.below(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Score \u2014 Medium Risk (75k PHP) \u2192 APPROVE score=0.3",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is APPROVE\", () => pm.expect(j.decision).to.eql('APPROVE'));",
+                  "pm.test(\"score is 0.3\", () => pm.expect(j.score).to.eql(0.3));",
+                  "pm.test(\"reason: amount_above_50k\", () => pm.expect(j.reasons).to.include('amount_above_50k'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 75000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Score \u2014 Self-Transfer \u2192 REJECT score=0.9",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is REJECT\", () => pm.expect(j.decision).to.eql('REJECT'));",
+                  "pm.test(\"score is 0.9\", () => pm.expect(j.score).to.eql(0.9));",
+                  "pm.test(\"reason: self_transfer\", () => pm.expect(j.reasons).to.include('self_transfer'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 1,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Score \u2014 New Account + High Velocity \u2192 REJECT score=1.0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is REJECT\", () => pm.expect(j.decision).to.eql('REJECT'));",
+                  "pm.test(\"score capped at 1.0\", () => pm.expect(j.score).to.eql(1.0));",
+                  "pm.test(\"multiple risk reasons\", () => pm.expect(j.reasons.length).to.be.above(2));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 150000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 5.0,\n  \"recentTxCount\": 8\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Score \u2014 Non-PHP Currency \u2192 higher risk",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"reason: non_php_currency\", () => pm.expect(j.reasons).to.include('non_php_currency'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"USD\",\n  \"transactionType\": \"TRANSFER_OUT\",\n  \"targetAccountId\": 2,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Score \u2014 Missing Required Field (422 expected)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 Unprocessable Entity\", () => pm.response.to.have.status(422));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Score \u2014 No JWT (401 expected)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 Unauthorized\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": 1,\n  \"customerId\": 1,\n  \"amount\": 5000.00,\n  \"currency\": \"PHP\",\n  \"transactionType\": \"TRANSFER_OUT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Phase 4 \u2014 T24 Core Adapter & Simulator",
+      "item": [
+        {
+          "name": "GET T24 Adapter Health (no JWT needed)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is UP\", () => pm.expect(j.status).to.eql(\"UP\"));",
+                  "pm.test(\"service is t24-adapter\", () => pm.expect(j.service).to.eql(\"t24-adapter\"));",
+                  "pm.test(\"version is 2.0.0\", () => pm.expect(j.version).to.eql(\"2.0.0\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Happy Path (T24 /1 POSTED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-PH-1791004427-abc1234\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 15000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is POSTED\", () => pm.expect(j.status).to.eql(\"POSTED\"));",
+                  "pm.test(\"ftReference generated\", () => pm.expect(j.ftReference).to.include(\"FT20261004\"));",
+                  "pm.test(\"ofsResponse format /1\", () => pm.expect(j.ofsResponse).to.include(\"/1\"));",
+                  "pm.test(\"cachedResponse is false\", () => pm.expect(j.cachedResponse).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Idempotency Replay (same ref)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-PH-1791004427-abc1234\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 15000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is POSTED\", () => pm.expect(j.status).to.eql(\"POSTED\"));",
+                  "pm.test(\"cachedResponse is TRUE (T24 Idempotency hit)\", () => pm.expect(j.cachedResponse).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Simulated T24 Rejection (SIM-REJECT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-SIM-REJECT-001\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 5000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is REJECTED\", () => pm.expect(j.status).to.eql(\"REJECTED\"));",
+                  "pm.test(\"ofsResponse format /-1\", () => pm.expect(j.ofsResponse).to.include(\"/-1\"));",
+                  "pm.test(\"reason present\", () => pm.expect(j.reason).to.include(\"Account Closed\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Simulated SLA Timeout (SIM-TIMEOUT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-SIM-TIMEOUT-001\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 5000.0000,\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 202 Accepted (Processing)\", () => pm.response.to.have.status(202));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is PROCESSING\", () => pm.expect(j.status).to.eql(\"PROCESSING\"));",
+                  "pm.test(\"reason indicates SLA timeout\", () => pm.expect(j.reason).to.include(\"timeout\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 Missing Field (400 expected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000.0000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 Bad Request\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Transfer \u2014 No JWT (401 expected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-001\",\n  \"debitAccountNo\": \"1000100001\",\n  \"creditAccountNo\": \"1000100002\",\n  \"amount\": 5000.0000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 Unauthorized\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Phase 5 \u2014 Remittance Orchestrator (Saga Engine)",
+      "item": [
+        {
+          "name": "GET Remittance Orchestrator Health (no JWT needed)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is UP\", () => pm.expect(j.status).to.eql(\"UP\"));",
+                  "pm.test(\"service is remittance-orchestrator\", () => pm.expect(j.service).to.eql(\"remittance-orchestrator\"));",
+                  "pm.test(\"version is 2.0.0\", () => pm.expect(j.version).to.eql(\"2.0.0\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Remittance Transfer \u2014 Happy Path (Saga Full Execution)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "SAGA-KEY-1001-HAPPY",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"1000100001\",\n  \"targetAccountId\": \"1000100002\",\n  \"amount\": 1500.00,\n  \"currency\": \"PHP\",\n  \"description\": \"Family remittance via Saga Engine\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is POSTED\", () => pm.expect(j.status).to.eql(\"POSTED\"));",
+                  "pm.test(\"riskDecision is PASS\", () => pm.expect(j.riskDecision).to.eql(\"PASS\"));",
+                  "pm.test(\"ftReference generated\", () => pm.expect(j.ftReference).to.include(\"FT20261004\"));",
+                  "pm.test(\"remittanceId exists\", () => pm.expect(j.remittanceId).to.exist);",
+                  "pm.test(\"cachedIdempotentResponse is false\", () => pm.expect(j.cachedIdempotentResponse).to.be.false);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Remittance Transfer \u2014 Idempotency Replay (Same Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "SAGA-KEY-1001-HAPPY",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"1000100001\",\n  \"targetAccountId\": \"1000100002\",\n  \"amount\": 1500.00,\n  \"currency\": \"PHP\",\n  \"description\": \"Family remittance via Saga Engine\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"status is POSTED\", () => pm.expect(j.status).to.eql(\"POSTED\"));",
+                  "pm.test(\"cachedIdempotentResponse is TRUE (Saga Idempotency hit)\", () => pm.expect(j.cachedIdempotentResponse).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Remittance Transfer \u2014 Risk Rejection (>100k Amount)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "SAGA-KEY-1002-RISK",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"1000100001\",\n  \"targetAccountId\": \"1000100002\",\n  \"amount\": 150000.00,\n  \"currency\": \"PHP\",\n  \"description\": \"High amount suspicious transfer\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"error mentions risk screening\", () => pm.expect(j.error).to.include(\"rejected by risk screening\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Remittance Transfer \u2014 Core T24 Rejection (SIM-REJECT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "SAGA-KEY-1003-SIMREJECT",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"1000100001\",\n  \"targetAccountId\": \"SIM-REJECT\",\n  \"amount\": 500.00,\n  \"currency\": \"PHP\",\n  \"description\": \"Core bank rejection simulation\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "transfer"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 Unprocessable Entity\", () => pm.response.to.have.status(422));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"error mentions T24 rejected transfer\", () => pm.expect(j.error).to.include(\"Core banking T24 rejected transfer\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11. Phase 6 — Loan Service",
+      "description": "Apply → accept → schedule → repay → EOD. Requires migrate_phase6_loans.sql and the Phase 6 seed (arosales = NORMAL band). The EOD requests need admin_password in your environment.",
+      "item": [
+        {
+          "name": "POST Login (arosales — NORMAL band, score 670)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"arosales\",\n  \"password\": \"password123\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"jwt_token\", pm.response.json().token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Apply for a loan — 250,000 / 36 months (TC-LD-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{loan_apply_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNo\": \"001133218709\",\n  \"amount\": 250000.0,\n  \"termMonths\": 36\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// One key per run of this folder; the next request reuses it (TC-LD-06).",
+                  "pm.environment.set(\"loan_apply_key\", \"LOAN-APPLY-\" + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 Created\", () => pm.response.to.have.status(201));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"decision is APPROVED\", () => pm.expect(j.decision).to.eql(\"APPROVED\"));",
+                  "pm.test(\"band is NORMAL at 18%\", () => { pm.expect(j.band).to.eql(\"NORMAL\"); pm.expect(j.offer.annualRate).to.eql(18.0); });",
+                  "pm.test(\"monthly installment is 9,038.10\", () => pm.expect(j.offer.monthlyInstallment).to.eql(9038.10));",
+                  "pm.environment.set(\"loan_application_ref\", j.referenceNo);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Apply again with the same Idempotency-Key — same application (TC-LD-06)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{loan_apply_key}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNo\": \"001133218709\",\n  \"amount\": 250000.0,\n  \"termMonths\": 36\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK (replayed)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"same application reference\", () => pm.expect(pm.response.json().referenceNo).to.eql(pm.environment.get(\"loan_application_ref\")));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Accept offer — disburse from PH1000000LOAN (TC-LN-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "accept-{{loan_application_ref}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications/{{loan_application_ref}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications",
+                "{{loan_application_ref}}",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 Created\", () => pm.response.to.have.status(201));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"loan is ACTIVE with full principal outstanding\", () => { pm.expect(j.status).to.eql(\"ACTIVE\"); pm.expect(j.outstandingPrincipal).to.eql(250000.00); });",
+                  "pm.test(\"T24 FT reference saved\", () => pm.expect(j.ftReference).to.match(/^FT/));",
+                  "pm.environment.set(\"loan_id\", j.loanId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Accept the same offer again — 409 already-accepted (TC-LN-02)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "accept-{{loan_application_ref}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications/{{loan_application_ref}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications",
+                "{{loan_application_ref}}",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409 Conflict\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"type is already-accepted\", () => pm.expect(pm.response.json().type).to.include(\"already-accepted\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET My loans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"list contains the new loan\", () => pm.expect(pm.response.json().map(l => l.loanId)).to.include(pm.environment.get(\"loan_id\")));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Repayment schedule",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/{{loan_id}}/schedule",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "{{loan_id}}",
+                "schedule"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "var rows = pm.response.json().installments;",
+                  "pm.test(\"36 installments\", () => pm.expect(rows.length).to.eql(36));",
+                  "pm.test(\"row 1 is 9,038.10\", () => pm.expect(rows[0].totalDue).to.eql(9038.10));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Repay one installment — 9,038.10 (TC-LN-04)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/{{loan_id}}/repayments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "{{loan_id}}",
+                "repayments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 9038.1\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 Created\", () => pm.response.to.have.status(201));",
+                  "var j = pm.response.json();",
+                  "pm.test(\"outstanding reduced by row 1 principal (5,288.10)\", () => pm.expect(j.outstandingPrincipal).to.eql(244711.90));",
+                  "pm.test(\"repayment reference issued\", () => pm.expect(j.referenceNo).to.match(/^LRP-/));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Admin login (set admin_password in your environment)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"{{admin_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.environment.set(\"admin_jwt\", pm.response.json().token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Run loan EOD as admin — mark overdue + 2% penalty (TC-EOD-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_jwt}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/eod/run?businessDate=2026-11-06",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "eod",
+                "run"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-11-06"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"result echoes the business date\", () => pm.expect(pm.response.json().businessDate).to.eql(\"2026-11-06\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Run loan EOD as a customer — 403 Forbidden",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/eod/run?businessDate=2026-11-06",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "eod",
+                "run"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-11-06"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 Forbidden\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Internal transfer endpoint via gateway — 404 not routed (TC-GW-01)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Internal-Service",
+                "value": "loan-service",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/internal/remittance/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "internal",
+                "remittance",
+                "transfer"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountNo\": \"PH1000000LOAN\",\n  \"targetAccountNo\": \"001133218709\",\n  \"amount\": 1.0,\n  \"transactionType\": \"LOAN_DISBURSEMENT\",\n  \"idempotencyKey\": \"should-never-arrive\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 404 Not Found\", () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     }

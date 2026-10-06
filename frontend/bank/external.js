@@ -94,8 +94,8 @@ function reviewExternalTransfer() {
   else if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > .00001) f.error = 'Enter a positive amount with at most two decimal places.';
   else if (amount > Number(source.currentBalance)) f.error = 'Not enough available balance for this amount.';
   else if (f.rail === 'INSTAPAY' && amount > 50000) f.error = 'InstaPay allows up to PHP 50,000 per transfer. Choose PESONet for a larger amount.';
-  if (f.error) { renderPage(); return; }
-  f.externalReview = {mock:true,reference:`PAY-${crypto.randomUUID()}`,recipientName:recipient.name,destinationAccountNumber:recipient.number,bank:recipient.bank,sourceAccountId:source.accountId,amount,currency:'PHP',rail:f.rail};
+  const refKey = typeof generateUUID === 'function' ? generateUUID() : ('PAY-' + Math.random().toString(36).slice(2) + Date.now());
+  f.externalReview = {mock:true,reference:`PAY-${refKey}`,recipientName:recipient.name,destinationAccountNumber:recipient.number,bank:recipient.bank,sourceAccountId:source.accountId,amount,currency:'PHP',rail:f.rail};
   showDialog('Review your transfer', `<p class="notice">Please check the recipient details before confirming.</p><dl class="detail-list">${detail('From',escapeHtml(maskedNumber(source.accountNumber)))}${detail('Recipient',escapeHtml(recipient.name))}${detail('Bank',escapeHtml(recipient.bank))}${detail('Account',escapeHtml(maskedNumber(recipient.number)))}${detail('Method',f.rail)}${detail('Amount',escapeHtml(money(amount)))}${detail('Processing',f.rail === 'PESONET' ? 'Pending for about 90 seconds; money deducted on completion' : 'Immediate')}</dl>`, '<button class="btn btn-secondary" data-action="close-dialog">Go back</button><button class="btn btn-primary" data-action="confirm-transfer">Confirm transfer</button>');
 }
 async function sendExternalTransfer() {

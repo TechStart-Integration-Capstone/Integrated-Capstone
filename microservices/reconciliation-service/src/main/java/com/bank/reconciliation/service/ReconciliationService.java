@@ -18,47 +18,66 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Cross-database reconciliation service.
+ *
+ * Compares Azure SQL LEDGER_TRANSACTION records against PostgreSQL LEDGER_MUTATION_AUDIT
+ * to detect and flag data drift (MATCHED vs DRIFT_DETECTED).
+ *
+ * Two triggers:
+ *  1. Real-time — Kafka listener on remittance.events / ledger.transaction.events
+ *  2. Scheduled — every 15 minutes (configurable via app.reconciliation.cron)
+ */
 @Service
 public class ReconciliationService {
 
     private static final Logger log = LoggerFactory.getLogger(ReconciliationService.class);
 
-    private final TransactionRepository transactionRepository;
+    private final TransactionRepository         transactionRepository;
     private final LedgerMutationAuditRepository auditRepository;
-    private final ReconciliationLogRepository reconLogRepository;
-    private final ObjectMapper objectMapper;
+    private final ReconciliationLogRepository   reconLogRepository;
+    private final ObjectMapper                  objectMapper;
 
     public ReconciliationService(TransactionRepository transactionRepository,
                                  LedgerMutationAuditRepository auditRepository,
                                  ReconciliationLogRepository reconLogRepository,
                                  ObjectMapper objectMapper) {
         this.transactionRepository = transactionRepository;
-        this.auditRepository = auditRepository;
-        this.reconLogRepository = reconLogRepository;
-        this.objectMapper = objectMapper;
+        this.auditRepository       = auditRepository;
+        this.reconLogRepository    = reconLogRepository;
+        this.objectMapper          = objectMapper;
     }
 
-    // Real-time reconciliation triggered by Kafka event
-    @KafkaListener(topics = "ledger.transaction.events", groupId = "reconciliation-service-group")
+    // ── Real-time reconciliation triggered by Kafka ───────────────────────────
+
+    @KafkaListener(topics = {"remittance.events", "ledger.transaction.events"},
+                   groupId = "reconciliation-service-group")
     public void onTransactionEvent(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);
+
+            // loan.* events carry no ledger leg; the transfer itself is reconciled via LEDGER_TRANSACTION.
+            if (node.path("eventType").asText("").startsWith("loan.")) return;
+
             Long transactionId = node.has("transactionId") ? node.get("transactionId").asLong() : null;
             if (transactionId != null) {
-                transactionRepository.findById(transactionId).ifPresent(tx -> saveReconLog(tx));
+                transactionRepository.findById(transactionId)
+                        .ifPresent(this::saveReconLog);
             }
         } catch (Exception e) {
             log.error("[reconciliation-service] Error processing Kafka event: {}", e.getMessage());
         }
     }
 
-    // Scheduled sweep every 15 minutes
+    // ── Scheduled sweep every 15 minutes ─────────────────────────────────────
+
     @Scheduled(cron = "${app.reconciliation.cron:0 */15 * * * *}")
     public void scheduledReconciliation() {
         log.info("[reconciliation-service] Running scheduled 15-minute reconciliation sweep...");
         List<TransactionRecord> transactions = transactionRepository.findTop50ByOrderByTransactionDateDesc();
-        transactions.forEach(tx -> saveReconLog(tx));
-        log.info("[reconciliation-service] Reconciliation sweep completed for {} transactions.", transactions.size());
+        transactions.forEach(this::saveReconLog);
+        log.info("[reconciliation-service] Reconciliation sweep completed for {} transactions.",
+                transactions.size());
     }
 
     @Transactional("postgresTransactionManager")
@@ -66,36 +85,47 @@ public class ReconciliationService {
         return saveReconLog(tx);
     }
 
-    // Internal method — called both from @Transactional wrapper and directly (safe either way)
+    // ── Core reconciliation logic ─────────────────────────────────────────────
+
     private ReconciliationLog saveReconLog(TransactionRecord tx) {
         Optional<LedgerMutationAudit> auditOpt = auditRepository.findByTransactionId(tx.getTransactionId());
-        String oracleStatus = tx.getStatus();
+
+        String azureSqlStatus = tx.getStatus();
         String postgresStatus;
         String reconStatus;
 
+        // account_id is populated from the PostgreSQL audit row when one exists;
+        // null for failed/missing transactions where no audit row was written.
+        Long accountId = null;
+
         if (auditOpt.isPresent()) {
             LedgerMutationAudit audit = auditOpt.get();
+            accountId = audit.getAccountId();   // populated from the audit row
+
             if (audit.getAmount().compareTo(tx.getAmount()) == 0) {
                 postgresStatus = "COMMITTED";
-                reconStatus = "MATCHED";
+                reconStatus    = "MATCHED";
             } else {
                 postgresStatus = "AMOUNT_MISMATCH";
-                reconStatus = "DRIFT_DETECTED";
+                reconStatus    = "DRIFT_DETECTED";
             }
         } else {
-            if ("SUCCESS".equalsIgnoreCase(oracleStatus)) {
+            if ("SUCCESS".equalsIgnoreCase(azureSqlStatus)) {
                 postgresStatus = "MISSING_AUDIT";
-                reconStatus = "DRIFT_DETECTED";
+                reconStatus    = "DRIFT_DETECTED";
             } else {
                 postgresStatus = "NOT_APPLICABLE";
-                reconStatus = "MATCHED";
+                reconStatus    = "MATCHED";
             }
         }
 
         ReconciliationLog recon = reconLogRepository.save(
-                new ReconciliationLog(tx.getTransactionId(), oracleStatus, postgresStatus, reconStatus));
-        log.info("[reconciliation-service] txId={} oracle={} postgres={} recon={}",
-                tx.getTransactionId(), oracleStatus, postgresStatus, reconStatus);
+                new ReconciliationLog(tx.getTransactionId(), accountId,
+                        azureSqlStatus, postgresStatus, reconStatus));
+
+        log.info("[reconciliation-service] txId={} azureSql={} postgres={} recon={}",
+                tx.getTransactionId(), azureSqlStatus, postgresStatus, reconStatus);
+
         return recon;
     }
 

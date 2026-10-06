@@ -48,6 +48,11 @@ scrape_configs:
     static_configs:
       - targets: ['analytics-service:8088']
 
+  - job_name: 'loan-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['loan-service:8091']
+
   - job_name: 'redis'
     static_configs:
       - targets: ['redis-exporter:9121']

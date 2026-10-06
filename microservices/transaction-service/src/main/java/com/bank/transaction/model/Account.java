@@ -13,6 +13,7 @@ public class Account {
     @Column(name = "account_type") private String accountType;
     @Column(name = "currency") private String currency;
     @Column(name = "current_balance", precision = 18, scale = 4) private BigDecimal currentBalance;
+    @Column(name = "held_balance", precision = 18, scale = 4) private BigDecimal heldBalance = BigDecimal.ZERO;
     @Column(name = "status") private String status;
     @Column(name = "created_date") private LocalDateTime createdDate;
 
@@ -23,6 +24,13 @@ public class Account {
     public String getCurrency() { return currency; }
     public BigDecimal getCurrentBalance() { return currentBalance; }
     public void setCurrentBalance(BigDecimal currentBalance) { this.currentBalance = currentBalance; }
+    public BigDecimal getHeldBalance() { return heldBalance != null ? heldBalance : BigDecimal.ZERO; }
+    public void setHeldBalance(BigDecimal heldBalance) { this.heldBalance = heldBalance; }
+    public BigDecimal getAvailableBalance() {
+        BigDecimal curr = currentBalance != null ? currentBalance : BigDecimal.ZERO;
+        BigDecimal held = heldBalance != null ? heldBalance : BigDecimal.ZERO;
+        return curr.subtract(held);
+    }
     public String getStatus() { return status; }
     public LocalDateTime getCreatedDate() { return createdDate; }
 }

@@ -5,18 +5,50 @@ spring:
   application:
     name: account-service
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:oracle:thin:@localhost:1521/XE}
-    driver-class-name: oracle.jdbc.OracleDriver
-    username: ${SPRING_DATASOURCE_USERNAME:ledger_master}
-    password: ${SPRING_DATASOURCE_PASSWORD:MasterSecretPassword123}
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
     hikari:
       maximum-pool-size: 10
       pool-name: AccountHikariPool
   jpa:
-    database-platform: org.hibernate.dialect.OracleDialect
+    database-platform: org.hibernate.dialect.SQLServerDialect
     hibernate:
       ddl-auto: none
     show-sql: false
+  # ── Redis — balance cache for circuit breaker fallback (display-only) ────
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:redis}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2000ms
+      connect-timeout: 1000ms
+
+# ── Resilience4j circuit breaker — accountDb ────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      accountDb:
+        # Open circuit after 5 failures in a 10-call sliding window
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50          # 50% failure rate opens the circuit
+        minimum-number-of-calls: 5          # Need at least 5 calls before evaluating
+        # Keep circuit open for 15 seconds before trying half-open
+        wait-duration-in-open-state: 15s
+        # Allow 3 test calls in half-open state
+        permitted-number-of-calls-in-half-open-state: 3
+        # Auto transition from open to half-open
+        automatic-transition-from-open-to-half-open-enabled: true
+        # Record these as failures
+        record-exceptions:
+          - java.lang.RuntimeException
+          - org.springframework.dao.DataAccessException
+          - com.microsoft.sqlserver.jdbc.SQLServerException
+        # Ignore not-found (EntityNotFoundException) — valid business response, not a DB failure
+        ignore-exceptions:
+          - jakarta.persistence.EntityNotFoundException
 
 management:
   endpoints:
@@ -26,3 +58,6 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    circuitbreakers:
+      enabled: true

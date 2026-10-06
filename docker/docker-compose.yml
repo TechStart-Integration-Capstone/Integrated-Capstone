@@ -2,24 +2,28 @@ services:
   # ==========================================
   # Layer 4: Datastores & In-Memory Matrix
   # ==========================================
-  oracle-xe:
-    image: gvenzl/oracle-xe:21-slim
-    container_name: oracle-xe-master
+  # ── Azure SQL (SQL Server 2022 local — replaces Oracle XE in Capstone 2) ──
+  azure-sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: azure-sql-master
     environment:
-      - ORACLE_PASSWORD=OraclePassword123
-      - APP_USER=ledger_master
-      - APP_USER_PASSWORD=MasterSecretPassword123
-    ports:
-      - "1522:1521"
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=PayPink2.0_StrongPass!
+      - MSSQL_PID=Developer
+    # No host port — internal only, connect via docker exec or azure-data-studio through docker network
     volumes:
-      - oracle_data:/opt/oracle/oradata
-      - ./../backend/src/main/resources/schema-oracle.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - azuresql_data:/var/opt/mssql
+      # Setup scripts run ONLY when the data volume is empty (first start). Existing volumes skip them;
+      # loan-service applies 02_loans.sql itself at startup, so loans work either way.
+      - ./../microservices/transaction-service/src/main/resources/schema-azuresql.sql:/mssql-server-setup-scripts.d/01_schema.sql:ro
+      - ./../microservices/loan-service/src/main/resources/db/phase6_loans.sql:/mssql-server-setup-scripts.d/02_loans.sql:ro
+      - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/03_seed.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "echo 'SELECT 1 FROM dual;' | sqlplus -s ledger_master/MasterSecretPassword123@localhost:1521/XE || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     networks:
       - ledger-net
 
@@ -30,11 +34,11 @@ services:
       - POSTGRES_DB=ledger_audit_db
       - POSTGRES_USER=audit_user
       - POSTGRES_PASSWORD=AuditSecretPassword123
-    ports:
-      - "5434:5432"
+    # No host port — internal only
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./../backend/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./../microservices/audit-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./../backend/notification-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/02_notification.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
       interval: 10s
@@ -48,8 +52,7 @@ services:
     image: redis:7-alpine
     container_name: redis-idempotency-matrix
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
-    ports:
-      - "6380:6379"
+    # No host port — internal only
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -129,6 +132,8 @@ services:
         condition: service_started
       reconciliation-service:
         condition: service_started
+      loan-service:
+        condition: service_started
       redis:
         condition: service_healthy
     ports:
@@ -139,6 +144,10 @@ services:
       - TRANSACTION_SERVICE_HOST=transaction-service
       - RECONCILIATION_SERVICE_HOST=reconciliation-service
       - ANALYTICS_SERVICE_HOST=analytics-service
+      - RISK_ENGINE_HOST=risk-engine
+      - T24_ADAPTER_HOST=t24-adapter
+      - LOAN_SERVICE_HOST=loan-service
+      - AUDIT_SERVICE_HOST=audit-service
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
@@ -155,15 +164,15 @@ services:
       context: ../microservices/auth-service
       dockerfile: Dockerfile
     container_name: auth-service
+    restart: unless-stopped
     depends_on:
-      oracle-xe:
+      azure-sql:
         condition: service_healthy
-    ports:
-      - "8081:8081"
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
     volumes:
       - ./../microservices/auth-service/target/auth-service.jar:/app/app.jar
@@ -175,15 +184,19 @@ services:
       context: ../microservices/account-service
       dockerfile: Dockerfile
     container_name: account-service
+    restart: unless-stopped
     depends_on:
-      oracle-xe:
+      azure-sql:
         condition: service_healthy
-    ports:
-      - "8082:8082"
+      redis:
+        condition: service_healthy
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
     volumes:
       - ./../microservices/account-service/target/account-service.jar:/app/app.jar
     networks:
@@ -194,19 +207,19 @@ services:
       context: ../microservices/transaction-service
       dockerfile: Dockerfile
     container_name: transaction-service
+    restart: unless-stopped
     depends_on:
-      oracle-xe:
+      azure-sql:
         condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8083:8083"
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -226,8 +239,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8084:8084"
+    # No host port — internal only
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - SPRING_DATASOURCE_USERNAME=audit_user
@@ -237,8 +249,8 @@ services:
       - SEMAPHORE_SENDER_NAME=${SEMAPHORE_SENDER_NAME:-PayPink}
       - SPRING_MAIL_HOST=${SPRING_MAIL_HOST:-smtp.gmail.com}
       - SPRING_MAIL_PORT=${SPRING_MAIL_PORT:-587}
-      - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME:-jonlevi.jlv@gmail.com}
-      - SPRING_MAIL_PASSWORD=${SPRING_MAIL_PASSWORD:-ffaeorqwvupclnrc}
+      - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME:-notifications@paypink.ph}
+      - SPRING_MAIL_PASSWORD=${PAYPINK_GMAIL_APP_PASSWORD}
     extra_hosts:
       - "smtp.gmail.com:74.125.203.109"
       - "host.docker.internal:host-gateway"
@@ -257,8 +269,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8085:8085"
+    # No host port — internal only
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - SPRING_DATASOURCE_USERNAME=audit_user
@@ -275,18 +286,17 @@ services:
       dockerfile: Dockerfile
     container_name: reconciliation-service
     depends_on:
-      oracle-xe:
+      azure-sql:
         condition: service_healthy
       postgresql:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8086:8086"
+    # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - ORACLE_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - ORACLE_DATASOURCE_USERNAME=ledger_master
-      - ORACLE_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - ORACLE_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - ORACLE_DATASOURCE_USERNAME=sa
+      - ORACLE_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
@@ -302,16 +312,15 @@ services:
       dockerfile: Dockerfile
     container_name: outbox-publisher
     depends_on:
-      oracle-xe:
+      azure-sql:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    ports:
-      - "8087:8087"
+    # No host port — internal only
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:oracle:thin:@oracle-xe:1521/XEPDB1
-      - SPRING_DATASOURCE_USERNAME=ledger_master
-      - SPRING_DATASOURCE_PASSWORD=MasterSecretPassword123
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - OUTBOX_POLL_INTERVAL_MS=5000
       - OUTBOX_RETRY_INTERVAL_MS=30000
@@ -330,13 +339,84 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    ports:
-      - "8088:8088"
+    # No host port — internal only
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - ANALYTICS_SERVICE_HOST=analytics-service
     volumes:
       - ./../microservices/analytics-service/target/analytics-service.jar:/app/app.jar
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Risk Engine (Python FastAPI — Phase 3)
+  # ==========================================
+  risk-engine:
+    build:
+      context: ../microservices/risk-engine
+      dockerfile: Dockerfile
+    container_name: risk-engine
+    # No host port — internal only, called by Remittance Orchestrator via http://risk-engine:8000
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=risk-engine
+    depends_on:
+      - otel-collector
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # T24 Core Adapter + OFS Simulator (Phase 4)
+  # ==========================================
+  t24-adapter:
+    build:
+      context: ../microservices/t24-adapter
+      dockerfile: Dockerfile
+    container_name: t24-adapter
+    # No host port — internal only, called by Remittance Orchestrator via http://t24-adapter:8090
+    environment:
+      - T24_SIMULATOR_URL=http://localhost:8090/ofs/process
+      - OTEL_SERVICE_NAME=t24-adapter
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    volumes:
+      - ./../microservices/t24-adapter/target/t24-adapter.jar:/app/app.jar
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Loan Service (Phase 6) — apply / accept / repay / EOD
+  # ==========================================
+  loan-service:
+    build:
+      context: ../microservices/loan-service
+      dockerfile: Dockerfile
+    container_name: loan-service
+    depends_on:
+      azure-sql:
+        condition: service_healthy
+      transaction-service:
+        condition: service_started
+    # No host port — internal only, accessed via api-gateway:8080 (/api/v1/loans/**)
+    # Money moves only through transaction-service's /internal/remittance/transfer (not routed by the gateway).
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - ORCHESTRATOR_URL=http://transaction-service:8083
+    volumes:
+      - ./../microservices/loan-service/target/loan-service.jar:/app/app.jar
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     networks:
       - ledger-net
 
@@ -365,6 +445,21 @@ services:
       - api-gateway
     ports:
       - "3001:80"
+    networks:
+      - ledger-net
+
+  # ==========================================
+  # Layer 1: Mobile App (Flutter Web on Nginx)
+  # ==========================================
+  mobile-app:
+    build:
+      context: ../mobile
+      dockerfile: Dockerfile
+    container_name: mobile-app
+    depends_on:
+      - api-gateway
+    ports:
+      - "3002:80"
     networks:
       - ledger-net
 
@@ -472,7 +567,7 @@ networks:
     driver: bridge
 
 volumes:
-  oracle_data:
+  azuresql_data:
   postgres_data:
   kafka_data:
   zookeeper_data:

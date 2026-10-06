@@ -35,10 +35,10 @@ public class TransactionReportService {
         var start = from.atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
         var end = to.plusDays(1).atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
         var rows = jdbc.query("SELECT t.transaction_date, t.reference_no, t.transaction_type, t.status, "
-            + "COALESCE((SELECT JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id FETCH FIRST 1 ROW ONLY), "
+            + "COALESCE((SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
             + "CASE WHEN t.transaction_type IN ('CREDIT','WELCOME_GIFT','TRANSFER_IN') THEN 'CREDIT' WHEN t.transaction_type IN ('DEBIT','TRANSFER_OUT') OR t.transaction_type LIKE 'EXT_%' THEN 'DEBIT' END), "
-            + "t.amount, c.first_name || ' ' || c.last_name, t.transaction_id FROM TRANSACTION t LEFT JOIN ACCOUNT a ON a.account_id = t.to_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
-            + "WHERE t.from_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ? ORDER BY t.transaction_date, t.transaction_id FETCH FIRST 10001 ROWS ONLY",
+            + "t.amount, c.first_name + ' ' + c.last_name, t.transaction_id FROM LEDGER_TRANSACTION t LEFT JOIN ACCOUNT a ON a.account_id = t.to_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
+            + "WHERE t.from_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ? ORDER BY t.transaction_date, t.transaction_id OFFSET 0 ROWS FETCH NEXT 10001 ROWS ONLY",
             (rs, n) -> new Row(rs.getTimestamp(1).toLocalDateTime(), BankingIdentifiers.reference(rs.getLong(8), rs.getTimestamp(1).toLocalDateTime()), rs.getString(3), rs.getString(4), rs.getString(5), rs.getBigDecimal(6), rs.getString(7)),
             accountId, Timestamp.valueOf(start), Timestamp.valueOf(end));
         if (rows.size() > 10000) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "This period contains over 10,000 transactions. Choose a shorter date range.");

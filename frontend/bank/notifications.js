@@ -10,25 +10,35 @@ function resetNotificationOwner() {
   Object.assign(transferNotifications,{owner:state.profile?.username,generation:state.generation,items:[],known:new Set(),read:new Set(),loaded:false,error:''});
   try { transferNotifications.read = new Set(JSON.parse(localStorage.getItem(notificationKey()) || '[]')); } catch { /* Reading remains available without storage. */ }
 }
+function notificationFromLoan(tx) {
+  const amount = money(tx.amount,tx.currency);
+  const account = maskedNumber(tx.accountNumber);
+  return tx.type === 'LOAN_DISBURSEMENT'
+    ? {id:`${tx.transactionId}:${tx.status}`,title:'Loan approved and received',message:`Your loan was approved. ${amount} was credited to your account ${account}.`,tx}
+    : {id:`${tx.transactionId}:${tx.status}`,title:'Loan payment received',message:`${amount} was paid toward your loan from your account ${account}.`,tx};
+}
 function notificationFromTransfer(tx) {
+  if (tx.type?.startsWith('LOAN_')) return notificationFromLoan(tx);
   const incoming = tx.type === 'TRANSFER_IN';
-  const pending = tx.status === 'PENDING';
-  const failed = tx.status === 'FAILED';
-  const title = pending ? 'Transfer pending' : failed ? 'Transfer failed' : incoming ? 'Money received' : 'Money sent';
+  const pending = ['PENDING','RESERVED','Reserved','PROCESSING','Processing'].includes(tx.status);
+  const cancelled = ['CANCELLED','Cancelled'].includes(tx.status);
+  const failed = ['FAILED','Failed'].includes(tx.status);
+  const title = pending ? 'Transfer pending' : cancelled ? 'Transfer cancelled' : failed ? 'Transfer reversed' : incoming ? 'Money received' : 'Money sent';
   const amount = money(tx.amount,tx.currency);
   const person = tx.counterpartyName?.trim() || 'another account';
   const account = maskedNumber(tx.accountNumber);
-  const message = pending ? `${amount} to ${person} is waiting to be processed. No money has been deducted yet.`
-    : failed ? `Your ${amount} transfer to ${person} could not be completed. No money was deducted.`
+  const message = pending ? `${amount} to ${person} is waiting to be processed. Funds are on hold.`
+    : cancelled ? `Your ${amount} transfer to ${person} was cancelled. Held funds were restored to your balance.`
+    : failed ? `Your ${amount} transfer to ${person} could not be completed and was reversed. No funds were lost.`
     : incoming ? `${amount} from ${person} was credited to your account ${account}.`
     : `${amount} was sent to ${person} from your account ${account}.`;
-  return {id:`${tx.transactionId}:${tx.status}`,title,message,tx};
+  return {id:`${tx.transactionId || tx.reference}:${tx.status}`,title,message,tx};
 }
 function updateTransferNotifications(activity, announce = true) {
   if (!state.session || !state.profile) return;
   resetNotificationOwner();
-  const items = activity.filter(tx => (['TRANSFER_IN','TRANSFER_OUT'].includes(tx.type) || tx.type?.startsWith('EXT_'))
-    && ['PENDING','FAILED','SUCCESS','COMPLETED'].includes(tx.status)).map(notificationFromTransfer);
+  const items = activity.filter(tx => (['TRANSFER_IN','TRANSFER_OUT','LOAN_DISBURSEMENT','LOAN_REPAYMENT'].includes(tx.type) || tx.type?.startsWith('EXT_'))
+    && ['PENDING','FAILED','Failed','SUCCESS','COMPLETED','Posted','CANCELLED','Cancelled','Reserved','Processing'].includes(tx.status)).map(notificationFromTransfer);
   const fresh = items.filter(item => !transferNotifications.known.has(item.id));
   if (announce && transferNotifications.loaded && fresh.length) {
     fresh.slice(0,3).reverse().forEach(showTransferPopup);
@@ -51,7 +61,7 @@ function notificationList() {
   if (transferNotifications.error) return `<p role="status" class="notice">${escapeHtml(transferNotifications.error)}</p>`;
   if (!transferNotifications.loaded) return '<p role="status" class="muted">Loading notifications…</p>';
   if (!transferNotifications.items.length) return '<div class="notification-empty"><h3>You’re all caught up.</h3><p>Updates about money you send and receive will appear here.</p></div>';
-  return `<div class="notification-list">${transferNotifications.items.map(item => `<button type="button" class="notification-item ${transferNotifications.read.has(item.id) ? '' : 'unread'}" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${item.tx.type === 'TRANSFER_IN' ? '↓' : '↑'}</span><span><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span><small>${escapeHtml(txDate(item.tx).toLocaleString('en-PH'))}</small>${!transferNotifications.read.has(item.id) ? '<span class="notification-unread-label">Unread</span>' : ''}</span></button>`).join('')}</div>`;
+  return `<div class="notification-list">${transferNotifications.items.map(item => `<button type="button" class="notification-item ${transferNotifications.read.has(item.id) ? '' : 'unread'}" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? '↓' : '↑'}</span><span><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span><small>${escapeHtml(txDate(item.tx).toLocaleString('en-PH'))}</small>${!transferNotifications.read.has(item.id) ? '<span class="notification-unread-label">Unread</span>' : ''}</span></button>`).join('')}</div>`;
 }
 function renderNotificationInbox() {
   const body = dialog.querySelector('#notification-inbox');
@@ -98,7 +108,7 @@ document.addEventListener('click', event => {
   button.closest('.transfer-popup')?.remove();
   transferNotifications.read.add(item.id); persistNotificationReads();
   dialog.dataset.notifications = 'false';
-  showDialog(item.title,`<p>${escapeHtml(item.message)}</p><dl class="detail-list">${detail('Amount',escapeHtml(money(item.tx.amount,item.tx.currency)))}${detail('Status',statusPill(item.tx.status))}${detail(item.tx.type === 'TRANSFER_IN' ? 'Sender' : 'Recipient',escapeHtml(item.tx.counterpartyName || 'PayPink customer'))}${detail('Account',escapeHtml(maskedNumber(item.tx.counterpartyAccountNumber)))}${detail('Reference',escapeHtml(item.tx.reference))}${detail('Date & time',escapeHtml(txDate(item.tx).toLocaleString('en-PH')))}</dl>`, '<button class="btn btn-secondary" type="button" id="notification-button-back">All notifications</button><button class="btn btn-primary" data-action="close-dialog">Done</button>');
+  showDialog(item.title,`<p>${escapeHtml(item.message)}</p><dl class="detail-list">${detail('Amount',escapeHtml(money(item.tx.amount,item.tx.currency)))}${detail('Status',statusPill(item.tx.status))}${detail(['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? 'Sender' : 'Recipient',escapeHtml(item.tx.type?.startsWith('LOAN_') ? 'PayPink Loans' : item.tx.counterpartyName || 'PayPink customer'))}${detail('Account',escapeHtml(maskedNumber(item.tx.counterpartyAccountNumber)))}${detail('Reference',escapeHtml(item.tx.reference))}${detail('Date & time',escapeHtml(txDate(item.tx).toLocaleString('en-PH')))}</dl>`, '<button class="btn btn-secondary" type="button" id="notification-button-back">All notifications</button><button class="btn btn-primary" data-action="close-dialog">Done</button>');
 });
 document.addEventListener('click', event => { if (event.target.closest('#notification-button-back')) openNotifications(); });
 dialog.addEventListener('close',()=>{ dialog.dataset.notifications='false'; });
@@ -117,7 +127,7 @@ function showTransferPopup(item) {
   }
   const popup = document.createElement('div');
   popup.className = 'transfer-popup';
-  popup.innerHTML = `<button type="button" class="transfer-popup-open" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${item.tx.type === 'TRANSFER_IN' ? '↓' : '↑'}</span><span><span role="status"><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span></span><small>View transfer details →</small></span></button><button type="button" class="transfer-popup-close" data-dismiss-transfer-popup aria-label="Dismiss notification">×</button>`;
+  popup.innerHTML = `<button type="button" class="transfer-popup-open" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? '↓' : '↑'}</span><span><span role="status"><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span></span><small>View transfer details →</small></span></button><button type="button" class="transfer-popup-close" data-dismiss-transfer-popup aria-label="Dismiss notification">×</button>`;
   host.prepend(popup);
   while (host.children.length > 3) host.lastElementChild.remove();
   let timer;

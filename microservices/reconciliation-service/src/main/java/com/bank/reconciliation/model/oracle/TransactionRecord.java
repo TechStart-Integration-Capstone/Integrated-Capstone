@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "TRANSACTION")
+@Table(name = "LEDGER_TRANSACTION")
 public class TransactionRecord {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "transaction_id") private Long transactionId;
