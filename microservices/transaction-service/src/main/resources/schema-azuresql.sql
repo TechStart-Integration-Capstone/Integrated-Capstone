@@ -137,9 +137,19 @@ CREATE TABLE dbo.REMITTANCE (
     created_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     updated_at        DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     transaction_type  NVARCHAR(30)  NOT NULL CONSTRAINT DF_REMITTANCE_TYPE DEFAULT 'TRANSFER', -- TRANSFER | LOAN_DISBURSEMENT | LOAN_REPAYMENT
+    cancel_until      DATETIME2     NULL,
+    retry_count       INT           NOT NULL CONSTRAINT DF_REMITTANCE_RETRY_COUNT DEFAULT 0,
+    max_retries       INT           NOT NULL CONSTRAINT DF_REMITTANCE_MAX_RETRIES DEFAULT 3,
+    next_retry_at     DATETIME2     NULL,
     CONSTRAINT fk_remittance_src_account FOREIGN KEY (source_account_id) REFERENCES dbo.ACCOUNT(account_id),
     CONSTRAINT fk_remittance_tgt_account FOREIGN KEY (target_account_id) REFERENCES dbo.ACCOUNT(account_id)
 );
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_remittance_status_retry')
+BEGIN
+    CREATE INDEX idx_remittance_status_retry ON dbo.REMITTANCE(status, next_retry_at, cancel_until);
+END
 GO
 
 -- 8. LOAN_APPLICATION TABLE (Phase 6 Loans: instant decision from credit score)

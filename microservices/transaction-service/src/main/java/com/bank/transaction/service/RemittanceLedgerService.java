@@ -267,8 +267,46 @@ public class RemittanceLedgerService {
         remittance.setInternalStatus(Remittance.STEP_POSTED);
         remittance.setCurrentService("t24-adapter");
         remittance.setReason(reason);
+        remittance.setUpdatedAt(LocalDateTime.now());
         remittanceRepository.save(remittance);
-        log.info("[ledger-service] Held funds released for sourceAcc={} ref={}", sourceAccountId, remittance.getReferenceNo());
+
+        // Record outbox event for automatic/bank-side reversal
+        OutboxEvent event = new OutboxEvent();
+        event.setTransactionId(null);
+        event.setEventType("REMITTANCE_REVERSED");
+        event.setPayload(String.format("{\"referenceNo\":\"%s\",\"callerCustomerId\":%d,\"amount\":%.4f,\"status\":\"FAILED\",\"reason\":\"%s\"}",
+                remittance.getReferenceNo(), remittance.getCallerCustomerId(), remittance.getAmount(), reason != null ? reason.replace("\"", "'") : ""));
+        event.setStatus("PENDING");
+        event.setCreatedDate(LocalDateTime.now());
+        outboxEventRepository.save(event);
+
+        log.info("[ledger-service] Held funds released and reversed for sourceAcc={} ref={}", sourceAccountId, remittance.getReferenceNo());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void cancelAndReleaseHold(Remittance remittance, String reason) {
+        if (remittance.getSourceAccountId() != null && remittance.getAmount() != null) {
+            String releaseSql = "UPDATE dbo.ACCOUNT SET held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END WHERE account_id = ?";
+            jdbcTemplate.update(releaseSql, remittance.getAmount(), remittance.getAmount(), remittance.getSourceAccountId());
+        }
+        remittance.setStatus(Remittance.STATUS_CANCELLED);
+        remittance.setInternalStatus(Remittance.INTERNAL_CANCELLED_BY_USER);
+        remittance.setCurrentService("transaction-service");
+        remittance.setReason(reason);
+        remittance.setUpdatedAt(LocalDateTime.now());
+        remittanceRepository.save(remittance);
+
+        // Record outbox event for user cancellation
+        OutboxEvent event = new OutboxEvent();
+        event.setTransactionId(null);
+        event.setEventType("REMITTANCE_CANCELLED");
+        event.setPayload(String.format("{\"referenceNo\":\"%s\",\"callerCustomerId\":%d,\"amount\":%.4f,\"status\":\"CANCELLED\",\"reason\":\"%s\"}",
+                remittance.getReferenceNo(), remittance.getCallerCustomerId(), remittance.getAmount(), reason != null ? reason.replace("\"", "'") : ""));
+        event.setStatus("PENDING");
+        event.setCreatedDate(LocalDateTime.now());
+        outboxEventRepository.save(event);
+
+        log.info("[ledger-service] User cancelled remittance ref={} and released held funds.", remittance.getReferenceNo());
     }
 
     @Transactional

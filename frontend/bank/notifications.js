@@ -20,23 +20,25 @@ function notificationFromLoan(tx) {
 function notificationFromTransfer(tx) {
   if (tx.type?.startsWith('LOAN_')) return notificationFromLoan(tx);
   const incoming = tx.type === 'TRANSFER_IN';
-  const pending = tx.status === 'PENDING';
-  const failed = tx.status === 'FAILED';
-  const title = pending ? 'Transfer pending' : failed ? 'Transfer failed' : incoming ? 'Money received' : 'Money sent';
+  const pending = ['PENDING','RESERVED','Reserved','PROCESSING','Processing'].includes(tx.status);
+  const cancelled = ['CANCELLED','Cancelled'].includes(tx.status);
+  const failed = ['FAILED','Failed'].includes(tx.status);
+  const title = pending ? 'Transfer pending' : cancelled ? 'Transfer cancelled' : failed ? 'Transfer reversed' : incoming ? 'Money received' : 'Money sent';
   const amount = money(tx.amount,tx.currency);
   const person = tx.counterpartyName?.trim() || 'another account';
   const account = maskedNumber(tx.accountNumber);
-  const message = pending ? `${amount} to ${person} is waiting to be processed. No money has been deducted yet.`
-    : failed ? `Your ${amount} transfer to ${person} could not be completed. No money was deducted.`
+  const message = pending ? `${amount} to ${person} is waiting to be processed. Funds are on hold.`
+    : cancelled ? `Your ${amount} transfer to ${person} was cancelled. Held funds were restored to your balance.`
+    : failed ? `Your ${amount} transfer to ${person} could not be completed and was reversed. No funds were lost.`
     : incoming ? `${amount} from ${person} was credited to your account ${account}.`
     : `${amount} was sent to ${person} from your account ${account}.`;
-  return {id:`${tx.transactionId}:${tx.status}`,title,message,tx};
+  return {id:`${tx.transactionId || tx.reference}:${tx.status}`,title,message,tx};
 }
 function updateTransferNotifications(activity, announce = true) {
   if (!state.session || !state.profile) return;
   resetNotificationOwner();
   const items = activity.filter(tx => (['TRANSFER_IN','TRANSFER_OUT','LOAN_DISBURSEMENT','LOAN_REPAYMENT'].includes(tx.type) || tx.type?.startsWith('EXT_'))
-    && ['PENDING','FAILED','SUCCESS','COMPLETED'].includes(tx.status)).map(notificationFromTransfer);
+    && ['PENDING','FAILED','Failed','SUCCESS','COMPLETED','Posted','CANCELLED','Cancelled','Reserved','Processing'].includes(tx.status)).map(notificationFromTransfer);
   const fresh = items.filter(item => !transferNotifications.known.has(item.id));
   if (announce && transferNotifications.loaded && fresh.length) {
     fresh.slice(0,3).reverse().forEach(showTransferPopup);

@@ -17,6 +17,9 @@ public class RemittanceResponse {
     private String reason;
     private boolean cachedIdempotentResponse;
     private Long transactionId;          // LEDGER_TRANSACTION id once POSTED
+    private java.time.LocalDateTime cancelUntil;
+    private Integer cancelWindowSeconds;
+    private Boolean canCancel;
 
     public RemittanceResponse() {}
 
@@ -75,4 +78,14 @@ public class RemittanceResponse {
 
     public Long getTransactionId() { return transactionId; }
     public void setTransactionId(Long transactionId) { this.transactionId = transactionId; }
+
+    public java.time.LocalDateTime getCancelUntil() { return cancelUntil; }
+    public void setCancelUntil(java.time.LocalDateTime cancelUntil) { this.cancelUntil = cancelUntil; }
+
+    public Integer getCancelWindowSeconds() { return cancelWindowSeconds; }
+    public void setCancelWindowSeconds(Integer cancelWindowSeconds) { this.cancelWindowSeconds = cancelWindowSeconds; }
+
+    public Boolean getCanCancel() { return canCancel; }
+    public boolean isCanCancel() { return Boolean.TRUE.equals(canCancel); }
+    public void setCanCancel(Boolean canCancel) { this.canCancel = canCancel; }
 }
