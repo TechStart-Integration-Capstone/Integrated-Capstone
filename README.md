@@ -6,6 +6,8 @@
 
 ## Table of Contents
 
+**Interest EOD:** [Daily accrual, monthly posting, migrations and operation](docs/interest-eod.md).
+
 **Customer website:** [PayPink personal banking](http://localhost:3001/bank/) — login, registration with Savings and Everyday accounts plus a PHP 50 welcome gift, balances, fund transfers, masked account numbers, and transaction history. The [simulation UI](http://localhost:3001/) stays at its original URL. See [customer banking setup and features](docs/customer-banking.md).
 
 1. [System Architecture](#system-architecture)
