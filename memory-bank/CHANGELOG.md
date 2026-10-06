@@ -1,6 +1,11 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-06 — CI/CD Port 80 Exposing & Automated Database Migration Step:
+  - **Port 80/3001 Dual Binding (`docker/docker-compose.yml`):** Exposed `80:80` alongside `3001:80` for `frontend-spa` container, resolving `curl: (7) Failed to connect to localhost port 80` in the CI/CD deployment health check and aligning host ingress with Azure NSG Rule 110.
+  - **Automated Schema Migration (`.github/workflows/pipeline.yml`):** Added post-startup `Apply additive database migrations` step executing `migrate_phase6_reversals.sql`, `migrate_transaction_monitoring.sql`, `migrate_phase6_loans.sql`, `migrate_reconciliation_fix.sql`, and `migrate_interest_*.sql` on live containers, resolving `Invalid column name 'cancel_until'` in `transaction-service`.
+  - **Health Check Resilience (`.github/workflows/pipeline.yml`):** Extended SPA endpoint polling to accept either port 80 or port 3001. — [levi]
+
 - 2026-10-06 — First deploy re-run after the volume migration: `azure-sql-master` healthy, but `kafka-event-bus` exited with `NodeExistsException` on `/brokers/ids/1`. The ZooKeeper snapshot was copied seconds after the old containers were killed, so the old broker's ephemeral node was still registered. Started Kafka again after the ZooKeeper session expired (`[KafkaServer id=1] started`, healthy). One-off effect of the migration; data intact. Deploy re-run pending. — [levi]
 
 - 2026-10-06 — Ran the migration on `vm-paypink` via `az vm run-command`: removed 27 `docker`-project containers; copied `azuresql_data` 105.1M, `postgres_data` 46.2M, `loki_data` 2.5M, `tempo_data` 57.8M, `zookeeper_data` 12K into `paypink_*` (sizes match). `kafka_data` (676K→1.0G) and `zookeeper_log` (44K→64M) grew only because busybox `cp` expanded sparse preallocated index/log files. `docker_*` volumes kept as backup. — [levi]

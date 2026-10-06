@@ -453,6 +453,7 @@ services:
     depends_on:
       - api-gateway
     ports:
+      - "80:80"
       - "3001:80"
     networks:
       - ledger-net

@@ -53,7 +53,7 @@ Built on top of the Capstone 1 ledger engine.
 - Cache: Redis 7 — idempotency keys, rate-limit buckets, display-only balance cache
 - Messaging: Apache Kafka — topics: ledger.transaction.events, loan.*
 - Observability: OTel Collector → Prometheus + Loki + Tempo → Grafana + Jaeger
-- Frontend: Vanilla JS SPA served by Nginx (port 3001)
+- Frontend: Vanilla JS SPA served by Nginx (ports 80 and 3001), Flutter PWA (port 3002)
 
 > The running auth-service (as of 2026-10-05) uses a hosted Azure SQL database named `paypink`. Checked-in Compose defaults still point to local SQL Server. Preserve runtime connection settings when restarting.
 
