@@ -1,7 +1,7 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **dom**_
-_Last updated: 2026-10-06 (Interest EOD merged; CI/CD Pipeline Hardening, Java 17 Compatibility & Cloud Host Active)_
+_Last updated: 2026-10-06 (Interest EOD implemented and tested; activation pending) - aly_
 
 ---
 
@@ -258,7 +258,11 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 
 ## Current Focus
 
+<<<<<<< Updated upstream
 All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temurin runners. Remaining work:
+=======
+All planned phases complete through Phase 6. Remaining work:
+>>>>>>> Stashed changes
 - **Interest EOD activation** — apply the additive migrations, configure the start date and PostgreSQL credentials, then deploy transaction-service and api-gateway while preserving runtime Azure SQL settings.
 - **Phase 7** — Mobile Frontend (PWA)
 - **Phase 8** — Chaos + Load Testing
