@@ -20,7 +20,7 @@ Built on top of the Capstone 1 ledger engine.
 | 1 | Oracle XE → Azure SQL Migration | Done |
 | 2 | OpenTelemetry & Observability Mesh | Done |
 | 3 | Risk Engine & Fraud Screening (rule-based + Isolation Forest ML) | Done |
-| 4 | T24 Core Adapter & Simulator | Done |
+| 4 | T24 Core Adapter & Simulator (Deterministic OFS & Account State) | Done |
 | 5 | Remittance Orchestrator & Saga Engine Hardening | Done |
 | 5b | Loans — apply / accept / disburse / repay / EOD | Implemented (unit-tested; not yet Docker end-to-end) |
 | 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Done |
@@ -121,6 +121,16 @@ Java consumer reads RiskResult{score, decision, reasons} — unchanged. New HTTP
 ### Frontend visibility
 
 bank.js renders riskScore + riskDecision on the transfer receipt: "Risk evaluation: Score 0.40 (APPROVED)". No frontend changes were needed.
+
+---
+
+## T24 Core Adapter & OFS Simulator (Phase 4 — updated 2026-10-06)
+
+Deterministic Temenos T24 OFS Core Banking Integration and Simulation:
+- **No Probabilities:** Probabilistic simulation (90% success, 8% rejection, 2% timeout) has been removed. Outcomes are 100% deterministic based on message syntax and account lifecycle state.
+- **OFS Message Validation:** Validates `FUNDS.TRANSFER,%s/I/PROCESS,,DEBIT.ACCT.NO::%s,CREDIT.ACCT.NO::%s,AMOUNT::%.2f,CURRENCY::%s`. Rejects with `/-1` (HTTP 422) if syntax is malformed, fields are missing, debit equals credit, or amount <= 0.
+- **Account State Verification:** Verifies lifecycle state of debit and credit accounts. If an account is `FROZEN` or `CLOSED`, returns deterministic rejection `/-1` (HTTP 422) triggering immediate hold release in transaction-service with 0 retries. State managed via in-memory registry, `POST /ofs/account-status`, or convention matching (`ACC-FROZEN-*`, `ACC-CLOSED-*`).
+- **Timeout Preservation:** Explicit timeout simulation retained for `SIM-TIMEOUT` references (2500ms delay to exceed 2s SLA). Circuit breaker and `RemittanceSagaWorker` bounded retries (3 attempts with exponential backoff: 15s, 45s, 135s) and auto-reversal remain fully operational.
 
 ---
 
