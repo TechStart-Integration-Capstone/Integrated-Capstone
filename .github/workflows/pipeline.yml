@@ -226,6 +226,16 @@ jobs:
             mvn -B -f microservices/$s/pom.xml clean package -DskipTests
           done
 
+      - name: Guard against containers from another Compose project
+        run: |
+          OTHER=$(docker ps -a --format '{{.Names}} {{.Label "com.docker.compose.project"}}' \
+            | awk '$2 != "" && $2 != "paypink" && $2 != "paypink-ci"')
+          if [ -n "$OTHER" ]; then
+            echo "::error::Containers from another Compose project exist. The prod stack must run as project 'paypink'. Migrate volumes first (see docs/AZURE_DEPLOYMENT_GUIDE.md, 'Compose project name')."
+            echo "$OTHER"
+            exit 1
+          fi
+
       - name: Build and start
         run: |
           docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env \

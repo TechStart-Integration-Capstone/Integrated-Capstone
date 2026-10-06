@@ -301,3 +301,8 @@ Run [`scripts/03-verify-ports.sh`](file:///scripts/03-verify-ports.sh) from outs
 3. **Database Schema Initialization vs. Existing Volume Migrations:**
    * **Fresh VM / Rebuilds:** Docker Compose mounts `microservices/audit-service/.../schema-postgres.sql` directly into `/docker-entrypoint-initdb.d/01_schema.sql`, so all tables (including `RECONCILIATION_LOG`, `RISK_DECISION`, and interest tables) are created automatically.
    * **Existing Pre-Seeded Volumes:** Run `scripts/migrate_reconciliation_fix.sql` and `scripts/migrate_interest_postgres.sql` inside the `postgres-immutable-audit` container to apply additive changes without data loss.
+4. **Compose project name:**
+   * The CD pipeline always runs `docker compose -p paypink`, so volumes are named `paypink_*`. Services use fixed `container_name`s, so a stack started by hand from `docker/` (project `docker`, volumes `docker_*`) blocks the deploy with `container name ... already in use`.
+   * The pipeline step *Guard against containers from another Compose project* stops the deploy before any containers are created.
+   * Fix once, without SSH: `az vm run-command invoke -g RG-PAYPINK-WESTUS2 -n vm-paypink --command-id RunShellScript --scripts @scripts/04-migrate-compose-project.sh`, then re-run the deploy. The `docker_*` volumes are kept as a backup.
+   * Never start the prod stack by hand without `-p paypink`.

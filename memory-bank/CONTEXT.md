@@ -263,6 +263,7 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 - **Container Health:** 26/26 Docker containers running and healthy.
 - **GitHub Self-Hosted Runner:** v2.337.0 active as systemd service (`actions.runner.TechStart-Integration-Capstone-Integrated-Capstone.vm-paypink.service`) with labels `self-hosted,azure-vm` for automated Stage 3 CD deployments. Pipeline uses Node 24 actions (`checkout@v5`, `setup-java@v5`, `setup-python@v6`, `upload-artifact@v5`), hosted jobs pinned to `ubuntu-24.04`, and `setup-java@v5` (Temurin 17) and host fallback to guarantee Java 17 toolchain for Maven artifact packaging before Docker image builds.
 - **Budget Control:** Zero-cost / low-cost tier. Scheduled auto-shutdown active at 11:00 UTC (7:00 PM PHT). Deallocate when idle.
+- **Compose project:** Prod must run as `-p paypink` (volumes `paypink_*`). As of 2026-10-06 the live stack was still the manually started project `docker` (volumes `docker_*`); migrate with `scripts/04-migrate-compose-project.sh` before the CD deploy can succeed. Pipeline guard blocks deploys while foreign-project containers exist.
 - **Reconciliation Hotfix Migration:** Run `scripts/migrate_reconciliation_fix.sql` against `postgres-immutable-audit` container on the VM to sync `account_id` and `azure_sql_status` column renames.
 
 ---

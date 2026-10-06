@@ -1,6 +1,8 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-06 — Prod deploy failed at `docker compose up` with `container name "/azure-sql-master" is already in use`: the VM stack had been started by hand as Compose project `docker` (volumes `docker_*`), while the pipeline uses `-p paypink`; the failed run also created empty `paypink_*` volumes. Added pipeline step *Guard against containers from another Compose project* (fails before any container is created), `scripts/04-migrate-compose-project.sh` (removes `docker` project containers/network, copies `docker_*` → `paypink_*`, keeps old volumes as backup; runnable via `az vm run-command`), and a guide note. Migration on the VM pending at time of entry. — [levi]
+
 - 2026-10-06 — CI/CD deprecation cleanup (`.github/workflows/pipeline.yml`): bumped `actions/checkout` v4→v5, `actions/setup-java` v4→v5, `actions/setup-python` v5→v6, `actions/upload-artifact` v4→v5 (Node 24 runtime; clears Node 20 and setup-java v4 deprecation warnings). Pinned GitHub-hosted jobs from `ubuntu-latest` to `ubuntu-24.04` ahead of the 19/10/2026 Ubuntu 26 migration. Self-hosted runner v2.337.0 supports Node 24. — [levi]
 
 - 2026-10-06 — CI/CD Production Deployment Java 17 Temurin Toolchain Fix:
