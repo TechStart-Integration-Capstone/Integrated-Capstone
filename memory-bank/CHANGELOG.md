@@ -1,5 +1,7 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
+
+- 2026-10-06 — Admin Portal UI Streamlining: Removed Concurrency, Event Lifecycle, and Perimeter Validation tabs from Admin navigation (`frontend/index.html` & `frontend/admin/admin.js`). Fixed duplicate PHT clock badge display (`frontend/src/js/app.js`). Rebuilt and restarted `frontend-spa` Docker container. — [dom]
 - 2026-10-06 — Enforced project memory workflow in root `AGENTS.md`: read `memory-bank/CONTEXT.md` before code and update CONTEXT/CHANGELOG after every change, including migrations and deployments. Updated context to reflect actual local runtime rather than pending activation. — [Codex; uncommitted]
 
 - 2026-10-06 — Integrated interest postings with the existing PostgreSQL GL (`LEDGER_MUTATION_AUDIT`), replacing redundant Azure SQL `GL_ENTRY`:
