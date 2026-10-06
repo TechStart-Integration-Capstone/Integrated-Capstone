@@ -19,9 +19,9 @@ PostgreSQL holds immutable daily interest snapshots. The existing ledger column 
 - On the last calendar day, daily accrual completes first. PostgreSQL sums the
   period's stored amounts and rounds once to two decimals. Savings balances then
   increase by that amount. Loans accrue only; no loan capitalization policy was specified.
-- Posting writes `ACCOUNT`, `GL_ENTRY`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT` and
+- Posting writes `ACCOUNT`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT` and
   `EOD_JOB_RUN` in one Azure SQL transaction. Existing consumers receive the normal
-  credit event with before/after balances. A zero total gets a GL period record,
+  credit event with before/after balances into the existing PostgreSQL `LEDGER_MUTATION_AUDIT` GL. A zero total completes the EOD job,
   without a zero-value financial transaction or event.
 
 ## Setup
@@ -76,14 +76,14 @@ schema-altering rights; database owners/superusers can change any database prote
 
 Month-end refuses to post unless every date from the configured period start through
 month-end has a completed snapshot. Duplicate credits are prevented by an Azure SQL
-unique key on `(account_id, posting_type, period_end)` and checking posted GL amounts
+unique `LEDGER_TRANSACTION.reference_no` (`INT-<period-end>-<account-id>`) and checking the existing transaction amount
 for that period. A posting failure rolls back the whole month, including its job log;
 the worker logs the failure and leaves PostgreSQL untouched. An hourly recovery job
 retries unfinished closed months, including a crash between the final daily accrual
 and monthly posting. Successful job records suppress unnecessary scheduled retries;
-manual retries still verify the posted GL amounts.
+manual retries still verify the posted transaction amounts.
 
-The GL follows the supplied single customer-credit entry specification. It does not
+There is no separate Azure SQL GL table. GL credits arrive asynchronously through the existing outbox/Kafka/audit consumer; database failures are retried and duplicate deliveries are skipped per transaction/account. The retirement migration drops the old `GL_ENTRY` only when empty and refuses to discard historical entries. This does not
 invent an expense-side chart-of-accounts entry or change the existing loan subledger.
 
 ## Admin operations
@@ -98,7 +98,7 @@ POST /api/v1/interest/eod/post?businessDate=2026-10-31
 Authorization: Bearer <admin JWT>
 ```
 
-Responses contain `businessDate`, `accounts` (new snapshots or GL postings), and
+Responses contain `businessDate`, `accounts` (new snapshots or interest credits), and
 `replayed`. Accrual retries return zero new accounts. Posting excludes loans.
 Future dates and non-month-end posting dates return 400; missing snapshots or
 incomplete periods return 409; non-admin requests return 403. The gateway strips

@@ -14,9 +14,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.Optional;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -105,5 +108,33 @@ class AuditKafkaConsumerTest {
         assertThatNoException().isThrownBy(() -> consumer.consume(
                 "{\"eventType\":\"loan.disbursed\",\"transactionId\":501,\"accountId\":4,\"amount\":250000.00}"));
         verifyNoInteractions(auditRepository);
+    }
+
+    @Test void interestCreditUsesExistingPostgresLedger() {
+        var cap = ArgumentCaptor.forClass(LedgerMutationAudit.class);
+        consumer.consume("""
+                {"transactionId":701,"accountId":12,"transactionType":"INTEREST_CREDIT",
+                 "operation":"CREDIT","currency":"PHP","amount":"33.97",
+                 "beforeBalance":"10000.0000","afterBalance":"10033.9700"}
+                """);
+        verify(auditRepository).save(cap.capture());
+        assertThat(cap.getValue().getAmount()).isEqualByComparingTo("33.97");
+        assertThat(cap.getValue().getOperation()).isEqualTo("CREDIT");
+        assertThat(cap.getValue().getAfterBalance()).isEqualByComparingTo("10033.97");
+    }
+
+    @Test void duplicateDeliverySkipsOnlyTheSameLedgerLeg() {
+        when(auditRepository.findByTransactionIdAndAccountId(701L, 12L))
+                .thenReturn(Optional.of(new LedgerMutationAudit()));
+        consumer.consume(event(701L,12L,1L,"CREDIT","33.97","10000","10033.97"));
+        verify(auditRepository, never()).save(any());
+        consumer.consume(event(701L,13L,1L,"DEBIT","33.97","10000","9966.03"));
+        verify(auditRepository).save(any());
+    }
+
+    @Test void databaseFailurePropagatesSoKafkaRetriesInsteadOfLosingTheGlEntry() {
+        when(auditRepository.save(any())).thenThrow(new DataAccessResourceFailureException("offline"));
+        assertThatThrownBy(() -> consumer.consume(event(701L,12L,1L,"CREDIT","33.97","10000","10033.97")))
+                .isInstanceOf(DataAccessResourceFailureException.class);
     }
 }
