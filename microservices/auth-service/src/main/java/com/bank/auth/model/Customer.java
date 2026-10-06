@@ -23,6 +23,11 @@ public class Customer {
         this.lastName = lastName; this.email = email; this.contactNo = contactNo;
         this.status = "ACTIVE"; this.createdDate = LocalDateTime.now();
     }
+    public Customer(Long customerId, String username, String passwordHash, String firstName, String lastName, String email, String contactNo) {
+        this.customerId = customerId; this.username = username; this.passwordHash = passwordHash;
+        this.firstName = firstName; this.lastName = lastName; this.email = email;
+        this.contactNo = contactNo; this.status = "ACTIVE"; this.createdDate = LocalDateTime.now();
+    }
 
     public Long getCustomerId() { return customerId; }
     public String getUsername() { return username; }

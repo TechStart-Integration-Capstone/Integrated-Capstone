@@ -89,17 +89,28 @@ public class ExternalTransferService {
         }
         return receipts(customer,reference).get(0);
     }
-    public List<Receipt> history(String authorization) { return receipts(banking.authenticatedCustomer(authorization).getCustomerId(),null); }
-    private List<Receipt> receipts(long customer,String reference) {
-        String sql="SELECT t.reference_no,t.from_account_id,t.amount,t.status,t.transaction_date,t.transaction_type,t.transaction_id FROM LEDGER_TRANSACTION t JOIN ACCOUNT a ON a.account_id=t.from_account_id WHERE a.customer_id=? AND t.transaction_type LIKE 'EXT_%'";
-        if (reference!=null) sql+=" AND t.reference_no=?";
-        sql+=" ORDER BY t.transaction_date DESC OFFSET 0 ROWS FETCH NEXT 200 ROWS ONLY";
-        return jdbc.query(sql,(rs,n)->{
-            String type=rs.getString(6); var recipient=Objects.requireNonNull(recipientForType(type));
-            return new Receipt(BankingIdentifiers.reference(rs.getLong(7),rs.getTimestamp(5).toLocalDateTime()),rs.getLong(2),recipient.number(),rs.getBigDecimal(3),"PHP",
-                "SUCCESS".equals(rs.getString(4))?"COMPLETED":rs.getString(4),rs.getTimestamp(5).toLocalDateTime(),
-                recipient.name(),recipient.bank(),type.contains("_PESONET_")?"PESONET":"INSTAPAY",true);
-        },reference==null?new Object[]{customer}:new Object[]{customer,reference});
+    public List<Receipt> history(String authorization) {
+        long customerId = banking.authenticatedCustomer(authorization).getCustomerId();
+        return receipts(customerId, null);
+    }
+    private List<Receipt> receipts(long customer, String reference) {
+        String sql = "SELECT t.reference_no,t.from_account_id,t.amount,t.status,t.transaction_date,t.transaction_type,t.transaction_id FROM LEDGER_TRANSACTION t JOIN ACCOUNT a ON a.account_id=t.from_account_id WHERE t.transaction_type LIKE 'EXT_%'";
+        List<Object> params = new ArrayList<>();
+        if (customer > 0) {
+            sql += " AND a.customer_id=?";
+            params.add(customer);
+        }
+        if (reference != null) {
+            sql += " AND t.reference_no=?";
+            params.add(reference);
+        }
+        sql += " ORDER BY t.transaction_date DESC OFFSET 0 ROWS FETCH NEXT 200 ROWS ONLY";
+        return jdbc.query(sql, (rs, n) -> {
+            String type = rs.getString(6); var recipient = Objects.requireNonNull(recipientForType(type));
+            return new Receipt(BankingIdentifiers.reference(rs.getLong(7), rs.getTimestamp(5).toLocalDateTime()), rs.getLong(2), recipient.number(), rs.getBigDecimal(3), "PHP",
+                "SUCCESS".equals(rs.getString(4)) ? "COMPLETED" : rs.getString(4), rs.getTimestamp(5).toLocalDateTime(),
+                recipient.name(), recipient.bank(), type.contains("_PESONET_") ? "PESONET" : "INSTAPAY", true);
+        }, params.toArray());
     }
     @Scheduled(fixedDelay=2000)
     @Transactional
