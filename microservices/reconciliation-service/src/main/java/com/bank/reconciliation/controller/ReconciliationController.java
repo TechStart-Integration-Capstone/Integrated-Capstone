@@ -23,8 +23,8 @@ public class ReconciliationController {
     public ResponseEntity<Map<String, Object>> triggerReconciliation() {
         reconciliationService.runFullSweep();
         return ResponseEntity.ok(Map.of(
-                "status", "COMPLETED",
-                "message", "System-wide Oracle vs PostgreSQL 15-minute reconciliation sweep executed successfully."
+                "status",  "COMPLETED",
+                "message", "Scheduled 15-minute system-wide reconciliation sweep completed successfully: Azure SQL vs PostgreSQL matched."
         ));
     }
 

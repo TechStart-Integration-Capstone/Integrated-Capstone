@@ -74,7 +74,7 @@ BEGIN
         annual_rate         DECIMAL(6,3)  NULL,
         monthly_installment DECIMAL(18,4) NULL,
         decline_reason      NVARCHAR(50)  NULL,
-        status              NVARCHAR(15)  NOT NULL,          -- DECIDED | ACCEPTED | EXPIRED
+        status              NVARCHAR(15)  NOT NULL,          -- DECIDED | DISBURSING | ACCEPTED | FAILED | EXPIRED
         expires_at          DATETIME2     NOT NULL,          -- created + 7 days
         created_date        DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
     );

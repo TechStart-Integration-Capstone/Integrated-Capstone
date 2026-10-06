@@ -10,14 +10,19 @@ spring:
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
       - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
   datasource:
-    oracle:
+    # Primary OLTP — Azure SQL (SQL Server 2022)
+    # Key was previously named "oracle" — renamed in post-Phase-1 cleanup.
+    # docker-compose passes ORACLE_DATASOURCE_* env vars which map to this prefix via
+    # the environment overrides in AzureSqlDataSourceConfig (@ConfigurationProperties).
+    azure-sql:
       jdbc-url: ${ORACLE_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
       driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
       username: ${ORACLE_DATASOURCE_USERNAME:sa}
       password: ${ORACLE_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
       hikari:
         maximum-pool-size: 10
-        pool-name: ReconSqlServerPool
+        pool-name: ReconAzureSqlPool
+    # Immutable audit store — PostgreSQL 15
     postgres:
       jdbc-url: ${POSTGRES_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ledger_audit_db}
       driver-class-name: org.postgresql.Driver
@@ -26,6 +31,7 @@ spring:
       hikari:
         maximum-pool-size: 10
         pool-name: ReconPostgresPool
+
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     consumer:

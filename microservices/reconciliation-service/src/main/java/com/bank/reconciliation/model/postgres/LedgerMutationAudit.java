@@ -11,7 +11,7 @@ public class LedgerMutationAudit {
     @Column(name = "audit_id") private Long auditId;
     @Column(name = "transaction_id") private Long transactionId;
     @Column(name = "account_id") private Long accountId;
-    @Column(name = "operation") private String operation;
+    @Column(name = "entry_type") private String operation;
     @Column(name = "amount", precision = 18, scale = 4) private BigDecimal amount;
     @Column(name = "currency") private String currency;
     @Column(name = "before_balance", precision = 18, scale = 4) private BigDecimal beforeBalance;

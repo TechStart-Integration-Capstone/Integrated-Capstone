@@ -3,6 +3,7 @@ package com.bank.loan.controller;
 import com.bank.loan.dto.LoanDtos.*;
 import com.bank.loan.exception.LoanException;
 import com.bank.loan.service.LoanApplicationService;
+import com.bank.loan.service.LoanCreditLimitService;
 import com.bank.loan.service.LoanDisbursementService;
 import com.bank.loan.service.LoanEodService;
 import com.bank.loan.service.LoanQueryService;
@@ -31,14 +32,17 @@ public class LoanController {
     private final LoanRepaymentService repayments;
     private final LoanQueryService queries;
     private final LoanEodService eod;
+    private final LoanCreditLimitService creditLimit;
 
     public LoanController(LoanApplicationService applications, LoanDisbursementService disbursements,
-                          LoanRepaymentService repayments, LoanQueryService queries, LoanEodService eod) {
+                          LoanRepaymentService repayments, LoanQueryService queries, LoanEodService eod,
+                          LoanCreditLimitService creditLimit) {
         this.applications = applications;
         this.disbursements = disbursements;
         this.repayments = repayments;
         this.queries = queries;
         this.eod = eod;
+        this.creditLimit = creditLimit;
     }
 
     @PostMapping("/applications")
@@ -63,6 +67,12 @@ public class LoanController {
     @GetMapping
     public List<LoanSummary> myLoans(@RequestHeader(value = "X-Auth-Customer-Id", required = false) String customerHeader) {
         return queries.myLoans(customerId(customerHeader));
+    }
+
+    /** Credit limit and how much the customer can still borrow. */
+    @GetMapping("/eligibility")
+    public Eligibility eligibility(@RequestHeader(value = "X-Auth-Customer-Id", required = false) String customerHeader) {
+        return creditLimit.eligibility(customerId(customerHeader));
     }
 
     @GetMapping("/{loanId}/schedule")

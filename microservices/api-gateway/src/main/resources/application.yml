@@ -143,7 +143,7 @@ spring:
           predicates:
             - Path=/api/v1/audit/**
           filters:
-            - StripPrefix=2
+            - StripPrefix=3
 
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:

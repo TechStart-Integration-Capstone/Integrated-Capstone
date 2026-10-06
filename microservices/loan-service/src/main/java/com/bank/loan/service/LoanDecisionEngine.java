@@ -12,9 +12,11 @@ import java.util.Map;
  * Steps, in order:
  *   1. Customer has an OVERDUE loan          → DECLINED (EXISTING_LOAN_OVERDUE)
  *   2. credit_score below decline threshold  → DECLINED (CREDIT_SCORE_TOO_LOW)
- *   3. Pick the band; cap amount and term at the band limits
- *   4. Installment above affordability cap   → DECLINED (INSUFFICIENT_INCOME)
- *   5. Nothing capped → APPROVED, otherwise COUNTER_OFFER
+ *   3. Pick the band. Its max amount is the customer's total credit limit: what they still owe on open
+ *      loans is taken off it. Less than the minimum loan left → DECLINED (CREDIT_LIMIT_REACHED)
+ *   4. Cap amount at the remaining limit and term at the band limit
+ *   5. Installment above affordability cap   → DECLINED (INSUFFICIENT_INCOME)
+ *   6. Nothing capped → APPROVED, otherwise COUNTER_OFFER
  */
 @Component
 public class LoanDecisionEngine {
@@ -37,8 +39,9 @@ public class LoanDecisionEngine {
         public boolean isDeclined() { return DECLINED.equals(decision); }
     }
 
+    /** @param existingDebt principal still owed on open loans plus offers being disbursed */
     public Decision decide(int creditScore, BigDecimal monthlyIncome, BigDecimal requestedAmount,
-                           int requestedTerm, boolean hasOverdueLoan) {
+                           int requestedTerm, boolean hasOverdueLoan, BigDecimal existingDebt) {
         Map.Entry<String, LoanProperties.Band> band = bandFor(creditScore);
         String bandName = band != null ? band.getKey() : null;
 
@@ -46,7 +49,10 @@ public class LoanDecisionEngine {
         if (creditScore < props.getDeclineBelowScore() || band == null) return Decision.declined(bandName, "CREDIT_SCORE_TOO_LOW");
 
         LoanProperties.Band rules = band.getValue();
-        BigDecimal amount = requestedAmount.min(rules.getMaxAmount());
+        BigDecimal available = availableCredit(rules, existingDebt);
+        if (available.compareTo(props.getMinAmount()) < 0) return Decision.declined(bandName, "CREDIT_LIMIT_REACHED");
+
+        BigDecimal amount = requestedAmount.min(available);
         int term = Math.min(requestedTerm, rules.getMaxTerm());
 
         BigDecimal installment = AmortizationCalculator.installment(amount, rules.getAnnualRate(), term);
@@ -56,6 +62,12 @@ public class LoanDecisionEngine {
         boolean unchanged = amount.compareTo(requestedAmount) == 0 && term == requestedTerm;
         return new Decision(unchanged ? APPROVED : COUNTER_OFFER, bandName, AmortizationCalculator.money(amount), term,
                 rules.getAnnualRate(), installment, null);
+    }
+
+    /** Band limit minus existing debt, never below zero. */
+    public static BigDecimal availableCredit(LoanProperties.Band rules, BigDecimal existingDebt) {
+        BigDecimal debt = existingDebt != null ? existingDebt : BigDecimal.ZERO;
+        return AmortizationCalculator.money(rules.getMaxAmount().subtract(debt).max(BigDecimal.ZERO));
     }
 
     public Map.Entry<String, LoanProperties.Band> bandFor(int creditScore) {

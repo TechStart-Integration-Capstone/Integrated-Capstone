@@ -45,6 +45,15 @@ public class LoanException extends RuntimeException {
                 "This application was declined and cannot be accepted.");
     }
 
+    public static LoanException disbursementFailed() {
+        return new LoanException(HttpStatus.UNPROCESSABLE_ENTITY, "disbursement-failed", "Disbursement Failed",
+                "We couldn’t release this loan and nothing was credited to your account. Please apply again.");
+    }
+
+    public static LoanException creditLimitReached(String detail) {
+        return new LoanException(HttpStatus.CONFLICT, "credit-limit-reached", "Credit Limit Reached", detail);
+    }
+
     public static LoanException idempotencyConflict() {
         return new LoanException(HttpStatus.CONFLICT, "idempotency-conflict", "Idempotency Conflict",
                 "This Idempotency-Key was already used for a different request.");

@@ -36,6 +36,12 @@ public final class LoanDtos {
     public record ApplicationResponse(String referenceNo, String decision, Integer creditScore, String band,
                                       Offer offer, String declineReason, String status, Instant expiresAt) {}
 
+    /** What the customer can borrow now. creditLimit is the score band's max; available = creditLimit − outstanding. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Eligibility(Integer creditScore, String band, BigDecimal creditLimit, BigDecimal outstanding,
+                              BigDecimal available, BigDecimal minAmount, Integer maxTermMonths, BigDecimal annualRate,
+                              boolean eligible, String reason) {}
+
     public record NextDue(LocalDate dueDate, BigDecimal amount) {}
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
