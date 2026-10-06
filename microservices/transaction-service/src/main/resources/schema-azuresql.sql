@@ -34,9 +34,11 @@ CREATE TABLE dbo.CUSTOMER (
     status           NVARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
     created_date     DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     -- Phase 6 Loans: hardcoded credit score + monthly income for affordability
-    credit_score     INT           NOT NULL CONSTRAINT DF_CUSTOMER_CS DEFAULT 650
-                                   CONSTRAINT CK_CUSTOMER_CS CHECK (credit_score BETWEEN 300 AND 850),
-    monthly_income   DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000
+    credit_score         INT           NOT NULL CONSTRAINT DF_CUSTOMER_CS DEFAULT 650
+                                       CONSTRAINT CK_CUSTOMER_CS CHECK (credit_score BETWEEN 300 AND 850),
+    monthly_income       DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000,
+    daily_transfer_limit DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_DAILY_LIMIT DEFAULT 50000.0000,
+    per_tx_limit         DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_PER_TX_LIMIT DEFAULT 25000.0000
 );
 GO
 
