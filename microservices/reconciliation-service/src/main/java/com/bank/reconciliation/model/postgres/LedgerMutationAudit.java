@@ -23,7 +23,19 @@ public class LedgerMutationAudit {
         this.transactionId = transactionId;
         this.amount = amount;
     }
+    public LedgerMutationAudit(Long transactionId, Long accountId, BigDecimal amount) {
+        this.transactionId = transactionId;
+        this.accountId = accountId;
+        this.amount = amount;
+    }
 
+    public Long getAuditId() { return auditId; }
     public Long getTransactionId() { return transactionId; }
+    public Long getAccountId() { return accountId; }
+    public String getOperation() { return operation; }
     public BigDecimal getAmount() { return amount; }
+    public String getCurrency() { return currency; }
+    public BigDecimal getBeforeBalance() { return beforeBalance; }
+    public BigDecimal getAfterBalance() { return afterBalance; }
+    public LocalDateTime getCreatedDate() { return createdDate; }
 }
