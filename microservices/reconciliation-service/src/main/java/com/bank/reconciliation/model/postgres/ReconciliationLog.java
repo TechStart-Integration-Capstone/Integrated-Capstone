@@ -40,17 +40,14 @@ public class ReconciliationLog {
 
     public ReconciliationLog() {}
 
-    /** Legacy 4-arg constructor for tests (accountId = null). */
-    public ReconciliationLog(Long transactionId, String azureSqlStatus, String postgresStatus, String reconStatus) {
-        this(transactionId, null, azureSqlStatus, postgresStatus, reconStatus);
+    public ReconciliationLog(Long transactionId, String oracleStatus, String postgresStatus, String reconStatus) {
+        this(transactionId, null, oracleStatus, postgresStatus, reconStatus);
     }
 
-    /** Full constructor — used by ReconciliationService.saveReconLog(). */
-    public ReconciliationLog(Long transactionId, Long accountId,
-                             String azureSqlStatus, String postgresStatus, String reconStatus) {
+    public ReconciliationLog(Long transactionId, Long accountId, String oracleStatus, String postgresStatus, String reconStatus) {
         this.transactionId  = transactionId;
-        this.accountId      = accountId;       // may be null for failed/missing transactions
-        this.azureSqlStatus = azureSqlStatus;
+        this.accountId      = accountId;
+        this.oracleStatus   = oracleStatus;
         this.postgresStatus = postgresStatus;
         this.reconStatus    = reconStatus;
         this.reconDate      = LocalDateTime.now();

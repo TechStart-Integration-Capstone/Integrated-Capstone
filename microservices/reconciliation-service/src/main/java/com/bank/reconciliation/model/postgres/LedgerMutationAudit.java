@@ -23,6 +23,11 @@ public class LedgerMutationAudit {
         this.transactionId = transactionId;
         this.amount = amount;
     }
+    public LedgerMutationAudit(Long transactionId, Long accountId, BigDecimal amount) {
+        this.transactionId = transactionId;
+        this.accountId = accountId;
+        this.amount = amount;
+    }
 
     public Long getAuditId() { return auditId; }
     public Long getTransactionId() { return transactionId; }
