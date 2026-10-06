@@ -19,25 +19,36 @@ import javax.sql.DataSource;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Primary datasource configuration for Azure SQL (SQL Server 2022).
+ *
+ * Previously named OracleDataSourceConfig — renamed in post-Phase-1 cleanup
+ * after the primary OLTP database was migrated from Oracle XE to Azure SQL.
+ *
+ * Config prefix: spring.datasource.azure-sql
+ * Bean qualifier: azureSqlDataSource / azureSqlEntityManagerFactory / azureSqlTransactionManager
+ *
+ * The "oracle" package path under model/repository is kept as-is to avoid
+ * a larger refactor — these map to Azure SQL tables, not Oracle.
+ */
 @Configuration
 @EnableTransactionManagement
 @EnableJpaRepositories(
         basePackages = "com.bank.reconciliation.repository.oracle",
-        entityManagerFactoryRef = "oracleEntityManagerFactory",
-        transactionManagerRef = "oracleTransactionManager"
+        entityManagerFactoryRef = "azureSqlEntityManagerFactory",
+        transactionManagerRef   = "azureSqlTransactionManager"
 )
-public class OracleDataSourceConfig {
+public class AzureSqlDataSourceConfig {
 
     @Primary
-    @Bean(name = "oracleDataSource")
-    @ConfigurationProperties(prefix = "spring.datasource.oracle")
-    public DataSource oracleDataSource() {
+    @Bean(name = "azureSqlDataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.azure-sql")
+    public DataSource azureSqlDataSource() {
         return DataSourceBuilder.create()
                 .type(com.zaxxer.hikari.HikariDataSource.class)
                 .build();
     }
 
-    // Manually create EntityManagerFactoryBuilder since auto-config is excluded
     @Primary
     @Bean(name = "entityManagerFactoryBuilder")
     public EntityManagerFactoryBuilder entityManagerFactoryBuilder() {
@@ -47,25 +58,27 @@ public class OracleDataSourceConfig {
     }
 
     @Primary
-    @Bean(name = "oracleEntityManagerFactory")
-    public LocalContainerEntityManagerFactoryBean oracleEntityManagerFactory(
+    @Bean(name = "azureSqlEntityManagerFactory")
+    public LocalContainerEntityManagerFactoryBean azureSqlEntityManagerFactory(
             @Qualifier("entityManagerFactoryBuilder") EntityManagerFactoryBuilder builder,
-            @Qualifier("oracleDataSource") DataSource dataSource) {
+            @Qualifier("azureSqlDataSource") DataSource dataSource) {
+
         Map<String, Object> props = new HashMap<>();
-        props.put("hibernate.dialect", "org.hibernate.dialect.SQLServerDialect");
+        props.put("hibernate.dialect",      "org.hibernate.dialect.SQLServerDialect");
         props.put("hibernate.hbm2ddl.auto", "none");
+
         return builder
                 .dataSource(dataSource)
                 .packages("com.bank.reconciliation.model.oracle")
-                .persistenceUnit("oracle")
+                .persistenceUnit("azureSql")
                 .properties(props)
                 .build();
     }
 
     @Primary
-    @Bean(name = "oracleTransactionManager")
-    public PlatformTransactionManager oracleTransactionManager(
-            @Qualifier("oracleEntityManagerFactory") EntityManagerFactory emf) {
+    @Bean(name = "azureSqlTransactionManager")
+    public PlatformTransactionManager azureSqlTransactionManager(
+            @Qualifier("azureSqlEntityManagerFactory") EntityManagerFactory emf) {
         return new JpaTransactionManager(emf);
     }
 }

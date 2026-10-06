@@ -1,15 +1,34 @@
 # AGENTS.md
 
-Read `CONTEXT.md` before writing code. After any change, add a line to `CHANGELOG.md`.
+Read `CONTEXT.md` before writing code. After any change, add an entry to `CHANGELOG.md` and update `CONTEXT.md`.
 Project owner: **dom**
+
+## Memory Bank Protocol
+- **MANDATORY:** Always update the memory bank (`memory-bank/CHANGELOG.md` and `memory-bank/CONTEXT.md`) after completing any change — whether code, database schema, CI/CD pipeline, test refactoring, or infrastructure deployment.
+- Keep `CHANGELOG.md` structured (newest on top, referencing specific microservice paths and committers).
+- Keep `CONTEXT.md` aligned with current architectural state, port mappings, active Git branches, and cloud status.
 
 ## Never break these
 - No risk score → reject (503). Money never moves without a score.
 - Cached balances are display-only. Never use them to approve a transfer.
 - Ledger change + OUTBOX row are saved in one database transaction.
 - Every transfer needs an `Idempotency-Key`.
-- Only the API Gateway exposes a port (8080).
-- No secrets in code.
+- Only the API Gateway exposes a port (8080) for external API traffic.
+- No secrets in code or repository commits.
+
+## Java 17 Temurin & Testing Rules
+- **No Reflection on Final Fields:** Never use reflection (`Field.setAccessible(true)`) to mutate `private final` fields (such as `ObjectMapper`, repository mocks, or Kafka templates). Java 17 Temurin runners throw `IllegalAccessException`. Always use constructor injection or package-private test setters.
+- **Kafka Topic Parity:** Matchers in test stubs must match actual production topic names (e.g. `remittance.events` instead of obsolete `ledger.transaction.events`).
+- **Entity Model Parity:** Ensure JPA entity models across services maintain all required getters and constructors to avoid compilation breakage when upstream branches merge.
+
+## Core Context & Localization (Philippines)
+- **Currency & Formatting:** Always use Philippine Peso (PHP / ₱) with standard comma separation (e.g., ₱1,500.00). Dates formatted as `DD/MM/YYYY` or `MMMM DD, YYYY`. Timestamps in Asia/Manila (UTC+8).
+- **Entities & Rails:** Real Filipino names (Juan Dela Cruz, Maria Santos), local mobile numbers (`+63 9XX XXX XXXX` or `09XX-XXX-XXXX`), and Philippine digital rails (InstaPay, PESONet, QR Ph, Maya, GCash).
+- **Design & UI Theme (Pink Palette):** Professional FinTech theme — Primary Rose (`#E11D48`), Deep Blush (`#DB2777`), Soft Pastel Pink (`#FDF2F8`, `#FCE7F3`), Crisp Slate (`#0F172A`, `#334155`).
+
+## Cloud & Cost Controls (Azure)
+- **Host:** Azure VM `vm-paypink` (`20.69.157.88`) in `RG-PAYPINK-WESTUS2` (FQDN: `paypink-levi-westus2.westus2.cloudapp.azure.com`).
+- **Budget:** Zero-cost / low-cost ($10 credit cap). Auto-shutdown configured for 11:00 UTC (7:00 PM PHT). Deallocate when idle.
 
 ## Risk Engine rules (as of 2026-10-05 upgrade — two-layer)
 - Architecture: `max(rule_score, ml_score * 0.90)` — both layers run independently; combined score > 0.85 = REJECT.

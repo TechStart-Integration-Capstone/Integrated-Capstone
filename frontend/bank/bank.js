@@ -26,7 +26,7 @@ const isSuccess = tx => ['SUCCESS', 'COMPLETED'].includes(tx.status);
 const friendlyType = tx => tx.type?.startsWith('EXT_') ? (tx.type.includes('PESONET') ? 'PESONet transfer' : 'InstaPay transfer') : ({CREDIT:'Money received', DEBIT:'Payment', WELCOME_GIFT:'Welcome gift', TRANSFER_OUT:'Transfer sent', TRANSFER_IN:'Transfer received', TRANSFER:'Account transfer', INSTAPAY:'InstaPay transfer', PESONET:'PESONet transfer', WITHDRAWAL:'Withdrawal', DEPOSIT:'Deposit', LOAN_DISBURSEMENT:'Loan received', LOAN_REPAYMENT:'Loan payment'}[tx.type] || String(tx.type || 'Transaction').replaceAll('_',' ').toLowerCase().replace(/^./, c => c.toUpperCase()));
 const txDate = tx => new Date(tx.date.endsWith('Z') || /[+-]\d\d:\d\d$/.test(tx.date) ? tx.date : `${tx.date}Z`);
 const shortDate = tx => txDate(tx).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
-const statusPill = status => `<span class="pill ${['ACTIVE','SUCCESS','COMPLETED'].includes(status) ? 'pill-green' : status === 'FAILED' ? 'pill-red' : 'pill-gray'}">${escapeHtml(status === 'SUCCESS' ? 'Completed' : String(status).toLowerCase().replace(/^./, c => c.toUpperCase()))}</span>`;
+const statusPill = status => `<span class="pill ${['ACTIVE','SUCCESS','COMPLETED','Posted'].includes(status) ? 'pill-green' : ['FAILED','CANCELLED','Cancelled','Failed'].includes(status) ? 'pill-red' : ['RESERVED','Reserved','Processing','PROCESSING'].includes(status) ? 'pill-wine' : 'pill-gray'}">${escapeHtml(status === 'SUCCESS' || status === 'Posted' ? 'Completed' : String(status).toLowerCase().replace(/^./, c => c.toUpperCase()))}</span>`;
 
 function toast(message, error = false) {
   const node = document.querySelector('#toast');
@@ -139,6 +139,7 @@ function renderPage() {
     return;
   }
   main.innerHTML = (state.error ? `<div class="notice" role="alert">${escapeHtml(state.error)} Showing your last loaded information.</div>` : '')
+    + (state.transfer?.cancellation ? `<div class="notice" role="status" style="margin-bottom:20px;border-left:4px solid var(--wine);background:#fcf2f7;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-radius:10px;"><div><strong style="color:var(--wine);">⏱️ Transfer Pending (30s Undo Window):</strong> <span>${escapeHtml(money(state.transfer.cancellation.amount))} is on hold. You have <strong id="cancel-banner-countdown">${state.transfer.cancellation.remainingSeconds}s</strong> remaining to cancel.</span></div><div style="display:flex;gap:8px;"><button class="btn btn-secondary" style="border-color:#bd3b52;color:#bd3b52;font-size:12px;padding:6px 12px;min-height:36px;" data-action="cancel-transfer-now" data-ref="${escapeHtml(state.transfer.cancellation.referenceNo)}">Cancel & Reverse</button><button class="btn btn-primary" style="font-size:12px;padding:6px 12px;min-height:36px;" data-action="navigate" data-page="transfer">View Transfer</button></div></div>` : '')
     + (state.page === 'overview' ? overview() : state.page === 'accounts' ? accountsPage() : state.page === 'transfer' ? transferPage() : state.page === 'loans' ? loansPage() : activityPage())
     + `<footer class="page-footer"><span>© ${new Date().getFullYear()} PayPink. A little more everyday.</span><span>${icon('lock')} ${state.updated ? `Updated ${state.updated.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}` : 'Personal banking'} · Philippine peso accounts</span></footer>`;
 }
@@ -158,7 +159,65 @@ function overview() {
         <div class="flow-row"><span class="circle-icon">${icon('down')}</span><div><small>Money in</small><strong>${balance(incoming)}</strong></div></div>
         <div class="flow-row"><span class="circle-icon">${icon('up')}</span><div><small>Money out</small><strong>${balance(outgoing)}</strong></div></div><p>Based on your latest 200 transactions.</p></section></div>
       <section aria-labelledby="accounts-title"><div class="section-heading"><h2 id="accounts-title">Your accounts <small>${accounts.length} in one place</small></h2><button class="btn btn-subtle" data-action="navigate" data-page="accounts">Manage your view ${icon('arrow')}</button></div><div class="accounts-grid">${accounts.slice(0,3).map(accountCard).join('') || empty('Your accounts will appear here.','No accounts are linked to this profile yet.','wallet')}</div></section>
+      <div class="insights-grid">${spendingPattern()}${beneficiaries()}</div>
       <section class="activity-panel" aria-labelledby="recent-title"><div class="activity-toolbar"><h2 id="recent-title">Recent activity</h2><button class="btn btn-subtle" data-action="navigate" data-page="activity">View all transactions ${icon('arrow')}</button></div>${transactionTable(state.activity.slice(0,5))}</section>`;
+}
+
+// Money out that leaves the customer: moving money between their own accounts is not spending.
+const isSpending = tx => isSuccess(tx) && tx.operation === 'DEBIT'
+  && !(['TRANSFER_OUT','TRANSFER'].includes(tx.type) && tx.counterpartyName && tx.counterpartyName === state.profile.fullName);
+const spendingCategory = tx => tx.type?.startsWith('EXT_') || ['INSTAPAY','PESONET'].includes(tx.type) ? 'InstaPay & PESONet'
+  : ['TRANSFER_OUT','TRANSFER','P2P_REMITTANCE'].includes(tx.type) ? 'Transfers to others'
+  : tx.type === 'LOAN_REPAYMENT' ? 'Loan payments' : tx.type === 'WITHDRAWAL' ? 'Withdrawals' : 'Payments';
+
+function spendingPattern() {
+  const now = new Date();
+  const months = Array.from({length:6}, (_, i) => new Date(now.getFullYear(), now.getMonth() - 5 + i, 1));
+  const key = d => `${d.getFullYear()}-${d.getMonth()}`;
+  const totals = new Map(months.map(m => [key(m), 0]));
+  const categories = new Map();
+  for (const tx of state.activity.filter(isSpending)) {
+    const date = txDate(tx), k = key(date);
+    if (totals.has(k)) totals.set(k, totals.get(k) + Number(tx.amount));
+    if (k === key(now)) categories.set(spendingCategory(tx), (categories.get(spendingCategory(tx)) || 0) + Number(tx.amount));
+  }
+  const values = months.map(m => totals.get(key(m)));
+  const peak = Math.max(...values, 1);
+  const thisMonth = values[5], lastMonth = values[4];
+  const change = lastMonth > 0 ? Math.round((thisMonth - lastMonth) / lastMonth * 100) : null;
+  const average = values.slice(0,5).reduce((a,b) => a + b, 0) / 5;
+  const monthTotal = [...categories.values()].reduce((a,b) => a + b, 0);
+  const bars = months.map((m, i) => `<div class="spend-bar${i === 5 ? ' current' : ''}"><span class="spend-bar-track"><span class="spend-bar-fill" style="height:${Math.max(values[i] / peak * 100, values[i] > 0 ? 4 : 0).toFixed(1)}%"></span></span><small>${escapeHtml(m.toLocaleDateString('en-PH',{month:'short'}))}</small><span class="sr-only">${escapeHtml(money(values[i]))}</span></div>`).join('');
+  const breakdown = [...categories.entries()].sort((a,b) => b[1] - a[1]).map(([name, amount]) => `<li><span>${escapeHtml(name)}</span><span class="spend-share"><span style="width:${(amount / monthTotal * 100).toFixed(1)}%"></span></span><strong>${balance(amount)}</strong></li>`).join('');
+  return `<section class="insight-card" aria-labelledby="spending-title"><div class="section-heading"><h2 id="spending-title">Spending pattern <small>Last 6 months</small></h2></div>
+    <div class="spend-summary"><div><small>Spent this month</small><strong>${balance(thisMonth)}</strong></div>
+      <div><small>vs last month</small><strong class="${change == null ? '' : change > 0 ? 'spend-up' : 'spend-down'}">${change == null ? '—' : `${change > 0 ? '▲' : change < 0 ? '▼' : ''} ${Math.abs(change)}%`}</strong></div>
+      <div><small>5-month average</small><strong>${balance(average)}</strong></div></div>
+    <div class="spend-chart" role="img" aria-label="Money spent per month: ${escapeHtml(months.map((m, i) => `${m.toLocaleDateString('en-PH',{month:'long'})} ${money(values[i])}`).join(', '))}">${bars}</div>
+    ${breakdown ? `<h3 class="spend-subtitle">Where it went this month</h3><ul class="spend-breakdown">${breakdown}</ul>` : '<p class="muted spend-note">No spending yet this month.</p>'}
+    <p class="spend-note">Transfers between your own accounts aren’t counted. Based on your latest 200 transactions.</p></section>`;
+}
+
+function beneficiaries() {
+  const directory = state.recipients || {favorites:[],recent:[]};
+  const sent = new Map();
+  for (const tx of state.activity) {
+    if (!isSuccess(tx) || tx.operation !== 'DEBIT' || !tx.counterpartyAccountNumber) continue;
+    const entry = sent.get(tx.counterpartyAccountNumber) || {count:0, total:0, last:null};
+    entry.count++; entry.total += Number(tx.amount);
+    if (!entry.last || txDate(tx) > entry.last) entry.last = txDate(tx);
+    sent.set(tx.counterpartyAccountNumber, entry);
+  }
+  const favoriteNumbers = new Set(directory.favorites.map(r => r.accountNumber));
+  const row = recipient => {
+    const stats = sent.get(recipient.accountNumber);
+    return `<li class="beneficiary"><span class="avatar">${escapeHtml(recipient.fullName.slice(0,1))}</span><span class="beneficiary-name"><strong>${escapeHtml(recipient.fullName)}${recipient.favorite ? ` <span class="beneficiary-star" aria-label="Favorite">${icon('star-filled')}</span>` : ''}</strong><small>${escapeHtml(maskedNumber(recipient.accountNumber))}${stats ? ` · ${stats.count} ${stats.count === 1 ? 'transfer' : 'transfers'} · ${balance(stats.total)} sent` : ''}</small></span><button class="btn btn-secondary" type="button" data-action="send-to-recipient" data-number="${escapeHtml(recipient.accountNumber)}" aria-label="Send money to ${escapeHtml(recipient.fullName)}">Send</button></li>`;
+  };
+  const recent = directory.recent.filter(r => !favoriteNumbers.has(r.accountNumber)).slice(0, 4);
+  const body = directory.error ? `<p class="form-error">${escapeHtml(directory.error)} Use Refresh to try again.</p>`
+    : `<h3 class="spend-subtitle">Favorites</h3>${directory.favorites.length ? `<ul class="beneficiary-list">${directory.favorites.map(row).join('')}</ul>` : '<p class="muted spend-note">Tap the star when you send money to save someone here.</p>'}
+       <h3 class="spend-subtitle">Recently paid</h3>${recent.length ? `<ul class="beneficiary-list">${recent.map(row).join('')}</ul>` : '<p class="muted spend-note">People you send money to will appear here.</p>'}`;
+  return `<section class="insight-card" aria-labelledby="beneficiaries-title"><div class="section-heading"><h2 id="beneficiaries-title">Your people <small>${directory.favorites.length} ${directory.favorites.length === 1 ? 'favorite' : 'favorites'}</small></h2><button class="btn btn-subtle" data-action="navigate" data-page="transfer">Transfer money ${icon('arrow')}</button></div>${body}</section>`;
 }
 
 function accountCard(account) {
@@ -326,7 +385,13 @@ document.addEventListener('click', async event => {
     case 'transfer-mode': state.transfer.mode = button.dataset.mode; state.transfer.error = ''; renderPage(); if (state.transfer.mode === 'other' && state.transfer.number) await lookupRecipient(); break;
     case 'confirm-transfer': await sendTransfer(); break;
     case 'retry-transfer': await sendTransfer(); break;
-    case 'new-transfer': state.transfer = null; state.page = 'transfer'; renderPage(); break;
+    case 'cancel-transfer-now': await cancelActiveTransfer(button.dataset.ref); break;
+    case 'new-transfer': if (cancelCountdownInterval) clearInterval(cancelCountdownInterval); state.transfer = null; state.page = 'transfer'; renderPage(); break;
+    case 'send-to-recipient':
+      if (state.transfer?.cancellation) { state.page = 'transfer'; renderPage(); break; }
+      state.transfer = null; state.page = 'transfer'; renderPage(); // initialises the transfer form
+      Object.assign(state.transfer, {mode:'other', number:button.dataset.number, recipient:null, error:''});
+      renderPage(); document.querySelector('#main').focus({preventScroll:true}); window.scrollTo(0,0); await lookupRecipient(); break;
     case 'choose-recipient': state.transfer.number = button.dataset.number; state.transfer.recipient = null; renderPage(); await lookupRecipient(); break;
     case 'favorite-recipient': await toggleFavorite(button.dataset.number,button.dataset.saved === 'true',button); break;
     case 'save-receipt': saveReceipt(state.transfer?.receipt); break;
@@ -414,6 +479,9 @@ function transferPage() {
   }
   const form = state.transfer;
   if (form.receipt) return form.receipt.mock ? mockReceipt(form.receipt) : transferReceipt(form.receipt);
+  if (form.cancellation) return transferCancellationPendingView(form.cancellation);
+  if (form.cancelled) return transferCancelledView(form.cancelled);
+  if (form.reversed) return transferReversedView(form.reversed);
   if (form.mode === 'external') return externalTransferPage(accounts);
   const source = accounts.find(a => String(a.accountId) === form.source);
   const destinations = accounts.filter(a => a.accountId !== source?.accountId);
@@ -486,7 +554,8 @@ async function sendTransfer() {
       sourceAccountId: String(request.sourceAccountId),
       targetAccountId: String(request.destinationAccountNumber),
       amount: parseFloat(request.amount),
-      currency: 'PHP'
+      currency: 'PHP',
+      cancelWindowSeconds: 30
     };
 
     const res = await api('/api/v1/remittance/transfer', {
@@ -494,11 +563,37 @@ async function sendTransfer() {
       body: payload,
       headers: {
         'Idempotency-Key': idempKey,
-        'X-Correlation-ID': 'corr-' + Date.now()
+        'X-Correlation-ID': 'corr-' + Date.now(),
+        'X-Auth-Customer-Id': String(state.profile?.customerId || '')
       }
     });
 
     if (generation !== state.generation || !state.session) return;
+
+    if (res.status === 'Reserved' && (res.canCancel || res.cancelWindowSeconds > 0)) {
+      delete state.session.pendingTransfer;
+      saveSession();
+
+      const cancellation = {
+        referenceNo: res.referenceNo,
+        amount: res.amount || request.amount,
+        currency: 'PHP',
+        sourceAccountId: request.sourceAccountId,
+        destinationAccountNumber: request.destinationAccountNumber,
+        recipientName: form.recipient ? form.recipient.fullName : (form.mode === 'own' ? state.profile.fullName : 'PayPink customer'),
+        cancelUntil: res.cancelUntil ? new Date(res.cancelUntil) : new Date(Date.now() + 30000),
+        remainingSeconds: res.cancelWindowSeconds || 30
+      };
+
+      form.cancellation = cancellation;
+      form.review = null;
+      await refresh();
+      renderPage();
+      startCancellationCountdown(cancellation, request, form);
+      toast('Transfer reserved. You have 30s to cancel & reverse if needed.');
+      return;
+    }
+
     delete state.session.pendingTransfer; saveSession();
 
     const receipt = {
@@ -551,6 +646,34 @@ async function sendTransfer() {
   } catch (error) {
     if (generation !== state.generation || !state.session) return;
     form.error = error.message;
+    if (error.message && (error.message.includes('rejected') || error.message.includes('revers') || error.message.includes('T24') || error.message.includes('Core banking'))) {
+      if (typeof showTransferPopup === 'function') {
+        showTransferPopup({
+          id: 'reversal-' + Date.now(),
+          title: 'Transfer Failed & Reversed',
+          message: error.message + '. Any held funds were immediately reversed to your account.',
+          tx: {
+            type: 'TRANSFER_OUT',
+            status: 'FAILED',
+            amount: request.amount,
+            currency: 'PHP',
+            accountNumber: '',
+            counterpartyAccountNumber: request.destinationAccountNumber,
+            reference: 'REJECT-' + Date.now(),
+            date: new Date().toISOString()
+          }
+        });
+      }
+      form.reversed = {
+        reference: 'REJECT-' + Date.now(),
+        amount: request.amount,
+        recipientName: form.recipient ? form.recipient.fullName : (form.mode === 'own' ? state.profile.fullName : 'PayPink customer'),
+        destinationAccountNumber: request.destinationAccountNumber,
+        reason: error.message,
+        type: 'Core banking instant rejection (0 retries)'
+      };
+      await refresh();
+    }
     // Preserve the exact request and key after timeouts/server failures: a retry checks the same transfer.
     if ([400,403,404,409,422,429].includes(error.status)) { delete state.session.pendingTransfer; saveSession(); form.review = null; }
   } finally {
@@ -563,6 +686,302 @@ function transferReceipt(receipt) {
   const riskItem = (receipt.riskScore !== undefined && receipt.riskScore !== null) ? detail('Risk evaluation', `Score ${escapeHtml(receipt.riskScore)} (${escapeHtml(receipt.riskDecision || 'APPROVED')})`) : '';
   return heading('All sent.', 'Your transfer is complete. Both account balances have been updated.')
     + `<section class="transfer-receipt"><span class="receipt-check">${icon('check')}</span><h2>Transfer successful</h2><div class="receipt-amount">${escapeHtml(money(receipt.amount,receipt.currency))}</div><p class="receipt-recipient">${escapeHtml(receipt.recipientName || 'PayPink customer')}</p><p class="muted">${escapeHtml(maskedNumber(receipt.destinationAccountNumber))}</p><dl class="detail-list">${detail('Reference number',escapeHtml(receipt.reference))}${ftItem}${riskItem}${detail('Status',statusPill(receipt.status))}${detail('Transfer fee','₱0.00')}${detail('Date & time',escapeHtml(txDate({date:receipt.date}).toLocaleString('en-PH')))}</dl><div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
+}
+
+let cancelCountdownInterval = null;
+
+function startCancellationCountdown(cancellation, request, form) {
+  clearInterval(cancelCountdownInterval);
+  cancelCountdownInterval = setInterval(async () => {
+    if (!state.transfer || !state.transfer.cancellation) {
+      clearInterval(cancelCountdownInterval);
+      return;
+    }
+    state.transfer.cancellation.remainingSeconds--;
+    const rem = state.transfer.cancellation.remainingSeconds;
+
+    const countdownEl = document.querySelector('#cancel-countdown');
+    const bannerCountdownEl = document.querySelector('#cancel-banner-countdown');
+    const progressEl = document.querySelector('#cancel-progress-bar');
+    if (countdownEl) countdownEl.textContent = `${Math.max(0, rem)}s`;
+    if (bannerCountdownEl) bannerCountdownEl.textContent = `${Math.max(0, rem)}s`;
+    if (progressEl) progressEl.style.width = `${Math.max(0, (rem / 30) * 100)}%`;
+
+    if (rem <= 0) {
+      clearInterval(cancelCountdownInterval);
+      await onCancellationWindowClosed(cancellation, request, form);
+    }
+  }, 1000);
+}
+
+async function onCancellationWindowClosed(cancellation, request, form) {
+  const countdownEl = document.querySelector('#cancel-countdown');
+  if (countdownEl) countdownEl.textContent = 'Submitting to Core Banking…';
+  const bannerCountdownEl = document.querySelector('#cancel-banner-countdown');
+  if (bannerCountdownEl) bannerCountdownEl.textContent = 'Submitting…';
+
+  const ref = cancellation.referenceNo;
+  let attempts = 0;
+  const maxAttempts = 12;
+
+  const pollInterval = setInterval(async () => {
+    attempts++;
+    try {
+      const statusRes = await api(`/api/v1/remittance/${encodeURIComponent(ref)}/status`, {
+        headers: { 'X-Auth-Customer-Id': String(state.profile?.customerId || '') }
+      });
+
+      const s = statusRes.status;
+      if (s === 'Posted' || s === 'SUCCESS' || s === 'COMPLETED') {
+        clearInterval(pollInterval);
+        if (state.transfer) state.transfer.cancellation = null;
+        const receipt = {
+          reference: statusRes.referenceNo || ref,
+          ftReference: statusRes.ftReference,
+          status: 'SUCCESS',
+          amount: statusRes.amount || cancellation.amount,
+          currency: 'PHP',
+          recipientName: cancellation.recipientName,
+          destinationAccountNumber: cancellation.destinationAccountNumber,
+          date: new Date().toISOString(),
+          riskScore: statusRes.riskScore,
+          riskDecision: statusRes.riskDecision,
+          reason: statusRes.reason
+        };
+        form.receipt = receipt;
+        form.review = null;
+        await refresh();
+        toast('Transfer complete. Screened by Risk Engine & posted via T24 Core.');
+        renderPage();
+      } else if (s === 'Cancelled') {
+        clearInterval(pollInterval);
+        if (state.transfer) {
+          state.transfer.cancellation = null;
+          form.cancelled = {
+            reference: ref,
+            amount: cancellation.amount,
+            recipientName: cancellation.recipientName,
+            destinationAccountNumber: cancellation.destinationAccountNumber
+          };
+        }
+        await refresh();
+        renderPage();
+      } else if (s === 'Failed' || s === 'REJECTED') {
+        clearInterval(pollInterval);
+        if (state.transfer) {
+          state.transfer.cancellation = null;
+          form.reversed = {
+            reference: ref,
+            amount: cancellation.amount,
+            recipientName: cancellation.recipientName,
+            destinationAccountNumber: cancellation.destinationAccountNumber,
+            reason: statusRes.reason || 'Core banking rejected transfer. Held funds have been released back to your available balance.',
+            type: statusRes.internalStatus === 'AUTO_REVERSED' ? 'Auto-reversed after 3 retries' : 'Instant T24 core reversal'
+          };
+        }
+        await refresh();
+        toast('Transfer failed and reversed. Held funds restored.', true);
+        if (typeof showTransferPopup === 'function') {
+          showTransferPopup({
+            id: 'reversed-' + Date.now(),
+            title: 'Transfer Failed & Reversed',
+            message: `Your ${money(cancellation.amount)} transfer to ${cancellation.recipientName} failed (${statusRes.reason || 'Bank rejection'}). Held funds were returned to your balance.`,
+            tx: {
+              type: 'TRANSFER_OUT',
+              status: 'FAILED',
+              amount: cancellation.amount,
+              currency: 'PHP',
+              accountNumber: '',
+              counterpartyAccountNumber: cancellation.destinationAccountNumber,
+              reference: ref,
+              date: new Date().toISOString()
+            }
+          });
+        }
+        renderPage();
+      } else if (attempts >= maxAttempts) {
+        clearInterval(pollInterval);
+        if (state.transfer) {
+          state.transfer.cancellation = null;
+          form.receipt = {
+            reference: ref,
+            ftReference: statusRes.ftReference,
+            status: 'Processing',
+            amount: cancellation.amount,
+            currency: 'PHP',
+            recipientName: cancellation.recipientName,
+            destinationAccountNumber: cancellation.destinationAccountNumber,
+            date: new Date().toISOString(),
+            reason: 'Core banking is processing your transfer. Retries and status updates are managed by the background saga worker.'
+          };
+        }
+        await refresh();
+        toast('Transfer is processing with Core Banking.');
+        renderPage();
+      }
+    } catch (err) {
+      console.warn('Status poll warning:', err);
+      if (attempts >= maxAttempts) {
+        clearInterval(pollInterval);
+        if (state.transfer) state.transfer.cancellation = null;
+        await refresh();
+        renderPage();
+      }
+    }
+  }, 2500);
+}
+
+async function cancelActiveTransfer(referenceNo) {
+  if (!referenceNo) return;
+  clearInterval(cancelCountdownInterval);
+  try {
+    const res = await api(`/api/v1/remittance/${encodeURIComponent(referenceNo)}/cancel`, {
+      method: 'POST',
+      headers: {
+        'X-Auth-Customer-Id': String(state.profile?.customerId || '')
+      }
+    });
+
+    const c = state.transfer?.cancellation;
+    const amount = c ? c.amount : 0;
+    const recipientName = c ? c.recipientName : 'PayPink customer';
+    const destAcc = c ? c.destinationAccountNumber : '';
+
+    if (state.transfer) {
+      state.transfer.cancellation = null;
+      state.transfer.cancelled = {
+        reference: referenceNo,
+        amount: amount,
+        recipientName: recipientName,
+        destinationAccountNumber: destAcc
+      };
+    }
+
+    delete state.session.pendingTransfer;
+    saveSession();
+
+    await refresh();
+    toast('Transfer cancelled. Held funds released back to your available balance.');
+
+    if (typeof showTransferPopup === 'function') {
+      showTransferPopup({
+        id: 'cancelled-' + Date.now(),
+        title: 'Transfer Cancelled',
+        message: `Transfer of ${money(amount)} was cancelled. Held funds were released back to your available balance.`,
+        tx: {
+          type: 'TRANSFER_OUT',
+          status: 'CANCELLED',
+          amount: amount,
+          currency: 'PHP',
+          accountNumber: '',
+          counterpartyAccountNumber: destAcc,
+          reference: referenceNo,
+          date: new Date().toISOString()
+        }
+      });
+    }
+    renderPage();
+  } catch (err) {
+    toast(err.message || 'Could not cancel transfer.', true);
+    if (state.transfer?.cancellation) {
+      state.transfer.cancellation.remainingSeconds = 0;
+      renderPage();
+    }
+  }
+}
+
+function transferCancellationPendingView(cancellation) {
+  const pct = Math.max(0, Math.min(100, (cancellation.remainingSeconds / 30) * 100));
+  return heading('Hold active. Cancellation window open.', 'You have 30 seconds to cancel this transfer and restore your held funds immediately.')
+    + `<section class="transfer-receipt" style="max-width:540px;">
+        <div style="display:inline-grid;place-content:center;width:64px;height:64px;background:#fcf0f5;border:2px solid #ebccd9;border-radius:50%;margin:0 auto 16px;color:var(--wine);font-size:26px;">
+          ⏱️
+        </div>
+        <h2>Pending Transfer — 30s Undo Window</h2>
+        <div class="receipt-amount" style="margin-bottom:6px;">${escapeHtml(money(cancellation.amount))}</div>
+        <p class="receipt-recipient">To ${escapeHtml(cancellation.recipientName || 'PayPink customer')}</p>
+        <p class="muted" style="margin-bottom:20px;">${escapeHtml(maskedNumber(cancellation.destinationAccountNumber))}</p>
+        
+        <div style="background:#faf2f6;border:1px solid #ebd3e0;border-radius:12px;padding:18px;margin-bottom:24px;text-align:left;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <strong style="color:var(--wine);font-size:13px;">Time to cancel & reverse:</strong>
+            <strong id="cancel-countdown" style="font-size:18px;color:var(--wine);font-family:var(--display);">${cancellation.remainingSeconds}s</strong>
+          </div>
+          <div style="background:#eedae5;height:8px;border-radius:4px;overflow:hidden;margin-bottom:12px;">
+            <div id="cancel-progress-bar" style="background:var(--wine);height:100%;width:${pct}%;transition:width 1s linear;"></div>
+          </div>
+          <p style="font-size:11px;color:#7e6975;margin:0;line-height:1.5;">
+            Funds are temporarily held. If you don't cancel within 30 seconds, this transfer will be submitted to T24 Core Banking.
+          </p>
+        </div>
+
+        <dl class="detail-list" style="margin-bottom:24px;">
+          ${detail('Reference', escapeHtml(cancellation.referenceNo))}
+          ${detail('Status', '<span class="pill pill-wine">Reserved (Held)</span>')}
+          ${detail('Client cancellation', 'Instant release within 30s')}
+        </dl>
+
+        <div class="dialog-actions" style="display:flex;gap:12px;justify-content:center;">
+          <button class="btn btn-secondary" style="border-color:#bd3b52;color:#bd3b52;font-weight:700;" type="button" data-action="cancel-transfer-now" data-ref="${escapeHtml(cancellation.referenceNo)}">
+            Cancel & Reverse Transfer
+          </button>
+        </div>
+      </section>`;
+}
+
+function transferCancelledView(cancelled) {
+  return heading('Transfer cancelled.', 'Your funds were released back to your available balance.')
+    + `<section class="transfer-receipt" style="max-width:540px;">
+        <span class="receipt-check" style="background:#faeded;color:#bd3b52;font-size:24px;line-height:60px;">✕</span>
+        <h2>Transfer Cancelled by User</h2>
+        <div class="receipt-amount" style="color:#bd3b52;margin-bottom:6px;">${escapeHtml(money(cancelled.amount))}</div>
+        <p class="receipt-recipient">To ${escapeHtml(cancelled.recipientName || 'PayPink customer')}</p>
+        <p class="muted" style="margin-bottom:20px;">${escapeHtml(maskedNumber(cancelled.destinationAccountNumber))}</p>
+        
+        <div class="notice" role="status" style="margin-bottom:24px;background:#fdf7f7;border:1px solid #fae1e1;color:#6b2828;">
+          <strong>Funds restored immediately.</strong><br>
+          The hold of ${escapeHtml(money(cancelled.amount))} was released back into your available balance within the 30-second cancellation window.
+        </div>
+
+        <dl class="detail-list" style="margin-bottom:24px;">
+          ${detail('Reference', escapeHtml(cancelled.reference))}
+          ${detail('Status', '<span class="pill pill-red">Cancelled</span>')}
+          ${detail('Reversal result', 'Held funds fully returned')}
+          ${detail('Date & time', escapeHtml(new Date().toLocaleString('en-PH')))}
+        </dl>
+
+        <div class="dialog-actions">
+          <button class="btn btn-primary" data-action="new-transfer">Make another transfer</button>
+        </div>
+      </section>`;
+}
+
+function transferReversedView(reversed) {
+  return heading('Transfer failed & reversed.', 'Core banking was unable to complete the transfer. Funds were reversed to your account.')
+    + `<section class="transfer-receipt" style="max-width:540px;">
+        <span class="receipt-check" style="background:#faeded;color:#bd3b52;font-size:24px;line-height:60px;">✕</span>
+        <h2>Bank Reversal Executed</h2>
+        <div class="receipt-amount" style="color:#bd3b52;margin-bottom:6px;">${escapeHtml(money(reversed.amount))}</div>
+        <p class="receipt-recipient">To ${escapeHtml(reversed.recipientName || 'PayPink customer')}</p>
+        <p class="muted" style="margin-bottom:20px;">${escapeHtml(maskedNumber(reversed.destinationAccountNumber))}</p>
+
+        <div class="notice" role="status" style="margin-bottom:24px;background:#fdf7f7;border:1px solid #fae1e1;color:#6b2828;">
+          <strong>Automatic Reversal:</strong><br>
+          ${escapeHtml(reversed.reason || 'Core banking rejected transfer. Held funds have been released back to your available balance.')}
+        </div>
+
+        <dl class="detail-list" style="margin-bottom:24px;">
+          ${detail('Reference', escapeHtml(reversed.reference))}
+          ${detail('Status', '<span class="pill pill-red">Failed & Reversed</span>')}
+          ${detail('Reversal type', escapeHtml(reversed.type || 'Bank-side automatic reversal'))}
+          ${detail('Account action', 'Available balance restored')}
+          ${detail('Date & time', escapeHtml(new Date().toLocaleString('en-PH')))}
+        </dl>
+
+        <div class="dialog-actions">
+          <button class="btn btn-primary" data-action="new-transfer">Make another transfer</button>
+        </div>
+      </section>`;
 }
 
 function recipientPicker() {

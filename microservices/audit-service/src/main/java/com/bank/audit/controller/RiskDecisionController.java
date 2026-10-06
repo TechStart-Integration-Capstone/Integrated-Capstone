@@ -29,7 +29,7 @@ import java.util.Map;
  *  GET /risk-decisions/stats         — approval/rejection counts for last 24 h / 7 d
  */
 @RestController
-@RequestMapping("/risk-decisions")
+@RequestMapping({"/risk-decisions", "/audit/risk-decisions"})
 public class RiskDecisionController {
 
     private static final int DEFAULT_PAGE_SIZE = 50;

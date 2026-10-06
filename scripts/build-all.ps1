@@ -12,7 +12,8 @@ $services = @(
     "reconciliation-service",
     "outbox-publisher",
     "analytics-service",
-    "t24-adapter"
+    "t24-adapter",
+    "loan-service"
 )
 
 $rootDir = Split-Path -Parent $PSScriptRoot

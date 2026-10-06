@@ -224,6 +224,14 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - IDEMPOTENCY_TTL_HOURS=24
+      - INTEREST_EOD_ENABLED=${INTEREST_EOD_ENABLED:-false}
+      - INTEREST_START_DATE=${INTEREST_START_DATE:-}
+      - INTEREST_ZONE=${INTEREST_ZONE:-Asia/Manila}
+      - INTEREST_EOD_CRON=${INTEREST_EOD_CRON:-59 59 23 * * *}
+      - INTEREST_RECOVERY_CRON=${INTEREST_RECOVERY_CRON:-0 15 * * * *}
+      - INTEREST_POSTGRES_URL=${INTEREST_POSTGRES_URL:-jdbc:postgresql://postgresql:5432/ledger_audit_db}
+      - INTEREST_POSTGRES_USERNAME=${INTEREST_POSTGRES_USERNAME:-}
+      - INTEREST_POSTGRES_PASSWORD=${INTEREST_POSTGRES_PASSWORD:-}
     volumes:
       - ./../microservices/transaction-service/target/transaction-service.jar:/app/app.jar
     networks:
@@ -292,7 +300,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    # No host port — internal only, accessed via api-gateway:8080
+    ports:
+      - "8086:8086"
     environment:
       - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}

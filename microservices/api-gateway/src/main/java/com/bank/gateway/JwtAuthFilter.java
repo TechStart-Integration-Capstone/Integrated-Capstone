@@ -37,7 +37,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
     // Paths that additionally require ROLE_ADMIN in the JWT
     private static final List<String> ADMIN_PATHS = List.of(
-            "/api/v1/loans/eod"
+            "/api/v1/loans/eod",
+            "/api/v1/interest/eod"
     );
 
     public JwtAuthFilter(

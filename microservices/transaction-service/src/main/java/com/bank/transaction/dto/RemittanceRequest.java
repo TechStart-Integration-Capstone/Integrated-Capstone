@@ -27,6 +27,15 @@ public class RemittanceRequest {
     @JsonIgnore
     private String transactionType = TYPE_TRANSFER;
 
+    private Boolean skipClientWindow = false;
+    private Integer cancelWindowSeconds;
+
+    public Boolean getSkipClientWindow() { return skipClientWindow; }
+    public void setSkipClientWindow(Boolean skipClientWindow) { this.skipClientWindow = skipClientWindow; }
+
+    public Integer getCancelWindowSeconds() { return cancelWindowSeconds; }
+    public void setCancelWindowSeconds(Integer cancelWindowSeconds) { this.cancelWindowSeconds = cancelWindowSeconds; }
+
     public RemittanceRequest() {}
 
     public RemittanceRequest(String sourceAccountId, String targetAccountId, BigDecimal amount, String currency) {

@@ -11,7 +11,7 @@ public class LedgerMutationAudit {
     @Column(name = "audit_id") private Long auditId;
     @Column(name = "transaction_id", nullable = false) private Long transactionId;
     @Column(name = "account_id", nullable = false) private Long accountId;
-    @Column(name = "operation", nullable = false, length = 20) private String operation;
+    @Column(name = "entry_type", nullable = false, length = 20) private String operation;
     @Column(name = "amount", nullable = false, precision = 18, scale = 4) private BigDecimal amount;
     @Column(name = "currency", nullable = false, length = 10) private String currency = "PHP";
     @Column(name = "before_balance", nullable = false, precision = 18, scale = 4) private BigDecimal beforeBalance;

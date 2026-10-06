@@ -50,6 +50,7 @@ class LoanFlowsTest {
     private LoanRepaymentService repaymentService;
     private LoanEodService eodService;
     private LoanQueryService queryService;
+    private LoanCreditLimitService creditLimitService;
 
     @BeforeEach
     void setUp() {
@@ -68,6 +69,12 @@ class LoanFlowsTest {
                 .filter(a -> a.getIdempotencyKey().equals(inv.getArgument(0))).findFirst());
         when(applicationRepo.lockByReferenceNo(anyString())).thenAnswer(inv -> applications.values().stream()
                 .filter(a -> a.getReferenceNo().equals(inv.getArgument(0))).findFirst());
+        when(applicationRepo.findDisbursementsToRecover()).thenAnswer(inv -> applications.values().stream()
+                .filter(a -> a.getStatus().equals("DISBURSING")).toList());
+        when(applicationRepo.sumDisbursingAmount(anyLong(), anyLong())).thenAnswer(inv -> applications.values().stream()
+                .filter(a -> a.getCustomerId().equals(inv.getArgument(0)) && a.getStatus().equals("DISBURSING")
+                        && !a.getApplicationId().equals(inv.getArgument(1)))
+                .map(LoanApplication::getOfferedAmount).reduce(BigDecimal.ZERO, BigDecimal::add));
 
         LoanRepository loanRepo = mock(LoanRepository.class);
         when(loanRepo.save(any())).thenAnswer(inv -> {
@@ -82,6 +89,11 @@ class LoanFlowsTest {
                 .filter(l -> l.getCustomerId().equals(inv.getArgument(0))).toList());
         when(loanRepo.existsByCustomerIdAndStatus(anyLong(), anyString())).thenAnswer(inv -> loans.values().stream()
                 .anyMatch(l -> l.getCustomerId().equals(inv.getArgument(0)) && l.getStatus().equals(inv.getArgument(1))));
+        when(loanRepo.findByApplicationId(anyLong())).thenAnswer(inv -> loans.values().stream()
+                .filter(l -> l.getApplicationId().equals(inv.getArgument(0))).findFirst());
+        when(loanRepo.sumOpenPrincipal(anyLong())).thenAnswer(inv -> loans.values().stream()
+                .filter(l -> l.getCustomerId().equals(inv.getArgument(0)) && !l.getStatus().equals("CLOSED"))
+                .map(Loan::getOutstandingPrincipal).reduce(BigDecimal.ZERO, BigDecimal::add));
 
         LoanScheduleRepository scheduleRepo = mock(LoanScheduleRepository.class);
         when(scheduleRepo.saveAll(anyList())).thenAnswer(inv -> {
@@ -120,9 +132,11 @@ class LoanFlowsTest {
         LoanEvents events = new LoanEvents(outboxRepo, new ObjectMapper(), clock);
         LoanDecisionEngine engine = new LoanDecisionEngine(props);
         queryService = new LoanQueryService(loanRepo, scheduleRepo, reader);
-        applicationService = new LoanApplicationService(applicationRepo, loanRepo, reader, engine, events, props, tx);
+        creditLimitService = new LoanCreditLimitService(loanRepo, applicationRepo, reader, engine, props);
+        applicationService = new LoanApplicationService(applicationRepo, loanRepo, reader, engine, creditLimitService,
+                events, props, tx);
         disbursementService = new LoanDisbursementService(applicationRepo, loanRepo, scheduleRepo, reader, orchestrator,
-                events, props, queryService, tx);
+                creditLimitService, events, props, queryService, tx);
         repaymentService = new LoanRepaymentService(loanRepo, scheduleRepo, repaymentRepo, reader, orchestrator,
                 events, props, queryService, tx);
         eodService = new LoanEodService(loanRepo, scheduleRepo, events, props, tx);
@@ -230,7 +244,7 @@ class LoanFlowsTest {
     }
 
     @Test
-    @DisplayName("TC-LN-03: core down → 503, no LOAN saved; retry after restart succeeds once")
+    @DisplayName("TC-LN-03: core down → 503, no LOAN saved, offer stays DISBURSING; retry after restart succeeds once")
     void tcLn03_coreDownThenRetry() {
         ApplicationResponse app = applyNormal("apply-key-1");
         stubDisbursement(new TransferResult("PENDING_CORE", null, null, "Orchestrator timeout or unavailable"));
@@ -242,7 +256,7 @@ class LoanFlowsTest {
                 });
         assertThat(loans).isEmpty();
         assertThat(schedule).isEmpty();
-        assertThat(applications.get(1L).getStatus()).isEqualTo("DECIDED");
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DISBURSING");
 
         stubDisbursement(new TransferResult("POSTED", 777L, "FT26278RETRY", null));
         disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr");
@@ -270,6 +284,106 @@ class LoanFlowsTest {
         assertThatThrownBy(() -> disbursementService.accept(OTHER_CUSTOMER, stale.referenceNo(), "a3", null))
                 .isInstanceOfSatisfying(LoanException.class, e -> assertThat(e.getType()).isEqualTo("loan-not-found"));
         verifyNoInteractions(orchestrator);
+    }
+
+    @Test
+    @DisplayName("Disbursement still pending → recovery job records LOAN + schedule once the transfer posts")
+    void pendingDisbursement_recoveredByJob() {
+        ApplicationResponse app = applyNormal("apply-key-1");
+        stubDisbursement(new TransferResult("PENDING_CORE", null, null, "Orchestrator timeout or unavailable"));
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
+                .isInstanceOfSatisfying(LoanException.class, e -> assertThat(e.getType()).isEqualTo("core-unavailable"));
+
+        // The orchestrator finished the transfer after the client gave up; a retry with the same key replays it.
+        stubDisbursement(new TransferResult("POSTED", 777L, "FT26278LATE", null));
+        disbursementService.recoverDisbursements();
+
+        assertThat(loans.values()).singleElement().satisfies(l -> {
+            assertThat(l.getDisbursementTxnId()).isEqualTo(777L);
+            assertThat(l.getFtReference()).isEqualTo("FT26278LATE");
+        });
+        assertThat(schedule).hasSize(36);
+        assertThat(applications.get(1L).getStatus()).isEqualTo("ACCEPTED");
+        assertThat(outboxTypes()).containsExactly("loan.application.decided", "loan.disbursed");
+        verify(orchestrator, times(2)).transfer(any(), any(), any(), any(), eq("LOAN-DISB-LAP-20261005-000001"), any(), any());
+
+        // Nothing left to recover; accepting again is a conflict, not a second disbursement.
+        disbursementService.recoverDisbursements();
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-2", "corr"))
+                .isInstanceOfSatisfying(LoanException.class, e -> assertThat(e.getType()).isEqualTo("already-accepted"));
+        verify(orchestrator, times(2)).transfer(any(), any(), any(), any(), any(), any(), any());
+        assertThat(loans).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Disbursement rejected → 422 disbursement-failed, application FAILED, never retried")
+    void rejectedDisbursement_marksFailed() {
+        ApplicationResponse app = applyNormal("apply-key-1");
+        stubDisbursement(new TransferResult("REJECTED", null, null, "Core banking T24 rejected transfer"));
+
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
+                .isInstanceOfSatisfying(LoanException.class, e -> {
+                    assertThat(e.getType()).isEqualTo("disbursement-failed");
+                    assertThat(e.getStatus().value()).isEqualTo(422);
+                });
+        assertThat(applications.get(1L).getStatus()).isEqualTo("FAILED");
+        assertThat(loans).isEmpty();
+
+        disbursementService.recoverDisbursements();
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-2", "corr"))
+                .isInstanceOfSatisfying(LoanException.class, e -> assertThat(e.getType()).isEqualTo("disbursement-failed"));
+        verify(orchestrator, times(1)).transfer(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    // ── Credit limit ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Credit limit: NORMAL limit fully used by an open loan → next application DECLINED CREDIT_LIMIT_REACHED")
+    void creditLimit_openLoanUsesLimit() {
+        disbursedNormalLoan(); // 250,000 = the whole NORMAL limit
+
+        ApplicationResponse next = applicationService.apply(CUSTOMER, "apply-key-2", new ApplyRequest(ACCOUNT_NO, bd("10000"), 12)).response();
+
+        assertThat(next.decision()).isEqualTo("DECLINED");
+        assertThat(next.declineReason()).isEqualTo("CREDIT_LIMIT_REACHED");
+        assertThat(creditLimitService.eligibility(CUSTOMER)).satisfies(e -> {
+            assertThat(e.eligible()).isFalse();
+            assertThat(e.creditLimit()).isEqualByComparingTo("250000.00");
+            assertThat(e.outstanding()).isEqualByComparingTo("250000.00");
+            assertThat(e.available()).isEqualByComparingTo("0.00");
+        });
+    }
+
+    @Test
+    @DisplayName("Credit limit: partly used → offer capped at what is left (COUNTER_OFFER)")
+    void creditLimit_capsOffer() {
+        ApplicationResponse first = applicationService.apply(CUSTOMER, "apply-key-1", new ApplyRequest(ACCOUNT_NO, bd("100000"), 24)).response();
+        stubDisbursement(new TransferResult("POSTED", 501L, "FT26278ABC12", null));
+        disbursementService.accept(CUSTOMER, first.referenceNo(), "accept-key-1", null);
+        assertThat(creditLimitService.eligibility(CUSTOMER).available()).isEqualByComparingTo("150000.00");
+
+        ApplicationResponse second = applicationService.apply(CUSTOMER, "apply-key-2", new ApplyRequest(ACCOUNT_NO, bd("200000"), 24)).response();
+
+        assertThat(second.decision()).isEqualTo("COUNTER_OFFER");
+        assertThat(second.offer().amount()).isEqualByComparingTo("150000.00");
+    }
+
+    @Test
+    @DisplayName("Credit limit: two offers taken out side by side → accepting the second is 409 credit-limit-reached")
+    void creditLimit_checkedAgainOnAccept() {
+        ApplicationResponse a = applicationService.apply(CUSTOMER, "apply-key-1", new ApplyRequest(ACCOUNT_NO, bd("150000"), 24)).response();
+        ApplicationResponse b = applicationService.apply(CUSTOMER, "apply-key-2", new ApplyRequest(ACCOUNT_NO, bd("150000"), 24)).response();
+        assertThat(b.decision()).isEqualTo("APPROVED"); // nothing borrowed yet when b was decided
+        stubDisbursement(new TransferResult("POSTED", 501L, "FT26278ABC12", null));
+        disbursementService.accept(CUSTOMER, a.referenceNo(), "accept-key-1", null);
+
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, b.referenceNo(), "accept-key-2", null))
+                .isInstanceOfSatisfying(LoanException.class, e -> {
+                    assertThat(e.getType()).isEqualTo("credit-limit-reached");
+                    assertThat(e.getStatus().value()).isEqualTo(409);
+                });
+        verify(orchestrator, times(1)).transfer(any(), any(), any(), any(), any(), any(), any());
+        assertThat(loans).hasSize(1);
     }
 
     // ── Repay ───────────────────────────────────────────────────────────────

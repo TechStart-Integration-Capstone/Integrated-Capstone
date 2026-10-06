@@ -1,7 +1,7 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **dom**_
-_Last updated: 2026-10-05 (Phase 6 complete — Immutable Risk Decision Log)_
+_Last updated: 2026-10-06 (Interest EOD merged; CI/CD Pipeline Hardening, Java 17 Compatibility & Cloud Host Active)_
 
 ---
 
@@ -24,6 +24,7 @@ Built on top of the Capstone 1 ledger engine.
 | 5 | Remittance Orchestrator & Saga Engine Hardening | Done |
 | 5b | Loans — apply / accept / disburse / repay / EOD | Implemented (unit-tested; not yet Docker end-to-end) |
 | 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Done |
+| Interest EOD | Daily interest accrual and monthly savings posting | Implemented; 82 tests passed; live activation pending |
 | 7 | Mobile Frontend (PWA) | Pending |
 | 8 | Chaos + Load Testing | Pending |
 
@@ -65,7 +66,7 @@ Built on top of the Capstone 1 ledger engine.
 | api-gateway | 8080 (only exposed host port) | Redis |
 | auth-service | 8081 (internal) | Azure SQL |
 | account-service | 8082 (internal) | Azure SQL + Redis |
-| transaction-service | 8083 (internal) | Azure SQL + Redis + Kafka |
+| transaction-service | 8083 (internal) | Azure SQL + Redis + Kafka; PostgreSQL for interest EOD when enabled |
 | notification-service | 8084 (internal) | PostgreSQL + Kafka |
 | audit-service | 8085 (internal) | PostgreSQL + Kafka |
 | reconciliation-service | 8086 (internal) | Azure SQL + PostgreSQL |
@@ -125,7 +126,7 @@ bank.js renders riskScore + riskDecision on the transfer receipt: "Risk evaluati
 
 ## Azure SQL Schema (current)
 
-Tables: CUSTOMER, ACCOUNT, AUDIT_LOG, BANKING_FAVORITE, LEDGER_TRANSACTION, OUTBOX_EVENT, REMITTANCE, LOAN_APPLICATION, LOAN, LOAN_SCHEDULE, LOAN_REPAYMENT
+Tables: CUSTOMER, ACCOUNT, AUDIT_LOG, BANKING_FAVORITE, LEDGER_TRANSACTION, OUTBOX_EVENT, REMITTANCE, LOAN_APPLICATION, LOAN, LOAN_SCHEDULE, LOAN_REPAYMENT. Interest migration adds EOD_JOB_RUN, GL_ENTRY and ACCOUNT.interest_rate; live migration is pending.
 
 Migration run order on an existing database:
 1. schema-azuresql.sql
@@ -136,6 +137,14 @@ Migration run order on an existing database:
 PostgreSQL migration run order (ledger_audit_db):
 1. microservices/audit-service/src/main/resources/schema-postgres.sql (full schema on new DB)
 2. scripts/migrate_phase6_risk_decision.sql (adds RISK_DECISION on existing DB — idempotent)
+3. scripts/migrate_interest_postgres.sql (immutable daily interest snapshots and completion records)
+
+Interest EOD also requires scripts/migrate_interest_azuresql.sql on an existing ledger.
+The worker is in transaction-service's orchestrator.interest package. Enable with
+INTEREST_EOD_ENABLED=true, an explicit INTEREST_START_DATE, and PostgreSQL credentials.
+See docs/interest-eod.md. It credits SAVINGS/SAVINGS_ACCOUNT monthly through GL_ENTRY,
+LEDGER_TRANSACTION and OUTBOX_EVENT; LOAN accounts accrue only. Missing historical
+snapshots block posting instead of being recalculated from live balances.
 
 Key SQL Server constraints to remember:
 - TRANSACTION is a reserved word — table is LEDGER_TRANSACTION everywhere
@@ -188,8 +197,8 @@ Demo credentials (password: password123):
 ## Git
 
 - Freeze tag: capstone1-freeze → commit 1e51aea
-- Working branch (2026-10-05): aly-feature
-- Latest commit at last update: b6ee3e4 — Merge branch 'main' of https://github.com/TechStart-Integration-Capstone/Integrated-Capstone
+- Working branch (2026-10-06): levi-feature
+- Latest CI update: CI/CD Dev stage hardened for Java 17 Temurin; all 11 microservices pass parallel unit tests; Trivy scan configured with official action.
 
 ---
 
@@ -231,8 +240,39 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 
 ---
 
+## Cloud Deployment & Azure Host Status (`vm-paypink`)
+
+- **VM Name:** `vm-paypink` (Ubuntu 24.04 LTS)
+- **Public IP:** `20.69.157.88`
+- **FQDN:** `paypink-levi-westus2.westus2.cloudapp.azure.com`
+- **Resource Group:** `RG-PAYPINK-WESTUS2`
+- **Active Endpoints:**
+  - Web Banking Frontend SPA: `http://20.69.157.88:80`
+  - Mobile PWA App: `http://20.69.157.88:3002`
+  - API Gateway: `http://20.69.157.88:8080`
+- **Container Health:** 26/26 Docker containers running and healthy.
+- **Budget Control:** Zero-cost / low-cost tier. Scheduled auto-shutdown active at 11:00 UTC (7:00 PM PHT). Deallocate when idle.
+- **Reconciliation Hotfix Migration:** Run `scripts/migrate_reconciliation_fix.sql` against `postgres-immutable-audit` container on the VM to sync `account_id` and `azure_sql_status` column renames.
+
+---
+
 ## Current Focus
 
-All planned phases complete through Phase 6. Remaining work:
+All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temurin runners. Remaining work:
+- **Interest EOD activation** — apply the additive migrations, configure the start date and PostgreSQL credentials, then deploy transaction-service and api-gateway while preserving runtime Azure SQL settings.
 - **Phase 7** — Mobile Frontend (PWA)
 - **Phase 8** — Chaos + Load Testing
+
+---
+
+## Daily Interest Accrual and Monthly Posting (2026-10-06) - aly
+
+- **Worker location:** `microservices/transaction-service/src/main/java/com/bank/transaction/orchestrator/interest/`. Uses the existing orchestrator service, without adding a separate backend or exposed port.
+- **Daily calculation:** active `SAVINGS` and `SAVINGS_ACCOUNT` use whole-balance tiers of 1% below 1,000, 2.5% below 10,000, and 4% from 10,000. Active `LOAN` accounts use the annual fraction in `ACCOUNT.interest_rate`. Divide by 365 and round half-up to six decimals, including leap years. Daily runs read `ACCOUNT.current_balance` without crediting it.
+- **Immutable PostgreSQL records:** `interest_accrual` is unique per account/business date. `interest_accrual_batch` commits with all daily rows and seals the date, including empty batches. Rules ignore UPDATE/DELETE; triggers reject TRUNCATE and inserts into sealed dates. Neither table has a posting flag.
+- **Monthly posting:** after the final day's accrual, sum the period and round once to two decimals. Savings credits, `GL_ENTRY`, `LEDGER_TRANSACTION`, `OUTBOX_EVENT` and `EOD_JOB_RUN` commit in one Azure SQL transaction. Loans accrue only; existing loan repayment/overdue processing stays separate. Zero interest produces a GL period record without a zero-value ledger transaction.
+- **Retry and concurrency protection:** shared SQL Server application lock plus account locks; the application lock requires an explicit transaction before acquisition. A unique GL account/posting-type/period-end key prevents duplicate credits. Retries reuse committed PostgreSQL snapshots after an Azure SQL failure. Missing dates block posting; historical snapshots are never fabricated from current balances. Hourly recovery retries unfinished closed months.
+- **Admin endpoints:** `POST /api/v1/interest/eod/accrue?businessDate=YYYY-MM-DD` and `POST /api/v1/interest/eod/post?businessDate=YYYY-MM-DD`. Gateway and controller require `ROLE_ADMIN`; posting requires a calendar month-end.
+- **Activation:** disabled by default. Apply `scripts/migrate_interest_azuresql.sql` and `scripts/migrate_interest_postgres.sql`; set `INTEREST_EOD_ENABLED=true`, a stable `INTEREST_START_DATE`, and `INTEREST_POSTGRES_URL`, `INTEREST_POSTGRES_USERNAME`, `INTEREST_POSTGRES_PASSWORD`. A midmonth start creates an explicit partial first period. Default cutoff: 23:59:59 Asia/Manila; recovery runs hourly at minute 15. Cron and timezone are configurable.
+- **Validation:** transaction-service 66/66 and api-gateway 16/16 passed, including 10 native PostgreSQL 15/SQL Server 2022 tests for immutability, precision, duplicate/concurrent posting and rollback/recovery. `scripts/test_interest.ps1` creates and removes disposable databases; test containers were removed. Live migrations and deployment have not been performed.
+- **Documentation:** [interest EOD setup and operation](../docs/interest-eod.md); README and ERD updated.

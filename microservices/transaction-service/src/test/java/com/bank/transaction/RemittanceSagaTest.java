@@ -26,8 +26,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import com.bank.transaction.service.RemittanceSagaWorker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -455,6 +458,176 @@ class RemittanceSagaTest {
         verify(remittanceRepository, atLeastOnce()).save(argThat(r ->
                 Remittance.STATUS_FAILED.equals(r.getStatus()) &&
                 Remittance.STEP_FUNDS_CHECK.equals(r.getInternalStatus())
+        ));
+    }
+
+    @Test
+    @DisplayName("Cancel window activates Reserved status with 30s countdown and bypasses instant T24 dispatch")
+    void cancelWindow_activatesReservedStatusWith30sCountdown() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("100.00"));
+        request.setCancelWindowSeconds(30);
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
+
+        Remittance savedRemittance = new Remittance("TX-PH-WIN", 1L, 2L, new BigDecimal("100.00"), "PHP", Remittance.STATUS_RESERVED);
+        savedRemittance.setCancelUntil(LocalDateTime.now().plusSeconds(30));
+        when(remittanceRepository.save(any(Remittance.class))).thenReturn(savedRemittance);
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        ResponseEntity<RemittanceResponse> responseEntity = controller.processRemittance(request, "idemp-window", "corr-win", "1");
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        RemittanceResponse body = responseEntity.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.getStatus()).isEqualTo(Remittance.STATUS_RESERVED);
+        assertThat(body.isCanCancel()).isTrue();
+        assertThat(body.getCancelWindowSeconds()).isEqualTo(30);
+        assertThat(body.getCancelUntil()).isNotNull();
+
+        // Verify T24 adapter was NOT invoked yet because funds are reserved in the cancel window
+        verify(t24AdapterClient, never()).executeTransfer(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Cancel within 30s releases held funds and sets status to Cancelled")
+    void cancelWithin30s_releasesHeldFundsAndCancels() {
+        Remittance remittance = new Remittance("TX-PH-CANCEL", 1L, 2L, new BigDecimal("100.00"), "PHP", Remittance.STATUS_RESERVED);
+        remittance.setInternalStatus(Remittance.INTERNAL_CLIENT_CANCEL_WINDOW);
+        remittance.setCallerCustomerId(1L);
+        remittance.setCancelUntil(LocalDateTime.now().plusSeconds(25));
+
+        when(remittanceRepository.findByReferenceNo("TX-PH-CANCEL")).thenReturn(Optional.of(remittance));
+        when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
+
+        ResponseEntity<Map<String, Object>> response = controller.cancelRemittance("TX-PH-CANCEL", "1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("status")).isEqualTo(Remittance.STATUS_CANCELLED);
+        assertThat(remittance.getStatus()).isEqualTo(Remittance.STATUS_CANCELLED);
+        assertThat(remittance.getInternalStatus()).isEqualTo(Remittance.INTERNAL_CANCELLED_BY_USER);
+
+        // Verify hold release SQL was executed
+        verify(jdbcTemplate).update(contains("CASE WHEN held_balance >= ?"), eq(new BigDecimal("100.00")), eq(new BigDecimal("100.00")), eq(1L));
+
+        // Verify outbox event REMITTANCE_CANCELLED was recorded
+        verify(outboxEventRepository).save(argThat(event -> "REMITTANCE_CANCELLED".equals(event.getEventType())));
+    }
+
+    @Test
+    @DisplayName("Cancelling after the 30s window expires throws 409 Conflict")
+    void cancelAfterExpiration_throws409Conflict() {
+        Remittance remittance = new Remittance("TX-PH-EXPIRED", 1L, 2L, new BigDecimal("100.00"), "PHP", Remittance.STATUS_RESERVED);
+        remittance.setInternalStatus(Remittance.INTERNAL_CLIENT_CANCEL_WINDOW);
+        remittance.setCallerCustomerId(1L);
+        remittance.setCancelUntil(LocalDateTime.now().minusSeconds(5)); // Expired!
+
+        when(remittanceRepository.findByReferenceNo("TX-PH-EXPIRED")).thenReturn(Optional.of(remittance));
+
+        assertThatThrownBy(() -> controller.cancelRemittance("TX-PH-EXPIRED", "1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+
+        // Ensure hold was NOT released
+        verify(jdbcTemplate, never()).update(contains("CASE WHEN held_balance >= ?"), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Deterministic core bank rejection (T24 /-1) triggers instant reversal with 0 retries")
+    void t24Reject_performsInstantReversalWithZeroRetries() {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId("1");
+        request.setTargetAccountId("2");
+        request.setAmount(new BigDecimal("100.00"));
+
+        when(jdbcTemplate.queryForList(anyString(), eq("1"), eq("1")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 1L, "customer_id", 1L, "account_number", "ACC-PH-1001",
+                        "current_balance", new BigDecimal("1000.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.queryForList(anyString(), eq("2"), eq("2")))
+                .thenReturn(List.of(Map.of(
+                        "account_id", 2L, "customer_id", 2L, "account_number", "ACC-PH-2002",
+                        "current_balance", new BigDecimal("500.00"), "held_balance", BigDecimal.ZERO
+                )));
+        when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
+
+        Remittance rem = new Remittance("TX-PH-REJECT", 1L, 2L, new BigDecimal("100.00"), "PHP", Remittance.STATUS_RESERVED);
+        rem.setCallerCustomerId(1L);
+        when(remittanceRepository.save(any(Remittance.class))).thenReturn(rem);
+
+        when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
+                .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
+
+        // T24 returns REJECTED (e.g. invalid target account, T24 /-1 code)
+        when(t24AdapterClient.executeTransfer(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new T24Result("REJECTED", null, null, "Account balance exceeded /-1", false));
+
+        assertThatThrownBy(() -> controller.processRemittance(request, "idemp-reject", "corr-rej", "1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+
+        // Verify hold was released immediately
+        verify(jdbcTemplate).update(contains("CASE WHEN held_balance >= ?"), eq(new BigDecimal("100.00")), eq(new BigDecimal("100.00")), eq(1L));
+
+        // Verify outbox reversal event was written
+        verify(outboxEventRepository).save(argThat(event -> "REMITTANCE_REVERSED".equals(event.getEventType())));
+
+        // Verify remittance marked with INTERNAL_T24_REJECTED
+        verify(remittanceRepository, atLeastOnce()).save(argThat(r ->
+                Remittance.INTERNAL_T24_REJECTED.equals(r.getInternalStatus())
+        ));
+    }
+
+    @Test
+    @DisplayName("Saga worker automatically reverses held funds when max retries (3) exceeded")
+    void sagaWorker_autoReversesWhenMaxRetriesExceeded() {
+        RemittanceSagaWorker worker = new RemittanceSagaWorker(remittanceRepository, ledgerService, t24AdapterClient);
+
+        Remittance remittance = new Remittance("TX-PH-MAX-RETRIES", 1L, 2L, new BigDecimal("100.00"), "PHP", Remittance.STATUS_PROCESSING);
+        remittance.setCallerCustomerId(1L);
+        remittance.setRetryCount(3);
+        remittance.setMaxRetries(3);
+        remittance.setNextRetryAt(LocalDateTime.now().minusSeconds(10));
+
+        when(remittanceRepository.findByStatus("PROCESSING")).thenReturn(List.of(remittance));
+        when(remittanceRepository.findByStatus(Remittance.STATUS_PROCESSING)).thenReturn(List.of());
+        when(remittanceRepository.findByStatus("PENDING_CORE")).thenReturn(List.of());
+        when(remittanceRepository.findByStatus("T24_POSTED")).thenReturn(List.of());
+        when(remittanceRepository.findByStatusAndInternalStatusAndCancelUntilBefore(any(), any(), any())).thenReturn(List.of());
+
+        worker.resolvePendingSagas();
+
+        // T24 executeTransfer should NOT be called since retries are exhausted
+        verify(t24AdapterClient, never()).executeTransfer(any(), any(), any(), any(), any(), any());
+
+        // Verify hold funds released
+        verify(jdbcTemplate).update(contains("CASE WHEN held_balance >= ?"), eq(new BigDecimal("100.00")), eq(new BigDecimal("100.00")), eq(1L));
+
+        // Verify Outbox event recorded
+        verify(outboxEventRepository).save(argThat(event -> "REMITTANCE_REVERSED".equals(event.getEventType())));
+
+        // Verify remittance marked as AUTO_REVERSED and STATUS_FAILED
+        verify(remittanceRepository, atLeastOnce()).save(argThat(r ->
+                Remittance.INTERNAL_AUTO_REVERSED.equals(r.getInternalStatus()) &&
+                Remittance.STATUS_FAILED.equals(r.getStatus())
         ));
     }
 }
