@@ -1,7 +1,7 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **dom**_
-_Last updated: 2026-10-05 (Phase 6 complete — Immutable Risk Decision Log)_
+_Last updated: 2026-10-06 (CI/CD Pipeline Hardening, Java 17 Compatibility & Cloud Host Active)_
 
 ---
 
@@ -231,8 +231,24 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 
 ---
 
+## Cloud Deployment & Azure Host Status (`vm-paypink`)
+
+- **VM Name:** `vm-paypink` (Ubuntu 24.04 LTS)
+- **Public IP:** `20.69.157.88`
+- **FQDN:** `paypink-levi-westus2.westus2.cloudapp.azure.com`
+- **Resource Group:** `RG-PAYPINK-WESTUS2`
+- **Active Endpoints:**
+  - Web Banking Frontend SPA: `http://20.69.157.88:80`
+  - Mobile PWA App: `http://20.69.157.88:3002`
+  - API Gateway: `http://20.69.157.88:8080`
+- **Container Health:** 26/26 Docker containers running and healthy.
+- **Budget Control:** Zero-cost / low-cost tier. Scheduled auto-shutdown active at 11:00 UTC (7:00 PM PHT). Deallocate when idle.
+- **Reconciliation Hotfix Migration:** Run `scripts/migrate_reconciliation_fix.sql` against `postgres-immutable-audit` container on the VM to sync `account_id` and `azure_sql_status` column renames.
+
+---
+
 ## Current Focus
 
-All planned phases complete through Phase 6. Remaining work:
+All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temurin runners. Remaining work:
 - **Phase 7** — Mobile Frontend (PWA)
 - **Phase 8** — Chaos + Load Testing
