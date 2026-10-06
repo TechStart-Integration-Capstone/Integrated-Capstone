@@ -1,6 +1,10 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-06 - Updated memory-bank context with interest EOD behavior, schemas, admin endpoints, configuration, retry safeguards, 82 passing tests and pending live activation; attributed the latest interest changes to aly. - aly
+
+- 2026-10-06 - Added orchestrator interest EOD: immutable PostgreSQL daily accruals and batch completion, tiered savings/fixed loan rates, atomic Azure SQL monthly savings credits with GL/ledger/outbox, admin endpoints, retry/coverage guards, additive migrations and deployment guide. Validation: transaction-service 66/66 (including 10 native PostgreSQL 15/SQL Server 2022 tests), api-gateway 16/16; live deployment not performed. - aly
+
 - 2026-10-06 — Reconciliation service bug fix + Oracle → Azure SQL rename throughout.
   - **Root cause fixed:** `RECONCILIATION_LOG` had `account_id NOT NULL` in PostgreSQL but `ReconciliationLog.java` had no `account_id` field and the service never populated it. Every Kafka-triggered and scheduled reconciliation insert crashed with `null value in column "account_id" violates not-null constraint` (SQLState 23502). Fix: made `account_id` nullable in the schema, added the field to the entity, and populated it from `LedgerMutationAudit.getAccountId()` in `saveReconLog()` when an audit row exists.
   - **`schema-postgres.sql` (`microservices/audit-service/src/main/resources/`):** `RECONCILIATION_LOG` — `account_id` now nullable, `oracle_status` column renamed to `azure_sql_status`, `UNIQUE(transaction_id, account_id)` constraint replaced with `UNIQUE(transaction_id)`, added `idx_recon_tx_id` and partial `idx_recon_acct WHERE account_id IS NOT NULL`.

@@ -73,8 +73,49 @@ erDiagram
         nvarchar currency "max 10, default PHP"
         decimal current_balance "18,4 - CHECK >= 0"
         decimal held_balance "18,4 - CHECK 0 <= held <= current"
+        decimal interest_rate "7,4 - annual fraction for LOAN; default 0"
         nvarchar status "max 20, default ACTIVE"
         datetime2 created_date "UTC timestamp"
+    }
+
+    EOD_JOB_RUN {
+        bigint job_run_id PK
+        date business_date UK "With job_name"
+        nvarchar job_name UK
+        nvarchar status "RUNNING or SUCCESS"
+        datetime2 started_at
+        datetime2 ended_at
+    }
+
+    GL_ENTRY {
+        bigint gl_entry_id PK
+        bigint account_id FK
+        decimal amount "18,2"
+        nvarchar entry_type "CREDIT or DEBIT"
+        nvarchar posting_type "MONTHLY_INTEREST"
+        nvarchar description
+        date business_date
+        date period_start
+        date period_end "Unique with account_id and posting_type"
+        bigint job_run_id FK
+        bigint transaction_id FK "Nullable for zero interest"
+        datetime2 created_at
+    }
+
+    INTEREST_ACCRUAL {
+        bigint accrual_id PK
+        bigint account_id "Logical Azure SQL reference"
+        date business_date "Unique with account_id"
+        numeric eod_balance "18,4"
+        numeric rate "7,4 - annual fraction"
+        numeric interest_amount "18,6"
+        timestamptz created_at
+    }
+
+    INTEREST_ACCRUAL_BATCH {
+        date business_date PK
+        int account_count
+        timestamptz created_at
     }
 
     AUDIT_LOG {
@@ -264,6 +305,11 @@ erDiagram
     CUSTOMER ||--o{ AUDIT_LOG : "audited (customer_id)"
     CUSTOMER ||--o{ BANKING_FAVORITE : "saves (customer_id)"
     ACCOUNT ||--o{ BANKING_FAVORITE : "bookmarked as (account_id)"
+    ACCOUNT ||--o{ GL_ENTRY : "posted interest"
+    EOD_JOB_RUN ||--o{ GL_ENTRY : "posting job"
+    LEDGER_TRANSACTION |o--o| GL_ENTRY : "interest credit"
+    ACCOUNT ||..o{ INTEREST_ACCRUAL : "daily EOD snapshot"
+    INTEREST_ACCRUAL_BATCH ||..o{ INTEREST_ACCRUAL : "completed business date"
     ACCOUNT ||--o{ LEDGER_TRANSACTION : "debited from (from_account_id)"
     ACCOUNT |o--o{ LEDGER_TRANSACTION : "credited to (to_account_id)"
     LEDGER_TRANSACTION ||--o{ OUTBOX_EVENT : "publishes (transaction_id)"
@@ -511,6 +557,14 @@ Repayment allocations settling principal, interest, and late fees.
 ---
 
 ## 4. PostgreSQL (Immutable Audit) Data Dictionary
+
+Interest extensions: `INTEREST_ACCRUAL` stores the immutable `(account_id, business_date)`
+balance/rate/interest snapshot. `INTEREST_ACCRUAL_BATCH` seals each complete date atomically,
+including empty dates; it never records monthly posting status. Both tables block UPDATE,
+DELETE and TRUNCATE. Azure SQL `GL_ENTRY` records the posted accounting period with a
+unique `(account_id, posting_type, period_end)` key and references `EOD_JOB_RUN` and the
+credit's `LEDGER_TRANSACTION`. `ACCOUNT.interest_rate` stores the annual fraction for
+loan accounts. See [interest EOD](interest-eod.md) for precision, migrations and recovery.
 
 ### 4.1 `LEDGER_MUTATION_AUDIT`
 Append-only immutable record of every debit and credit leg committed to the banking ledger. Used for statutory audit and drift detection.

@@ -26,6 +26,16 @@ spring:
       connect-timeout: 3000ms
 
 app:
+  interest:
+    enabled: ${INTEREST_EOD_ENABLED:false}
+    start-date: ${INTEREST_START_DATE:}
+    zone: ${INTEREST_ZONE:Asia/Manila}
+    cron: ${INTEREST_EOD_CRON:59 59 23 * * *}
+    recovery-cron: ${INTEREST_RECOVERY_CRON:0 15 * * * *}
+    postgres:
+      url: ${INTEREST_POSTGRES_URL:jdbc:postgresql://localhost:5432/ledger_audit_db}
+      username: ${INTEREST_POSTGRES_USERNAME:}
+      password: ${INTEREST_POSTGRES_PASSWORD:}
   idempotency:
     ttl-hours: ${IDEMPOTENCY_TTL_HOURS:24}
   kafka:

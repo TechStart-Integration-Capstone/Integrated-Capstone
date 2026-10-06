@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -291,6 +293,29 @@ class JwtAuthFilterTest {
 
         StepVerifier.create(filter.filter(exchange, recordingChain(chainCalled))).verifyComplete();
 
+        assertThat(chainCalled.get()).isTrue();
+    }
+
+    @Test
+    void interestEod_customerCannotSpoofAdmin() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .post("/api/v1/interest/eod/post?businessDate=2026-10-31")
+                .header("Authorization", "Bearer " + validToken("arosales", 2L))
+                .header("X-Auth-Roles", "ROLE_ADMIN").build());
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    void interestEod_adminPassesThrough() {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .post("/api/v1/interest/eod/accrue?businessDate=2026-10-31")
+                .header("Authorization", "Bearer " + tokenWithRoles("admin", 0L, List.of("ROLE_ADMIN")))
+                .build());
+        StepVerifier.create(filter.filter(exchange, recordingChain(chainCalled))).verifyComplete();
         assertThat(chainCalled.get()).isTrue();
     }
 

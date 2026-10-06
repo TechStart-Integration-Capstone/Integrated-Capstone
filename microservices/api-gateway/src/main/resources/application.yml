@@ -34,6 +34,12 @@ spring:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
 
       routes:
+        # Interest EOD lives in the transaction-service orchestrator; admin JWT required.
+        - id: interest-eod
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/api/v1/interest/eod/**
+
         # Auth Service — public, no rate limiting
         - id: auth-service
           uri: http://${AUTH_SERVICE_HOST:auth-service}:8081
