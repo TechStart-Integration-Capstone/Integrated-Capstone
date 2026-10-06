@@ -1,6 +1,18 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-06 — CI/CD Port 80 Exposing & Automated Database Migration Step:
+  - **Port 80/3001 Dual Binding (`docker/docker-compose.yml`):** Exposed `80:80` alongside `3001:80` for `frontend-spa` container, resolving `curl: (7) Failed to connect to localhost port 80` in the CI/CD deployment health check and aligning host ingress with Azure NSG Rule 110.
+  - **Automated Schema Migration (`.github/workflows/pipeline.yml`):** Added post-startup `Apply additive database migrations` step executing `migrate_phase6_reversals.sql`, `migrate_transaction_monitoring.sql`, `migrate_phase6_loans.sql`, `migrate_reconciliation_fix.sql`, and `migrate_interest_*.sql` on live containers, resolving `Invalid column name 'cancel_until'` in `transaction-service`.
+  - **Health Check Resilience (`.github/workflows/pipeline.yml`):** Extended SPA endpoint polling to accept either port 80 or port 3001. — [levi]
+
+- 2026-10-06 — First deploy re-run after the volume migration: `azure-sql-master` healthy, but `kafka-event-bus` exited with `NodeExistsException` on `/brokers/ids/1`. The ZooKeeper snapshot was copied seconds after the old containers were killed, so the old broker's ephemeral node was still registered. Started Kafka again after the ZooKeeper session expired (`[KafkaServer id=1] started`, healthy). One-off effect of the migration; data intact. Deploy re-run pending. — [levi]
+
+- 2026-10-06 — Ran the migration on `vm-paypink` via `az vm run-command`: removed 27 `docker`-project containers; copied `azuresql_data` 105.1M, `postgres_data` 46.2M, `loki_data` 2.5M, `tempo_data` 57.8M, `zookeeper_data` 12K into `paypink_*` (sizes match). `kafka_data` (676K→1.0G) and `zookeeper_log` (44K→64M) grew only because busybox `cp` expanded sparse preallocated index/log files. `docker_*` volumes kept as backup. — [levi]
+- 2026-10-06 — Prod deploy failed at `docker compose up` with `container name "/azure-sql-master" is already in use`: the VM stack had been started by hand as Compose project `docker` (volumes `docker_*`), while the pipeline uses `-p paypink`; the failed run also created empty `paypink_*` volumes. Added pipeline step *Guard against containers from another Compose project* (fails before any container is created), `scripts/04-migrate-compose-project.sh` (removes `docker` project containers/network, copies `docker_*` → `paypink_*`, keeps old volumes as backup; runnable via `az vm run-command`), and a guide note. — [levi]
+
+- 2026-10-06 — CI/CD deprecation cleanup (`.github/workflows/pipeline.yml`): bumped `actions/checkout` v4→v5, `actions/setup-java` v4→v5, `actions/setup-python` v5→v6, `actions/upload-artifact` v4→v5 (Node 24 runtime; clears Node 20 and setup-java v4 deprecation warnings). Pinned GitHub-hosted jobs from `ubuntu-latest` to `ubuntu-24.04` ahead of the 19/10/2026 Ubuntu 26 migration. Self-hosted runner v2.337.0 supports Node 24. — [levi]
+
 - 2026-10-06 — CI/CD Production Deployment Java 17 Temurin Toolchain Fix:
   - Fixed `Prod: approve and deploy to Azure VM` failure where `Compile Java Service Artifacts` failed with `Fatal error compiling: error: release version 17 not supported` on `api-gateway`.
   - Added official `actions/setup-java@v4` (Eclipse Temurin 17) directly to `prod-deploy` in `.github/workflows/pipeline.yml` for the self-hosted runner (`vm-paypink`).
