@@ -44,7 +44,7 @@ public class BankingRecipientService {
                 + "FROM ACCOUNT a JOIN CUSTOMER c ON c.customer_id = a.customer_id JOIN "
                 + "(SELECT t.to_account_id, MAX(t.transaction_date) AS last_used FROM LEDGER_TRANSACTION t "
                 + "JOIN ACCOUNT source ON source.account_id = t.from_account_id WHERE source.customer_id = ? "
-                + "AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN') AND t.status = 'SUCCESS' GROUP BY t.to_account_id) r "
+                + "AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN','P2P_REMITTANCE') AND t.status = 'SUCCESS' GROUP BY t.to_account_id) r "
                 + "ON r.to_account_id = a.account_id WHERE a.customer_id <> ? AND a.status = 'ACTIVE' AND c.status = 'ACTIVE' AND a.currency = 'PHP' "
                 + "ORDER BY r.last_used DESC, a.account_id OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY",
                 (rs,row) -> new Recipient(rs.getString(1),rs.getString(2),rs.getInt(3) > 0), customer,customer,customer);

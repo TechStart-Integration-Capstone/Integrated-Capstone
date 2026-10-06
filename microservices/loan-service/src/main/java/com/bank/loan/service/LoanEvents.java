@@ -26,6 +26,7 @@ public class LoanEvents {
     public static final String DISBURSED = "loan.disbursed";
     public static final String REPAYMENT_POSTED = "loan.repayment.posted";
     public static final String INSTALLMENT_OVERDUE = "loan.installment.overdue";
+    public static final String AUTODEBIT_FAILED = "loan.autodebit.failed";
     public static final String CLOSED = "loan.closed";
 
     public static final ZoneId MANILA = ZoneId.of("Asia/Manila");

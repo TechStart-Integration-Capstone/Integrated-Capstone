@@ -341,7 +341,7 @@ public class RemittanceOrchestratorService {
                 remittance.setCancelUntil(LocalDateTime.now().plusSeconds(windowSeconds));
                 remittance.setRetryCount(0);
                 remittance.setMaxRetries(3);
-                remittance.setReason("30-second cancellation window active. You can cancel and reverse within 30 seconds.");
+                remittance.setReason("Cancellation window active. You can cancel within " + windowSeconds + " seconds.");
                 remittance = remittanceRepository.save(remittance);
 
                 RemittanceResponse windowResponse = new RemittanceResponse(
@@ -521,12 +521,13 @@ public class RemittanceOrchestratorService {
         boolean isCancelable = Remittance.STATUS_RESERVED.equalsIgnoreCase(remittance.getStatus())
                 && Remittance.INTERNAL_CLIENT_CANCEL_WINDOW.equalsIgnoreCase(remittance.getInternalStatus());
 
-        if (!isCancelable || (remittance.getCancelUntil() != null && LocalDateTime.now().isAfter(remittance.getCancelUntil()))) {
+        if (!isCancelable || (remittance.getCancelUntil() != null && LocalDateTime.now().isAfter(remittance.getCancelUntil()))
+                || !ledgerService.claimCancelWindow(remittance.getRemittanceId(), Remittance.INTERNAL_CANCELLED_BY_USER)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "The 30-second cancellation window has expired. Transfer is being processed and cannot be cancelled.");
+                    "The cancellation window has closed. Transfer is being processed and cannot be cancelled.");
         }
 
-        ledgerService.cancelAndReleaseHold(remittance, "Cancelled by user within 30-second window");
+        ledgerService.cancelAndReleaseHold(remittance, "Cancelled by user within the cancellation window");
     }
 
     public RemittanceResponse getRemittanceStatus(String referenceNo, Long callerCustomerId) {

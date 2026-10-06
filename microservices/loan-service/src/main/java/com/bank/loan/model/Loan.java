@@ -12,6 +12,11 @@ public class Loan {
     public static final String STATUS_OVERDUE = "OVERDUE";
     public static final String STATUS_CLOSED = "CLOSED";
 
+    /** Outcome of the last EOD auto-debit (last_autodebit_status). */
+    public static final String AUTODEBIT_PAID = "PAID";
+    public static final String AUTODEBIT_INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS";
+    public static final String AUTODEBIT_FAILED = "FAILED"; // core banking unavailable; retried next EOD
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "loan_id")
@@ -62,6 +67,15 @@ public class Loan {
     @Column(name = "maturity_date", nullable = false)
     private LocalDate maturityDate;
 
+    @Column(name = "last_autodebit_date")
+    private LocalDate lastAutoDebitDate;
+
+    @Column(name = "last_autodebit_status", length = 20)
+    private String lastAutoDebitStatus;
+
+    @Column(name = "last_autodebit_amount", precision = 18, scale = 4)
+    private BigDecimal lastAutoDebitAmount;
+
     public Loan() {}
 
     public Long getLoanId() { return loanId; }
@@ -96,4 +110,10 @@ public class Loan {
     public void setDisbursedDate(LocalDate disbursedDate) { this.disbursedDate = disbursedDate; }
     public LocalDate getMaturityDate() { return maturityDate; }
     public void setMaturityDate(LocalDate maturityDate) { this.maturityDate = maturityDate; }
+    public LocalDate getLastAutoDebitDate() { return lastAutoDebitDate; }
+    public void setLastAutoDebitDate(LocalDate lastAutoDebitDate) { this.lastAutoDebitDate = lastAutoDebitDate; }
+    public String getLastAutoDebitStatus() { return lastAutoDebitStatus; }
+    public void setLastAutoDebitStatus(String lastAutoDebitStatus) { this.lastAutoDebitStatus = lastAutoDebitStatus; }
+    public BigDecimal getLastAutoDebitAmount() { return lastAutoDebitAmount; }
+    public void setLastAutoDebitAmount(BigDecimal lastAutoDebitAmount) { this.lastAutoDebitAmount = lastAutoDebitAmount; }
 }

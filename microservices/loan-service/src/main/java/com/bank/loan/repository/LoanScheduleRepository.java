@@ -17,4 +17,8 @@ public interface LoanScheduleRepository extends JpaRepository<LoanSchedule, Long
     /** Loans with at least one PENDING installment due before the business date (EOD candidates). */
     @Query("SELECT DISTINCT s.loanId FROM LoanSchedule s WHERE s.status = 'PENDING' AND s.dueDate < :businessDate")
     List<Long> findLoanIdsWithPendingDueBefore(@Param("businessDate") LocalDate businessDate);
+
+    /** Loans with an unpaid installment due on or before the business date (EOD auto-debit candidates). */
+    @Query("SELECT DISTINCT s.loanId FROM LoanSchedule s WHERE s.status <> 'PAID' AND s.dueDate <= :businessDate")
+    List<Long> findLoanIdsWithUnpaidDueOnOrBefore(@Param("businessDate") LocalDate businessDate);
 }

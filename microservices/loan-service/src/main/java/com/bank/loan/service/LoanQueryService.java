@@ -1,5 +1,6 @@
 package com.bank.loan.service;
 
+import com.bank.loan.dto.LoanDtos.AutoDebit;
 import com.bank.loan.dto.LoanDtos.LoanSummary;
 import com.bank.loan.dto.LoanDtos.NextDue;
 import com.bank.loan.dto.LoanDtos.ScheduleResponse;
@@ -62,6 +63,8 @@ public class LoanQueryService {
         return new LoanSummary(loan.getLoanId(), loan.getReferenceNo(), accountNo, money(loan.getPrincipal()),
                 LoanApplicationService.rate(loan.getAnnualRate()), loan.getTermMonths(), money(loan.getMonthlyInstallment()),
                 money(loan.getOutstandingPrincipal()), money(loan.getPenaltyDue()), loan.getStatus(), nextDue,
-                loan.getDisbursedDate(), loan.getMaturityDate(), loan.getFtReference());
+                loan.getDisbursedDate(), loan.getMaturityDate(), loan.getFtReference(),
+                loan.getLastAutoDebitStatus() == null ? null : new AutoDebit(loan.getLastAutoDebitDate(),
+                        loan.getLastAutoDebitStatus(), loan.getLastAutoDebitAmount() == null ? null : money(loan.getLastAutoDebitAmount())));
     }
 }

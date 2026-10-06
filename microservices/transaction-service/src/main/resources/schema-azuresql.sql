@@ -193,7 +193,10 @@ CREATE TABLE dbo.LOAN (
     disbursement_txn_id   BIGINT        NULL REFERENCES dbo.LEDGER_TRANSACTION(transaction_id),
     ft_reference          NVARCHAR(20)  NULL,               -- T24 FT reference
     disbursed_date        DATE          NOT NULL,
-    maturity_date         DATE          NOT NULL
+    maturity_date         DATE          NOT NULL,
+    last_autodebit_date   DATE          NULL,               -- EOD auto-debit: last attempt
+    last_autodebit_status NVARCHAR(20)  NULL,               -- PAID | INSUFFICIENT_FUNDS | FAILED
+    last_autodebit_amount DECIMAL(18,4) NULL
 );
 GO
 

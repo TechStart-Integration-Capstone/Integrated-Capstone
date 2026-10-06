@@ -103,6 +103,9 @@ class LoanFlowsTest {
         when(scheduleRepo.findByLoanIdOrderByInstallmentNo(anyLong())).thenAnswer(inv -> schedule.stream()
                 .filter(s -> s.getLoanId().equals(inv.getArgument(0)))
                 .sorted(Comparator.comparing(LoanSchedule::getInstallmentNo)).toList());
+        when(scheduleRepo.findLoanIdsWithUnpaidDueOnOrBefore(any())).thenAnswer(inv -> schedule.stream()
+                .filter(s -> !s.getStatus().equals("PAID") && !s.getDueDate().isAfter(inv.getArgument(0)))
+                .map(LoanSchedule::getLoanId).distinct().toList());
         when(scheduleRepo.findLoanIdsWithPendingDueBefore(any())).thenAnswer(inv -> schedule.stream()
                 .filter(s -> s.getStatus().equals("PENDING") && s.getDueDate().isBefore(inv.getArgument(0)))
                 .map(LoanSchedule::getLoanId).distinct().toList());
@@ -139,7 +142,7 @@ class LoanFlowsTest {
                 creditLimitService, events, props, queryService, tx);
         repaymentService = new LoanRepaymentService(loanRepo, scheduleRepo, repaymentRepo, reader, orchestrator,
                 events, props, queryService, tx);
-        eodService = new LoanEodService(loanRepo, scheduleRepo, events, props, tx);
+        eodService = new LoanEodService(loanRepo, scheduleRepo, repaymentService, events, props, tx);
     }
 
     private static BigDecimal bd(String v) { return new BigDecimal(v); }
@@ -455,6 +458,7 @@ class LoanFlowsTest {
     @DisplayName("TC-EOD-01: EOD after the 1st due date → row OVERDUE, 2% penalty once, loan OVERDUE")
     void tcEod01_overdueAndPenaltyOnce() {
         LoanSummary loan = disbursedNormalLoan();
+        stubRepayment(new TransferResult("REJECTED", null, null, "INSUFFICIENT_FUNDS")); // auto-debit can't collect
         LocalDate businessDate = LocalDate.of(2026, 11, 6);
 
         EodResult first = eodService.run(businessDate);
@@ -467,7 +471,7 @@ class LoanFlowsTest {
         Loan stored = loans.get(loan.loanId());
         assertThat(stored.getStatus()).isEqualTo("OVERDUE");
         assertThat(stored.getPenaltyDue()).isEqualByComparingTo("180.76"); // 2% of 9,038.10
-        assertThat(outboxTypes()).endsWith("loan.installment.overdue");
+        assertThat(outboxTypes()).endsWith("loan.installment.overdue", "loan.autodebit.failed");
 
         int eventsAfterFirst = outbox.size();
         EodResult second = eodService.run(businessDate);
@@ -486,6 +490,7 @@ class LoanFlowsTest {
     @DisplayName("Paying penalty + overdue installment brings the loan back to ACTIVE")
     void repayAfterOverdue_penaltyFirstThenActive() {
         LoanSummary loan = disbursedNormalLoan();
+        stubRepayment(new TransferResult("REJECTED", null, null, "INSUFFICIENT_FUNDS")); // auto-debit can't collect
         eodService.run(LocalDate.of(2026, 11, 6));
         stubRepayment(new TransferResult("POSTED", 602L, "FT26278PAY02", null));
 
@@ -494,6 +499,61 @@ class LoanFlowsTest {
         assertThat(outcome.response().penaltyDue()).isEqualByComparingTo("0.00");
         assertThat(outcome.response().loanStatus()).isEqualTo("ACTIVE");
         assertThat(schedule.get(0).getStatus()).isEqualTo("PAID");
+    }
+
+    // ── EOD auto-debit ──────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Auto-debit on the due date collects the installment from the account; nothing becomes overdue")
+    void autoDebit_collectsOnDueDate() {
+        LoanSummary loan = disbursedNormalLoan();
+        stubRepayment(new TransferResult("POSTED", 610L, "FT26278AUTO1", null));
+
+        EodResult result = eodService.run(LocalDate.of(2026, 11, 5)); // first due date
+
+        assertThat(result.autoDebitsPaid()).isEqualTo(1);
+        verify(orchestrator).transfer(ACCOUNT_NO, "PH1000000LOAN", bd("9038.10"), "LOAN_REPAYMENT",
+                "LOAN-REPAY-AUTODEBIT-" + loan.loanId() + "-2026-11-05", "Repayment for loan " + loan.referenceNo(), "loan-eod-2026-11-05");
+        assertThat(schedule.get(0).getStatus()).isEqualTo("PAID");
+        assertThat(queryService.myLoans(CUSTOMER).get(0).lastAutoDebit()).satisfies(a -> {
+            assertThat(a.status()).isEqualTo("PAID");
+            assertThat(a.amount()).isEqualByComparingTo("9038.10");
+        });
+
+        // Next night: nothing due, nothing overdue, no second debit.
+        EodResult next = eodService.run(LocalDate.of(2026, 11, 6));
+        assertThat(next.installmentsMarkedOverdue()).isZero();
+        assertThat(next.autoDebitsPaid()).isZero();
+        verify(orchestrator, times(1)).transfer(any(), any(), any(), eq("LOAN_REPAYMENT"), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Auto-debit with a short balance takes nothing, records INSUFFICIENT_FUNDS and alerts once; retried next night with the penalty")
+    void autoDebit_insufficientFunds_alertsThenRetries() {
+        LoanSummary loan = disbursedNormalLoan();
+        stubRepayment(new TransferResult("REJECTED", null, null, "INSUFFICIENT_FUNDS"));
+
+        EodResult dueDay = eodService.run(LocalDate.of(2026, 11, 5));
+        eodService.run(LocalDate.of(2026, 11, 5)); // admin re-run the same day: no duplicate alert
+
+        assertThat(dueDay.autoDebitsInsufficientFunds()).isEqualTo(1);
+        assertThat(repayments).isEmpty();
+        assertThat(schedule.get(0).getStatus()).isEqualTo("PENDING"); // not overdue until the day after
+        assertThat(outboxTypes().stream().filter("loan.autodebit.failed"::equals)).hasSize(1);
+        assertThat(queryService.myLoans(CUSTOMER).get(0).lastAutoDebit().status()).isEqualTo("INSUFFICIENT_FUNDS");
+
+        // Customer tops up; next EOD marks the installment overdue (2% penalty) and collects both.
+        stubRepayment(new TransferResult("POSTED", 611L, "FT26278AUTO2", null));
+        EodResult nextDay = eodService.run(LocalDate.of(2026, 11, 6));
+
+        assertThat(nextDay.installmentsMarkedOverdue()).isEqualTo(1);
+        assertThat(nextDay.autoDebitsPaid()).isEqualTo(1);
+        verify(orchestrator).transfer(eq(ACCOUNT_NO), eq("PH1000000LOAN"), eq(bd("9218.86")), eq("LOAN_REPAYMENT"),
+                eq("LOAN-REPAY-AUTODEBIT-" + loan.loanId() + "-2026-11-06"), any(), any());
+        Loan stored = loans.get(loan.loanId());
+        assertThat(stored.getStatus()).isEqualTo("ACTIVE");
+        assertThat(stored.getPenaltyDue()).isEqualByComparingTo("0");
+        assertThat(stored.getLastAutoDebitStatus()).isEqualTo("PAID");
     }
 
     @Test
