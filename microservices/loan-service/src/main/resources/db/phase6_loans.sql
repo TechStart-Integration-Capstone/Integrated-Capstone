@@ -154,3 +154,12 @@ BEGIN
     FROM dbo.CUSTOMER WHERE username = N'paypink_bank';
 END
 GO
+
+-- 6. EOD auto-debit: outcome of the last automatic installment collection, shown to the customer.
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.LOAN') AND name = 'last_autodebit_status')
+BEGIN
+    ALTER TABLE dbo.LOAN ADD last_autodebit_date DATE NULL,
+        last_autodebit_status NVARCHAR(20) NULL,          -- PAID | INSUFFICIENT_FUNDS | FAILED
+        last_autodebit_amount DECIMAL(18,4) NULL;
+END
+GO

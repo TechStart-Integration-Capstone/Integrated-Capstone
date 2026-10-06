@@ -4,9 +4,11 @@ import com.bank.transaction.dto.RemittanceRequest;
 import com.bank.transaction.dto.RemittanceResponse;
 import com.bank.transaction.model.Remittance;
 import com.bank.transaction.service.RemittanceOrchestratorService;
+import com.bank.transaction.service.RemittanceSagaWorker;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,9 +21,17 @@ public class RemittanceController {
     private static final Logger log = LoggerFactory.getLogger(RemittanceController.class);
 
     private final RemittanceOrchestratorService orchestratorService;
+    private final RemittanceSagaWorker sagaWorker;
 
-    public RemittanceController(RemittanceOrchestratorService orchestratorService) {
+    @Autowired
+    public RemittanceController(RemittanceOrchestratorService orchestratorService, RemittanceSagaWorker sagaWorker) {
         this.orchestratorService = orchestratorService;
+        this.sagaWorker = sagaWorker;
+    }
+
+    /** Without "Send now" support (unit tests that only exercise the orchestrator). */
+    public RemittanceController(RemittanceOrchestratorService orchestratorService) {
+        this(orchestratorService, null);
     }
 
     @GetMapping("/health")
@@ -96,6 +106,29 @@ public class RemittanceController {
                 "status", Remittance.STATUS_CANCELLED,
                 "message", "Transfer was successfully cancelled. Held funds have been released back to your available balance."
         ));
+    }
+
+    /** Skips the rest of the cancellation window and submits the transfer to core banking now. */
+    @PostMapping("/{referenceNo}/send-now")
+    public ResponseEntity<Map<String, Object>> sendNow(
+            @PathVariable String referenceNo,
+            @RequestHeader(value = "X-Auth-Customer-Id", required = false) String authCustomerIdHeader) {
+
+        if (authCustomerIdHeader == null || authCustomerIdHeader.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Missing identity context: X-Auth-Customer-Id header required");
+        }
+        Long callerCustomerId;
+        try {
+            callerCustomerId = Long.valueOf(authCustomerIdHeader.trim());
+        } catch (NumberFormatException e) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid X-Auth-Customer-Id header format");
+        }
+
+        log.info("[remittance-controller] Send-now request received for ref={} from customerId={}", referenceNo, callerCustomerId);
+        Remittance remittance = sagaWorker.sendNow(referenceNo, callerCustomerId);
+        return ResponseEntity.ok(Map.of("referenceNo", referenceNo, "status", remittance.getStatus()));
     }
 
     @GetMapping("/{referenceNo}/status")

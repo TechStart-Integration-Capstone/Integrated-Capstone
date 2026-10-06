@@ -283,6 +283,18 @@ public class RemittanceLedgerService {
         log.info("[ledger-service] Held funds released and reversed for sourceAcc={} ref={}", sourceAccountId, remittance.getReferenceNo());
     }
 
+    /**
+     * Atomically ends a transfer's cancellation window. Cancel, "Send now" and the saga sweeper all call this
+     * first and only the caller that gets {@code true} may act, so a transfer is never both cancelled and sent.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean claimCancelWindow(Long remittanceId, String newInternalStatus) {
+        return jdbcTemplate.update("UPDATE dbo.REMITTANCE SET internal_status = ?, updated_at = ? "
+                        + "WHERE remittance_id = ? AND status = ? AND internal_status = ?",
+                newInternalStatus, LocalDateTime.now(), remittanceId,
+                Remittance.STATUS_RESERVED, Remittance.INTERNAL_CLIENT_CANCEL_WINDOW) == 1;
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void cancelAndReleaseHold(Remittance remittance, String reason) {
         if (remittance.getSourceAccountId() != null && remittance.getAmount() != null) {

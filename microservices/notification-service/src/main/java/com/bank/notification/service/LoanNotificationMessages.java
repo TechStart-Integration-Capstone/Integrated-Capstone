@@ -50,6 +50,9 @@ public final class LoanNotificationMessages {
                         + (penalty.signum() > 0 ? " A penalty of " + peso(penalty) + " was added." : "");
                 yield new LoanAlert(customerId, accountId, loanRef + "-I" + node.path("installmentNo").asInt(), message);
             }
+            case "loan.autodebit.failed" -> new LoanAlert(customerId, accountId, loanRef + "-AD" + text(node, "businessDate"),
+                    "We couldn't collect your loan payment of " + peso(node, "amount") + " for " + loanRef
+                            + ": not enough balance. Please top up your account; we'll try again tonight, or you can pay now in the app.");
             case "loan.closed" -> new LoanAlert(customerId, accountId, loanRef + "-CLOSED",
                     "Loan " + loanRef + " is fully paid. Thank you!");
             default -> null;

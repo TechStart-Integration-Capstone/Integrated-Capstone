@@ -122,22 +122,39 @@ public class BankingService {
         Customer customer = authenticatedCustomer(authorization);
         // The outbox records the actual debit/credit operation; transaction_type can be a payment rail.
         // Only the mutated account is selected: a target ID alone does not prove a recipient credit.
-        // Exception: a LOAN_DISBURSEMENT is a single bank → borrower row, so the borrower's (target) account is the
+        // Exceptions: a LOAN_DISBURSEMENT is a single bank → borrower row, so the borrower's (target) account is the
         // one shown, as a CREDIT; a LOAN_REPAYMENT is the borrower's DEBIT.
-        return jdbc.query("SELECT t.transaction_id, a.account_id, a.account_number, t.amount, t.source_currency, "
-                        + "t.transaction_type, COALESCE(CASE t.transaction_type WHEN 'LOAN_DISBURSEMENT' THEN 'CREDIT' "
+        // A P2P_REMITTANCE (transaction-service transfer) is also a single row for both sides, so the second SELECT
+        // adds the receiver's leg as a TRANSFER_IN credit with the sender as counterparty. That leg uses the negated
+        // transaction_id as its key, so a transfer between the customer's own accounts lists two distinct entries.
+        return jdbc.query("SELECT * FROM (SELECT t.transaction_id AS activity_id, t.transaction_id AS ledger_id, a.account_id, a.account_number, "
+                        + "t.amount, t.source_currency, t.transaction_type, COALESCE(CASE t.transaction_type WHEN 'LOAN_DISBURSEMENT' THEN 'CREDIT' "
                         + "WHEN 'LOAN_REPAYMENT' THEN 'DEBIT' END, "
                         + "(SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o "
                         + "WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
-                        + "CASE WHEN t.transaction_type IN ('DEBIT','CREDIT') THEN t.transaction_type END), "
-                        + "t.reference_no, t.status, t.transaction_date, c.first_name + ' ' + c.last_name, target.account_number FROM LEDGER_TRANSACTION t "
+                        + "CASE WHEN t.transaction_type IN ('DEBIT','CREDIT') THEN t.transaction_type END) AS operation, "
+                        + "t.status, t.transaction_date, c.first_name + ' ' + c.last_name AS counterparty_name, "
+                        + "target.account_number AS counterparty_account FROM LEDGER_TRANSACTION t "
                         + "JOIN ACCOUNT a ON a.account_id = CASE WHEN t.transaction_type = 'LOAN_DISBURSEMENT' "
                         + "THEN t.to_account_id ELSE t.from_account_id END "
-                        + "LEFT JOIN ACCOUNT target ON target.account_id = t.to_account_id AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN') "
+                        + "LEFT JOIN ACCOUNT target ON target.account_id = t.to_account_id AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN','P2P_REMITTANCE') "
                         + "LEFT JOIN CUSTOMER c ON c.customer_id = target.customer_id WHERE a.customer_id = ? "
-                        + "ORDER BY t.transaction_date DESC, t.transaction_id DESC OFFSET 0 ROWS FETCH NEXT 200 ROWS ONLY",
-                (rs, row) -> new Activity(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getBigDecimal(4),
-                        rs.getString(5), rs.getString(6), rs.getString(7), BankingIdentifiers.reference(rs.getLong(1),rs.getTimestamp(10).toLocalDateTime()), rs.getString(9),
-                        rs.getTimestamp(10).toLocalDateTime(), ExternalTransferService.recipientForType(rs.getString(6)) == null ? rs.getString(11) : ExternalTransferService.recipientForType(rs.getString(6)).name(), ExternalTransferService.recipientForType(rs.getString(6)) == null ? rs.getString(12) : ExternalTransferService.recipientForType(rs.getString(6)).number()), customer.getCustomerId());
+                        + "UNION ALL SELECT -t.transaction_id, t.transaction_id, a.account_id, a.account_number, t.amount, t.target_currency, "
+                        + "'TRANSFER_IN', 'CREDIT', t.status, t.transaction_date, c.first_name + ' ' + c.last_name, source.account_number "
+                        + "FROM LEDGER_TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id "
+                        + "JOIN ACCOUNT source ON source.account_id = t.from_account_id "
+                        + "LEFT JOIN CUSTOMER c ON c.customer_id = source.customer_id "
+                        + "WHERE t.transaction_type = 'P2P_REMITTANCE' AND a.customer_id = ?) activity "
+                        + "ORDER BY transaction_date DESC, ledger_id DESC, activity_id DESC OFFSET 0 ROWS FETCH NEXT 200 ROWS ONLY",
+                (rs, row) -> {
+                    String type = rs.getString("transaction_type");
+                    var rail = ExternalTransferService.recipientForType(type);
+                    LocalDateTime date = rs.getTimestamp("transaction_date").toLocalDateTime();
+                    return new Activity(rs.getLong("activity_id"), rs.getLong("account_id"), rs.getString("account_number"),
+                            rs.getBigDecimal("amount"), rs.getString("source_currency"), type, rs.getString("operation"),
+                            BankingIdentifiers.reference(rs.getLong("ledger_id"), date), rs.getString("status"), date,
+                            rail == null ? rs.getString("counterparty_name") : rail.name(),
+                            rail == null ? rs.getString("counterparty_account") : rail.number());
+                }, customer.getCustomerId(), customer.getCustomerId());
     }
 }

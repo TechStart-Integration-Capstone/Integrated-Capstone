@@ -255,6 +255,14 @@ class BankingTransferIntegrationTest {
         assertThat(recipients.directory("owner").favorites()).isEmpty();
     }
 
+    @Test void recentRecipientsIncludeTransfersPostedByTheRemittanceOrchestrator() {
+        // The 30-second-hold transfer flow (transaction-service) records sends as P2P_REMITTANCE.
+        jdbc.update("INSERT INTO LEDGER_TRANSACTION(from_account_id,to_account_id,amount,source_currency,target_currency,transaction_type,reference_no,status) "
+                + "VALUES(1,3,10,'PHP','PHP','P2P_REMITTANCE','TX-PH-RECENT01','SUCCESS')");
+        assertThat(recipients.directory("owner").recent()).singleElement()
+                .satisfies(r -> assertThat(r.fullName()).isEqualTo("Alex Cruz"));
+    }
+
     @Test void recentRecipientsIncludeSentAndReceivedTransfersWithoutDuplicates() {
         transfers.transfer("owner",request(1,"PP-RECIPIENT","10","recipient_history_01"));
         transfers.transfer("owner",request(1,"PP-RECIPIENT","5","recipient_history_02"));

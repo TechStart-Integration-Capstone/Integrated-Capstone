@@ -50,7 +50,7 @@ async function loadLoans() {
     if (generation === state.generation) loanState.error = error.message;
   } finally {
     loanState.loading = false;
-    if (generation === state.generation && state.page === 'loans') renderPage();
+    if (generation === state.generation && ['loans','overview'].includes(state.page)) renderPage();
   }
 }
 
@@ -92,14 +92,37 @@ function offerCard(offer) {
     ${!declined && !accepted ? `<div class="dialog-actions"><button class="btn btn-secondary" type="button" data-loan-action="dismiss-offer">Not now</button><button class="btn btn-primary" type="button" data-loan-action="accept" data-ref="${escapeHtml(offer.referenceNo)}" ${loanState.busy ? 'disabled' : ''}>${loanState.busy ? 'Disbursing…' : `Accept and receive ${escapeHtml(money(o.amount))}`}</button></div>` : ''}</section>`;
 }
 
+// Installments are collected automatically by the nightly EOD job on their due date.
+// A short balance leaves the loan flagged INSUFFICIENT_FUNDS until the amount is paid (by a later debit or manually).
+function missedAutoDebit(loan) {
+  const last = loan.lastAutoDebit;
+  if (!last || last.status !== 'INSUFFICIENT_FUNDS' || loan.status === 'CLOSED') return false;
+  return loan.status === 'OVERDUE' || Number(loan.penaltyDue) > 0 || (loan.nextDue && loan.nextDue.dueDate <= last.date);
+}
+
+function autoDebitAlert(loan) {
+  const last = loan.lastAutoDebit;
+  return `<div class="loan-alert" role="alert">${icon('wallet')}<div><strong>We couldn’t collect your ${escapeHtml(money(last.amount))} payment</strong><p>Your account ${escapeHtml(maskedNumber(loan.accountNo))} didn’t have enough balance on ${escapeHtml(loanDate(last.date))}. Top up and we’ll try again tonight, or pay now to avoid ${loan.status === 'OVERDUE' ? 'more charges' : 'a 2% late fee'}.</p></div></div>`;
+}
+
+// Overview banner for loans whose automatic payment failed.
+function loanAlertsBanner() {
+  if (!loanState.loaded && !loanState.loading && !loanState.error && state.profile) queueMicrotask(loadLoans);
+  const missed = loanState.loans.filter(missedAutoDebit);
+  if (!missed.length) return '';
+  const total = missed.reduce((sum, loan) => sum + Number(loan.lastAutoDebit.amount), 0);
+  return `<div class="loan-alert loan-alert-banner" role="alert">${icon('wallet')}<div><strong>Loan payment not collected</strong><p>We couldn’t auto-debit ${escapeHtml(money(total))} for ${missed.length === 1 ? 'your loan' : `${missed.length} loans`} — not enough balance. Top up before tonight’s run or pay now.</p></div><button class="btn btn-primary" type="button" data-action="navigate" data-page="loans">Pay now</button></div>`;
+}
+
 function myLoansMarkup() {
   if (loanState.error) return `<p class="notice" role="alert">${escapeHtml(loanState.error)} <button class="btn btn-subtle" type="button" data-loan-action="reload">Try again</button></p>`;
   if (!loanState.loaded) return '<div class="loading-panel" role="status"><div class="skeleton"></div><p>Loading your loans…</p></div>';
   if (!loanState.loans.length) return '<p class="muted">Loans you accept will appear here, with what’s due next.</p>';
   return loanState.loans.map(loan => `<article class="account-card" style="margin-bottom:16px"><div class="account-card-top"><strong>${escapeHtml(loan.referenceNo)}</strong>${loanPill(loan.status)}</div>
+    ${missedAutoDebit(loan) ? autoDebitAlert(loan) : ''}
     <dl class="detail-list">${detail('Outstanding principal',balance(loan.outstandingPrincipal))}${Number(loan.penaltyDue) > 0 ? detail('Penalty due',balance(loan.penaltyDue)) : ''}
-    ${loan.nextDue ? detail('Next payment',`${balance(loan.nextDue.amount)} · ${escapeHtml(loanDate(loan.nextDue.dueDate))}`) : ''}${detail('Rate · term',`${escapeHtml(loan.annualRate)}% · ${escapeHtml(loan.termMonths)} months`)}</dl>
-    <div class="dialog-actions"><button class="btn btn-secondary" type="button" data-loan-action="schedule" data-id="${loan.loanId}">View schedule</button>${loan.status !== 'CLOSED' ? `<button class="btn btn-primary" type="button" data-loan-action="pay" data-id="${loan.loanId}">Pay</button>` : ''}</div></article>`).join('');
+    ${loan.nextDue ? detail('Next payment',`${balance(loan.nextDue.amount)} · ${escapeHtml(loanDate(loan.nextDue.dueDate))}`) + detail('Auto-debit',`On the due date from ${escapeHtml(maskedNumber(loan.accountNo))}`) : ''}${detail('Rate · term',`${escapeHtml(loan.annualRate)}% · ${escapeHtml(loan.termMonths)} months`)}</dl>
+    <div class="dialog-actions"><button class="btn btn-secondary" type="button" data-loan-action="schedule" data-id="${loan.loanId}">View schedule</button>${loan.status !== 'CLOSED' ? `<button class="btn btn-primary" type="button" data-loan-action="pay" data-id="${loan.loanId}">Pay now</button>` : ''}</div></article>`).join('');
 }
 
 async function applyForLoan(form) {
