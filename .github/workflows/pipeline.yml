@@ -244,10 +244,13 @@ jobs:
       - name: Apply additive database migrations
         run: |
           echo "Applying additive database schema migrations to live containers..."
-          PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env | cut -d= -f2- | tr -d '\r\n')
           SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
           if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
             SQLCMD="/opt/mssql-tools/bin/sqlcmd"
+          fi
+          PASS="PayPink2.0_StrongPass!"
+          if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -Q "SELECT 1" &>/dev/null; then
+            PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n')
           fi
           for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql; do
             if [ -f "$f" ]; then
@@ -255,10 +258,14 @@ jobs:
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
             fi
           done
+          PG_USER="audit_user"
+          if ! docker exec postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db -c "SELECT 1" &>/dev/null; then
+            PG_USER="postgres"
+          fi
           for f in scripts/migrate_reconciliation_fix.sql scripts/migrate_phase6_risk_decision.sql scripts/migrate_interest_postgres.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to postgres-immutable-audit..."
-              cat "$f" | docker exec -i postgres-immutable-audit psql -U postgres -d ledger_audit_db 2>/dev/null || true
+              cat "$f" | docker exec -i postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db 2>/dev/null || true
             fi
           done
           # Restart transaction-service so JPA models pick up newly migrated columns
