@@ -79,14 +79,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate compose file
-        run: docker compose -f "$COMPOSE_FILE" config --quiet
-      - name: Trivy filesystem scan
         run: |
-          docker run --rm -v "$PWD:/src" aquasec/trivy:latest fs \
-            --scanners vuln,misconfig \
-            --severity CRITICAL \
-            --ignore-unfixed \
-            --exit-code 0 /src
+          touch .env
+          docker compose -f "$COMPOSE_FILE" config --quiet
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          scanners: 'vuln,misconfig'
+          severity: 'CRITICAL'
+          ignore-unfixed: true
+          exit-code: '0'
 
   # ===================================================================
   # STAGE 2 - TEST (temporary stack, deleted at the end)

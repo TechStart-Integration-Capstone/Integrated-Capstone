@@ -36,15 +36,12 @@ class ReconciliationServiceTest {
     @Mock private TransactionRepository        transactionRepository;
     @Mock private LedgerMutationAuditRepository auditRepository;
     @Mock private ReconciliationLogRepository   reconLogRepository;
-    @InjectMocks private ReconciliationService  service;
+    private ReconciliationService               service;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach void setUp() {
-        try {
-            var f = ReconciliationService.class.getDeclaredField("objectMapper");
-            f.setAccessible(true); f.set(service, objectMapper);
-        } catch (Exception e) { throw new RuntimeException(e); }
+        service = new ReconciliationService(transactionRepository, auditRepository, reconLogRepository, objectMapper);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

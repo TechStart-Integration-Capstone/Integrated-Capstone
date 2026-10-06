@@ -28,15 +28,12 @@ import static org.mockito.Mockito.*;
 class AuditKafkaConsumerTest {
 
     @Mock private LedgerMutationAuditRepository auditRepository;
-    @InjectMocks private AuditKafkaConsumer consumer;
+    private AuditKafkaConsumer                  consumer;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach void setUp() {
-        try {
-            var f = AuditKafkaConsumer.class.getDeclaredField("objectMapper");
-            f.setAccessible(true); f.set(consumer, objectMapper);
-        } catch (Exception e) { throw new RuntimeException(e); }
+        consumer = new AuditKafkaConsumer(auditRepository, objectMapper);
     }
 
     private String event(long txId, long accId, long custId, String op, String amount, String before, String after) {
