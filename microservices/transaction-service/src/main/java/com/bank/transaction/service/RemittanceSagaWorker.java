@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,15 +19,20 @@ import java.util.List;
  * PayPink 2.0 — Remittance Saga Background Worker.
  *
  * Implements forward-recovery saga resolution & stuck-hold sweeping:
- *   1. Scans for REMITTANCE rows in T24_POSTED state (T24 committed, local DB pending)
- *      and completes the local ledger debit, credit, and outbox event idempotently.
- *   2. Scans for REMITTANCE rows in PROCESSING or old PENDING_CORE state (> 60s)
+ *   1. Scans for REMITTANCE rows that T24 already posted (status Processing + internal_status POSTED, or the
+ *      legacy T24_POSTED status) whose local ledger commit never finished, and completes the debit, credit
+ *      and outbox event. commitLedgerMutation is idempotent, so a row the orchestrator just posted is skipped.
+ *   2. Scans for REMITTANCE rows still waiting on T24 (Processing without a T24 posting, or old PENDING_CORE)
  *      and queries T24 status to either complete forward recovery or release held funds.
+ *
+ * Rows touched in the last {@link #SETTLE} are left alone: the orchestrator is probably still working on them.
  */
 @Component
 public class RemittanceSagaWorker {
 
     private static final Logger log = LoggerFactory.getLogger(RemittanceSagaWorker.class);
+    static final Duration SETTLE = Duration.ofSeconds(15);
+    private static final String LEGACY_T24_POSTED = "T24_POSTED";
 
     private final RemittanceRepository remittanceRepository;
     private final RemittanceLedgerService ledgerService;
@@ -44,49 +50,31 @@ public class RemittanceSagaWorker {
 
     @Scheduled(fixedDelay = 10000)
     public void resolvePendingSagas() {
-        // ── 1. Forward Recovery for T24_POSTED Remittances ─────────────────────────
-        List<Remittance> t24PostedList = remittanceRepository.findByStatus("T24_POSTED");
-        for (Remittance remittance : t24PostedList) {
-            try {
-                log.info("[saga-worker] Found T24_POSTED saga ref={} ftRef={}. Executing forward recovery ledger commit...",
-                        remittance.getReferenceNo(), remittance.getFtReference());
+        LocalDateTime settledBefore = LocalDateTime.now().minus(SETTLE);
 
-                RemittanceRequest request = new RemittanceRequest();
-                request.setSourceAccountId(String.valueOf(remittance.getSourceAccountId()));
-                request.setTargetAccountId(String.valueOf(remittance.getTargetAccountId()));
-                request.setAmount(remittance.getAmount());
-                request.setCurrency(remittance.getCurrency());
-
-                ledgerService.commitLedgerMutation(
-                        remittance,
-                        request,
-                        remittance.getSourceAccountId(),
-                        remittance.getTargetAccountId(),
-                        remittance.getAmount(),
-                        null,
-                        remittance.getFtReference()
-                );
-                log.info("[saga-worker] Forward recovery completed successfully for ref={}", remittance.getReferenceNo());
-            } catch (Exception e) {
-                log.error("[saga-worker] Failed to complete forward recovery for ref={}: {}",
-                        remittance.getReferenceNo(), e.getMessage());
-            }
+        // Status values are compared case-insensitively by SQL Server, so "Processing" also matches "PROCESSING".
+        List<Remittance> t24Posted = new ArrayList<>(remittanceRepository.findByStatus(LEGACY_T24_POSTED));
+        List<Remittance> awaitingT24 = new ArrayList<>();
+        for (Remittance r : remittanceRepository.findByStatus(Remittance.STATUS_PROCESSING)) {
+            if (isT24Posted(r)) t24Posted.add(r); else awaitingT24.add(r);
         }
-
-        // ── 2. Inquiry Resolution for PROCESSING & Old PENDING_CORE Remittances ──────
-        List<Remittance> pendingOrProcessing = new ArrayList<>();
-        pendingOrProcessing.addAll(remittanceRepository.findByStatus("PROCESSING"));
-
         // Sweep PENDING_CORE rows older than 60 seconds (#1)
         LocalDateTime sixtySecondsAgo = LocalDateTime.now().minusSeconds(60);
-        List<Remittance> pendingCoreList = remittanceRepository.findByStatus("PENDING_CORE");
-        for (Remittance r : pendingCoreList) {
-            if (r.getUpdatedAt() != null && r.getUpdatedAt().isBefore(sixtySecondsAgo)) {
-                pendingOrProcessing.add(r);
-            }
+        for (Remittance r : remittanceRepository.findByStatus("PENDING_CORE")) {
+            if (r.getUpdatedAt() != null && r.getUpdatedAt().isBefore(sixtySecondsAgo)) awaitingT24.add(r);
         }
 
-        for (Remittance remittance : pendingOrProcessing) {
+        // ── 1. Forward Recovery for T24-posted Remittances ──────────────────────────
+        for (Remittance remittance : t24Posted) {
+            if (!settled(remittance, settledBefore)) continue;
+            log.info("[saga-worker] Found T24-posted saga ref={} ftRef={}. Executing forward recovery ledger commit...",
+                    remittance.getReferenceNo(), remittance.getFtReference());
+            commit(remittance);
+        }
+
+        // ── 2. Inquiry Resolution for Remittances still waiting on T24 ───────────────
+        for (Remittance remittance : awaitingT24) {
+            if (!settled(remittance, settledBefore)) continue;
             try {
                 log.info("[saga-worker] Inquiring T24 status for saga ref={} status={}...",
                         remittance.getReferenceNo(), remittance.getStatus());
@@ -106,6 +94,7 @@ public class RemittanceSagaWorker {
                 if ("POSTED".equalsIgnoreCase(t24.status())) {
                     ledgerService.recordT24Posted(remittance, t24.ftReference());
                     log.info("[saga-worker] Inquiry resolved T24_POSTED for ref={}", remittance.getReferenceNo());
+                    commit(remittance);
                 } else if ("REJECTED".equalsIgnoreCase(t24.status())) {
                     ledgerService.releaseHoldFunds(
                             remittance,
@@ -119,6 +108,40 @@ public class RemittanceSagaWorker {
                 log.error("[saga-worker] Error during T24 status inquiry for ref={}: {}",
                         remittance.getReferenceNo(), e.getMessage());
             }
+        }
+    }
+
+    static boolean isT24Posted(Remittance r) {
+        return LEGACY_T24_POSTED.equalsIgnoreCase(r.getStatus())
+                || (Remittance.STEP_POSTED.equals(r.getInternalStatus()) && r.getFtReference() != null);
+    }
+
+    private static boolean settled(Remittance r, LocalDateTime settledBefore) {
+        return r.getUpdatedAt() == null || r.getUpdatedAt().isBefore(settledBefore);
+    }
+
+    private void commit(Remittance remittance) {
+        try {
+            RemittanceRequest request = new RemittanceRequest();
+            request.setSourceAccountId(String.valueOf(remittance.getSourceAccountId()));
+            request.setTargetAccountId(String.valueOf(remittance.getTargetAccountId()));
+            request.setAmount(remittance.getAmount());
+            request.setCurrency(remittance.getCurrency());
+            request.setTransactionType(remittance.getTransactionType());
+
+            ledgerService.commitLedgerMutation(
+                    remittance,
+                    request,
+                    remittance.getSourceAccountId(),
+                    remittance.getTargetAccountId(),
+                    remittance.getAmount(),
+                    null,
+                    remittance.getFtReference()
+            );
+            log.info("[saga-worker] Forward recovery completed successfully for ref={}", remittance.getReferenceNo());
+        } catch (Exception e) {
+            log.error("[saga-worker] Failed to complete forward recovery for ref={}: {}",
+                    remittance.getReferenceNo(), e.getMessage());
         }
     }
 }

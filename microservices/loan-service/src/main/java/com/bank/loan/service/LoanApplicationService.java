@@ -21,7 +21,7 @@ import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** POST /loans/applications — validate, check ownership, decide, save + outbox in one transaction. */
+/** POST /loans/applications — validate, check ownership, decide (credit limit included), save + outbox in one transaction. */
 @Service
 public class LoanApplicationService {
 
@@ -31,17 +31,20 @@ public class LoanApplicationService {
     private final LoanRepository loanRepository;
     private final CustomerAccountReader reader;
     private final LoanDecisionEngine decisionEngine;
+    private final LoanCreditLimitService creditLimit;
     private final LoanEvents events;
     private final LoanProperties props;
     private final TransactionTemplate tx;
 
     public LoanApplicationService(LoanApplicationRepository applicationRepository, LoanRepository loanRepository,
-                                  CustomerAccountReader reader, LoanDecisionEngine decisionEngine, LoanEvents events,
+                                  CustomerAccountReader reader, LoanDecisionEngine decisionEngine,
+                                  LoanCreditLimitService creditLimit, LoanEvents events,
                                   LoanProperties props, TransactionTemplate tx) {
         this.applicationRepository = applicationRepository;
         this.loanRepository = loanRepository;
         this.reader = reader;
         this.decisionEngine = decisionEngine;
+        this.creditLimit = creditLimit;
         this.events = events;
         this.props = props;
         this.tx = tx;
@@ -71,9 +74,10 @@ public class LoanApplicationService {
         var customer = reader.findCustomer(customerId)
                 .orElseThrow(LoanException::accountNotOwned);
         boolean hasOverdue = loanRepository.existsByCustomerIdAndStatus(customerId, Loan.STATUS_OVERDUE);
+        BigDecimal existingDebt = creditLimit.existingDebt(customerId);
 
         LoanDecisionEngine.Decision decision = decisionEngine.decide(customer.creditScore(), customer.monthlyIncome(),
-                request.amount(), request.termMonths(), hasOverdue);
+                request.amount(), request.termMonths(), hasOverdue, existingDebt);
 
         try {
             LoanApplication saved = tx.execute(status -> save(customerId, idempotencyKey, request, account.accountId(),

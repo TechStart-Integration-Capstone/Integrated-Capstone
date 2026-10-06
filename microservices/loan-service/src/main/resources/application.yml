@@ -23,7 +23,7 @@ spring:
 app:
   orchestrator:
     url: ${ORCHESTRATOR_URL:http://localhost:8083}
-    timeout-ms: 3000
+    timeout-ms: 10000                # > transaction-service worst case (T24 read timeout 3 s + ledger commit)
 
 loan:
   min-amount: 5000
@@ -33,6 +33,7 @@ loan:
   decline-below-score: 500
   offer-valid-days: 7
   penalty-rate: 0.02               # 2% of an overdue installment, charged once
+  disbursement-recovery-ms: 30000  # retry half-done disbursements (DISBURSING) every 30 s
   bank-account-no: PH1000000LOAN
   bands:
     LOW:    { min-score: 300, max-score: 579, max-amount: 30000,   annual-rate: 28.0, max-term: 12 }

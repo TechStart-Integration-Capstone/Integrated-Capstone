@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
 public class LoanApplication {
 
     public static final String STATUS_DECIDED = "DECIDED";
+    public static final String STATUS_DISBURSING = "DISBURSING"; // accepted; disbursement started, loan not recorded yet
     public static final String STATUS_ACCEPTED = "ACCEPTED";
+    public static final String STATUS_FAILED = "FAILED";         // disbursement definitively rejected; nothing credited
     public static final String STATUS_EXPIRED = "EXPIRED";
 
     @Id
@@ -57,7 +59,7 @@ public class LoanApplication {
     private String declineReason;
 
     @Column(name = "status", nullable = false, length = 15)
-    private String status; // DECIDED | ACCEPTED | EXPIRED
+    private String status; // DECIDED | DISBURSING | ACCEPTED | FAILED | EXPIRED
 
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt; // UTC

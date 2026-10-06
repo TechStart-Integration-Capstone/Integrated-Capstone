@@ -2,10 +2,10 @@
 
 // Phase 6 Loans: apply → offer → accept → my loans → schedule → pay. All money moves server-side.
 const LOANS_API = '/api/v1/loans';
-const loanState = {owner:null, loans:[], loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}};
+const loanState = {owner:null, loans:[], eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}};
 
 function resetLoansFor(owner) {
-  Object.assign(loanState, {owner, loans:[], loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}});
+  Object.assign(loanState, {owner, loans:[], eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}});
 }
 
 async function loanApi(path, {method = 'GET', body, idempotencyKey} = {}) {
@@ -35,7 +35,7 @@ async function loanApi(path, {method = 'GET', body, idempotencyKey} = {}) {
 
 const loanPill = status => `<span class="pill ${['APPROVED','ACTIVE','PAID','CLOSED'].includes(status) ? 'pill-green' : ['DECLINED','OVERDUE'].includes(status) ? 'pill-red' : 'pill-gray'}">${escapeHtml(String(status).replace('_',' ').toLowerCase().replace(/^./, c => c.toUpperCase()))}</span>`;
 const loanDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '—';
-const declineText = reason => ({CREDIT_SCORE_TOO_LOW:'Your credit score is below our minimum for a personal loan.', INSUFFICIENT_INCOME:'The monthly installment would be more than 30% of your monthly income.', EXISTING_LOAN_OVERDUE:'You have a loan with an overdue installment. Please settle it first.'}[reason] || 'We can’t offer a loan right now.');
+const declineText = reason => ({CREDIT_SCORE_TOO_LOW:'Your credit score is below our minimum for a personal loan.', INSUFFICIENT_INCOME:'The monthly installment would be more than 30% of your monthly income.', EXISTING_LOAN_OVERDUE:'You have a loan with an overdue installment. Please settle it first.', CREDIT_LIMIT_REACHED:'You’ve reached your credit limit. Pay down your current loan to borrow more.'}[reason] || 'We can’t offer a loan right now.');
 
 async function loadLoans() {
   if (!state.session || !state.profile || loanState.loading) return;
@@ -43,9 +43,9 @@ async function loadLoans() {
   loanState.loading = true;
   const generation = state.generation;
   try {
-    const loans = await loanApi('');
+    const [loans, eligibility] = await Promise.all([loanApi(''), loanApi('/eligibility').catch(() => null)]);
     if (generation !== state.generation) return;
-    loanState.loans = loans; loanState.loaded = true; loanState.error = '';
+    loanState.loans = loans; loanState.eligibility = eligibility; loanState.loaded = true; loanState.error = '';
   } catch (error) {
     if (generation === state.generation) loanState.error = error.message;
   } finally {
@@ -64,13 +64,21 @@ function loansPage() {
       ${loanState.formError ? `<div class="form-error" role="alert">${escapeHtml(loanState.formError)}</div>` : ''}
       <form id="loan-apply-form"><fieldset ${loanState.busy ? 'disabled' : ''}>
         <div class="form-field"><label for="loan-account">Pay into and repay from</label><select id="loan-account" name="accountNo" required>${accounts.map(a => `<option value="${escapeHtml(a.accountNumber)}" ${a.accountNumber === loanState.form.accountNo ? 'selected' : ''}>${escapeHtml(accountName(a.accountType))} · ${escapeHtml(maskedNumber(a.accountNumber))} · ${balance(a.currentBalance)}</option>`).join('')}</select></div>
-        <div class="form-row"><div class="form-field"><label for="loan-amount">Amount (PHP)</label><input id="loan-amount" name="amount" type="number" min="5000" step="0.01" required placeholder="250000.00" value="${escapeHtml(loanState.form.amount ?? '')}"><small>From ₱5,000.00.</small></div>
+        <div class="form-row"><div class="form-field"><label for="loan-amount">Amount (PHP)</label><input id="loan-amount" name="amount" type="number" min="5000" step="0.01" required placeholder="250000.00" value="${escapeHtml(loanState.form.amount ?? '')}"><small>${creditLimitText()}</small></div>
         <div class="form-field"><label for="loan-term">Term</label><select id="loan-term" name="termMonths">${terms.map(t => `<option value="${t}" ${t === Number(loanState.form.termMonths || 12) ? 'selected' : ''}>${t} months</option>`).join('')}</select></div></div>
         <button class="btn btn-primary" type="submit" ${accounts.length ? '' : 'disabled'}>${loanState.busy ? 'Checking…' : `Get my decision ${icon('arrow')}`}</button>
       </fieldset></form>
       ${loanState.offer ? offerCard(loanState.offer) : ''}
     </section>
     <aside class="transfer-guide" aria-labelledby="my-loans-title"><h2 id="my-loans-title">My loans</h2>${myLoansMarkup()}</aside></div>`;
+}
+
+// Credit limit = the credit-score band's maximum; what is still owed on open loans is taken off it.
+function creditLimitText() {
+  const e = loanState.eligibility;
+  if (!e) return 'From ₱5,000.00.';
+  if (!e.eligible) return escapeHtml(declineText(e.reason));
+  return `From ₱5,000.00 up to <strong>${escapeHtml(money(e.available))}</strong>` + (Number(e.outstanding) > 0 ? ` (limit ${escapeHtml(money(e.creditLimit))}, ${escapeHtml(money(e.outstanding))} still owed).` : '.');
 }
 
 function offerCard(offer) {
@@ -133,8 +141,10 @@ async function acceptOffer(referenceNo) {
     await Promise.all([loadLoans(), refresh()]);
   } catch (error) {
     if (generation === state.generation) {
-      loanState.formError = error.type === 'core-unavailable' ? 'We couldn’t disburse your loan right now. Nothing was charged — please try Accept again in a moment.' : error.message;
-      if (error.type === 'already-accepted') { loanState.offer = null; await loadLoans(); }
+      loanState.formError = error.message;
+      if (['already-accepted','disbursement-failed','credit-limit-reached'].includes(error.type)) { loanState.offer = null; await loadLoans(); }
+      // Still processing server-side: the loan is recorded automatically once the transfer completes.
+      if (error.type === 'core-unavailable') { loanState.offer = null; setTimeout(() => { if (generation === state.generation) { loadLoans(); refresh(); } }, 35000); }
     }
   } finally {
     if (generation === state.generation) { loanState.busy = false; renderPage(); }
