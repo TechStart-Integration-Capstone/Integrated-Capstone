@@ -47,7 +47,8 @@ public class RiskDecision {
      * Stored as TEXT in PostgreSQL (JSONB with GIN index applied by schema-postgres.sql).
      * Example: ["amount_above_50k","anomaly_off_hours_02h"]
      */
-    @Column(name = "reasons", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "reasons", nullable = false)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     private String reasons;
 
     /** End-to-end scoring latency in milliseconds as reported by the risk engine. */
