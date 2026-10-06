@@ -191,6 +191,23 @@ jobs:
           AVAIL_GB=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
           if [ "$AVAIL_GB" -lt 5 ]; then echo "Less than 5 GB free"; exit 1; fi
 
+      - name: Ensure Java 17 and Maven
+        run: |
+          if ! command -v mvn &> /dev/null || ! command -v java &> /dev/null; then
+            echo "Installing Maven and OpenJDK 17 on self-hosted runner..."
+            sudo apt-get update -y
+            sudo apt-get install -y maven openjdk-17-jdk
+          fi
+          mvn -version
+          java -version
+
+      - name: Compile Java Service Artifacts
+        run: |
+          for s in api-gateway auth-service account-service transaction-service notification-service audit-service reconciliation-service outbox-publisher analytics-service t24-adapter loan-service; do
+            echo "Packaging $s..."
+            mvn -B -f microservices/$s/pom.xml clean package -DskipTests
+          done
+
       - name: Build and start
         run: |
           docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env \
