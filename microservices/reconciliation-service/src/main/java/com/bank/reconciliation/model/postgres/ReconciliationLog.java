@@ -40,17 +40,17 @@ public class ReconciliationLog {
 
     public ReconciliationLog() {}
 
-    public ReconciliationLog(Long transactionId, String oracleStatus, String postgresStatus, String reconStatus) {
-        this(transactionId, null, oracleStatus, postgresStatus, reconStatus);
+    public ReconciliationLog(Long transactionId, String azureSqlStatus, String postgresStatus, String reconStatus) {
+        this(transactionId, null, azureSqlStatus, postgresStatus, reconStatus);
     }
 
-    public ReconciliationLog(Long transactionId, Long accountId, String oracleStatus, String postgresStatus, String reconStatus) {
-        this.transactionId  = transactionId;
-        this.accountId      = accountId;
-        this.oracleStatus   = oracleStatus;
-        this.postgresStatus = postgresStatus;
-        this.reconStatus    = reconStatus;
-        this.reconDate      = LocalDateTime.now();
+    public ReconciliationLog(Long transactionId, Long accountId, String azureSqlStatus, String postgresStatus, String reconStatus) {
+        this.transactionId   = transactionId;
+        this.accountId       = accountId;
+        this.azureSqlStatus  = azureSqlStatus;
+        this.postgresStatus  = postgresStatus;
+        this.reconStatus     = reconStatus;
+        this.reconDate       = LocalDateTime.now();
     }
 
     public Long          getReconId()        { return reconId; }
@@ -65,6 +65,7 @@ public class ReconciliationLog {
 
     public void setAccountId(Long accountId)           { this.accountId = accountId; }
     public void setAzureSqlStatus(String status)      { this.azureSqlStatus = status; }
+    public void setOracleStatus(String status)        { this.azureSqlStatus = status; }
     public void setPostgresStatus(String status)      { this.postgresStatus = status; }
     public void setReconStatus(String status)         { this.reconStatus = status; }
     public void setReconDate(LocalDateTime reconDate) { this.reconDate = reconDate; }

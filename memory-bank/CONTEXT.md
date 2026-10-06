@@ -1,7 +1,7 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **dom**_
-_Last updated: 2026-10-06 (Interest EOD implemented and tested; activation pending) - aly_
+_Last updated: 2026-10-06 (Interest EOD merged; CI/CD Pipeline Hardening, Java 17 Compatibility & Cloud Host Active)_
 
 ---
 
@@ -197,8 +197,8 @@ Demo credentials (password: password123):
 ## Git
 
 - Freeze tag: capstone1-freeze → commit 1e51aea
-- Working branch (2026-10-05): aly-feature
-- Latest commit at last update: b6ee3e4 — Merge branch 'main' of https://github.com/TechStart-Integration-Capstone/Integrated-Capstone
+- Working branch (2026-10-06): levi-feature
+- Latest CI update: CI/CD Dev stage hardened for Java 17 Temurin; all 11 microservices pass parallel unit tests; Trivy scan configured with official action.
 
 ---
 
@@ -240,9 +240,25 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 
 ---
 
+## Cloud Deployment & Azure Host Status (`vm-paypink`)
+
+- **VM Name:** `vm-paypink` (Ubuntu 24.04 LTS)
+- **Public IP:** `20.69.157.88`
+- **FQDN:** `paypink-levi-westus2.westus2.cloudapp.azure.com`
+- **Resource Group:** `RG-PAYPINK-WESTUS2`
+- **Active Endpoints:**
+  - Web Banking Frontend SPA: `http://20.69.157.88:80`
+  - Mobile PWA App: `http://20.69.157.88:3002`
+  - API Gateway: `http://20.69.157.88:8080`
+- **Container Health:** 26/26 Docker containers running and healthy.
+- **Budget Control:** Zero-cost / low-cost tier. Scheduled auto-shutdown active at 11:00 UTC (7:00 PM PHT). Deallocate when idle.
+- **Reconciliation Hotfix Migration:** Run `scripts/migrate_reconciliation_fix.sql` against `postgres-immutable-audit` container on the VM to sync `account_id` and `azure_sql_status` column renames.
+
+---
+
 ## Current Focus
 
-All planned phases complete through Phase 6. Remaining work:
+All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temurin runners. Remaining work:
 - **Interest EOD activation** — apply the additive migrations, configure the start date and PostgreSQL credentials, then deploy transaction-service and api-gateway while preserving runtime Azure SQL settings.
 - **Phase 7** — Mobile Frontend (PWA)
 - **Phase 8** — Chaos + Load Testing
