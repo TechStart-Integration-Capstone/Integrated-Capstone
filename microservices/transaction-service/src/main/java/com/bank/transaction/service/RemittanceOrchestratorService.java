@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.Optional;
 
@@ -174,8 +175,12 @@ public class RemittanceOrchestratorService {
                 } else if ("T24_POSTED".equalsIgnoreCase(existing.getStatus()) || "PROCESSING".equalsIgnoreCase(existing.getStatus())
                         || "PENDING_CORE".equalsIgnoreCase(existing.getStatus()) || "RESERVED".equalsIgnoreCase(existing.getStatus())
                         || "AUTHORIZED".equalsIgnoreCase(existing.getStatus())) {
-                    return new RemittanceResponse(
-                            "PROCESSING",
+                    boolean canCancel = "RESERVED".equalsIgnoreCase(existing.getStatus())
+                            && Remittance.INTERNAL_CLIENT_CANCEL_WINDOW.equalsIgnoreCase(existing.getInternalStatus())
+                            && existing.getCancelUntil() != null && java.time.LocalDateTime.now().isBefore(existing.getCancelUntil());
+                    int remaining = canCancel ? (int) Math.max(0, java.time.Duration.between(java.time.LocalDateTime.now(), existing.getCancelUntil()).toSeconds()) : 0;
+                    RemittanceResponse inProg = new RemittanceResponse(
+                            existing.getStatus(),
                             existing.getReferenceNo(),
                             existing.getFtReference(),
                             existing.getSourceAccountId(),
@@ -185,9 +190,13 @@ public class RemittanceOrchestratorService {
                             BigDecimal.ZERO,
                             existing.getRiskScore(),
                             existing.getRiskDecision(),
-                            "Transfer is currently processing. Status will update via saga worker.",
+                            canCancel ? "Transfer is in 30-second cancellation window. You may cancel within the window." : "Transfer is currently processing. Status will update via saga worker.",
                             true
                     );
+                    inProg.setCancelUntil(existing.getCancelUntil());
+                    inProg.setCancelWindowSeconds(remaining);
+                    inProg.setCanCancel(canCancel);
+                    return inProg;
                 } else if ("REJECTED".equalsIgnoreCase(existing.getStatus()) || "FAILED".equalsIgnoreCase(existing.getStatus())) {
                     String reason = existing.getReason() != null ? existing.getReason() : "Transfer was previously rejected.";
                     throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
@@ -318,60 +327,112 @@ public class RemittanceOrchestratorService {
                         "A transfer request with this Idempotency-Key is currently in progress. Please retry shortly.");
             }
 
-            // ── Step 8 & 9: T24 Core Adapter & Ledger Commit (With Exception Guardrail) ──────
-            RemittanceResponse finalResponse;
+            // Check if 30-second client cancellation window applies
+            boolean applyClientWindow = request.getCancelWindowSeconds() != null
+                    && request.getCancelWindowSeconds() > 0
+                    && !Boolean.TRUE.equals(request.getSkipClientWindow())
+                    && !RemittanceRequest.TYPE_LOAN_DISBURSEMENT.equals(request.getTransactionType());
 
-            try {
-                T24Result t24 = t24AdapterClient.executeTransfer(
+            if (applyClientWindow) {
+                int windowSeconds = request.getCancelWindowSeconds();
+                remittance.setStatus(Remittance.STATUS_RESERVED);
+                remittance.setInternalStatus(Remittance.INTERNAL_CLIENT_CANCEL_WINDOW);
+                remittance.setCurrentService("transaction-service");
+                remittance.setCancelUntil(LocalDateTime.now().plusSeconds(windowSeconds));
+                remittance.setRetryCount(0);
+                remittance.setMaxRetries(3);
+                remittance.setReason("30-second cancellation window active. You can cancel and reverse within 30 seconds.");
+                remittance = remittanceRepository.save(remittance);
+
+                RemittanceResponse windowResponse = new RemittanceResponse(
+                        Remittance.STATUS_RESERVED,
                         referenceNo,
-                        sourceAcc.number(),
-                        targetAcc.number(),
+                        null,
+                        sourceAcc.id(),
+                        targetAcc.id(),
                         request.getAmount(),
-                        request.getCurrency(),
-                        correlationId
+                        sourceAcc.balance(),
+                        sourceAcc.balance(),
+                        risk != null ? risk.score() : null,
+                        risk != null ? risk.decision() : null,
+                        remittance.getReason(),
+                        false
                 );
+                windowResponse.setCancelUntil(remittance.getCancelUntil());
+                windowResponse.setCancelWindowSeconds(windowSeconds);
+                windowResponse.setCanCancel(true);
+                return windowResponse;
+            }
 
-                if ("POSTED".equalsIgnoreCase(t24.status())) {
-                    ledgerService.recordT24Posted(remittance, t24.ftReference());
+            // ── Step 8 & 9: T24 Core Adapter & Ledger Commit ──────────────────────────
+            return executeCoreBankingSagaInternal(remittance, request, sourceAcc, targetAcc, risk, correlationId, redisKey);
 
-                    try {
-                        finalResponse = ledgerService.commitLedgerMutation(
-                                remittance,
-                                request,
-                                sourceAcc.id(),
-                                targetAcc.id(),
-                                request.getAmount(),
-                                risk,
-                                t24.ftReference()
-                        );
-                    } catch (Exception commitEx) {
-                        log.error("[remittance-orchestrator] T24 POSTED for ref={} but local ledger commit failed: {}. Preserving T24_POSTED status for saga worker recovery.",
-                                referenceNo, commitEx.getMessage());
-                        finalResponse = new RemittanceResponse(
-                                "PROCESSING",
-                                referenceNo,
-                                t24.ftReference(),
-                                request.getSourceAccountId(),
-                                request.getTargetAccountId(),
-                                request.getAmount(),
-                                BigDecimal.ZERO,
-                                BigDecimal.ZERO,
-                                risk != null ? risk.score() : null,
-                                risk != null ? risk.decision() : null,
-                                "T24 Core Banking posted transfer. Local ledger update will be finalized shortly by saga worker.",
-                                false
-                        );
-                    }
-                } else if ("REJECTED".equalsIgnoreCase(t24.status())) {
-                    String reason = "Core banking T24 rejected transfer: " + t24.reason();
-                    ledgerService.releaseHoldFunds(remittance, sourceAcc.id(), request.getAmount(), reason);
-                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
-                } else {
-                    // PROCESSING / Timeout SLA (#1)
-                    remittance.setStatus("PROCESSING");
-                    remittance.setReason("T24 Core Banking processing. Status will update via saga worker.");
-                    remittanceRepository.save(remittance);
+        } finally {
+            if (lockKey != null) {
+                redisTemplate.delete(lockKey);
+            }
+        }
+    }
 
+    public RemittanceResponse executeCoreBankingSaga(Remittance remittance, String correlationId) {
+        RemittanceRequest request = new RemittanceRequest();
+        request.setSourceAccountId(String.valueOf(remittance.getSourceAccountId()));
+        request.setTargetAccountId(String.valueOf(remittance.getTargetAccountId()));
+        request.setAmount(remittance.getAmount());
+        request.setCurrency(remittance.getCurrency());
+        request.setTransactionType(remittance.getTransactionType());
+
+        RemittanceLedgerService.AccountInfo sourceAcc = ledgerService.resolveAccount(String.valueOf(remittance.getSourceAccountId()));
+        RemittanceLedgerService.AccountInfo targetAcc = ledgerService.resolveAccount(String.valueOf(remittance.getTargetAccountId()));
+        RiskResult risk = remittance.getRiskScore() != null
+                ? new RiskResult(remittance.getRiskScore(), remittance.getRiskDecision(), java.util.List.of())
+                : null;
+
+        String redisKey = (remittance.getIdempotencyKey() != null && !remittance.getIdempotencyKey().isBlank())
+                ? IDEMP_PREFIX + remittance.getCallerCustomerId() + ":" + remittance.getIdempotencyKey()
+                : null;
+
+        return executeCoreBankingSagaInternal(remittance, request, sourceAcc, targetAcc, risk, correlationId, redisKey);
+    }
+
+    private RemittanceResponse executeCoreBankingSagaInternal(
+            Remittance remittance,
+            RemittanceRequest request,
+            RemittanceLedgerService.AccountInfo sourceAcc,
+            RemittanceLedgerService.AccountInfo targetAcc,
+            RiskResult risk,
+            String correlationId,
+            String redisKey) {
+
+        String referenceNo = remittance.getReferenceNo();
+        RemittanceResponse finalResponse;
+
+        try {
+            T24Result t24 = t24AdapterClient.executeTransfer(
+                    referenceNo,
+                    sourceAcc.number(),
+                    targetAcc.number(),
+                    request.getAmount(),
+                    request.getCurrency(),
+                    correlationId
+            );
+
+            if ("POSTED".equalsIgnoreCase(t24.status())) {
+                ledgerService.recordT24Posted(remittance, t24.ftReference());
+
+                try {
+                    finalResponse = ledgerService.commitLedgerMutation(
+                            remittance,
+                            request,
+                            sourceAcc.id(),
+                            targetAcc.id(),
+                            request.getAmount(),
+                            risk,
+                            t24.ftReference()
+                    );
+                } catch (Exception commitEx) {
+                    log.error("[remittance-orchestrator] T24 POSTED for ref={} but local ledger commit failed: {}. Preserving T24_POSTED status for saga worker recovery.",
+                            referenceNo, commitEx.getMessage());
                     finalResponse = new RemittanceResponse(
                             "PROCESSING",
                             referenceNo,
@@ -383,40 +444,128 @@ public class RemittanceOrchestratorService {
                             BigDecimal.ZERO,
                             risk != null ? risk.score() : null,
                             risk != null ? risk.decision() : null,
-                            "T24 Core Banking processing delay. Status will update via saga worker.",
+                            "T24 Core Banking posted transfer. Local ledger update will be finalized shortly by saga worker.",
                             false
                     );
                 }
-            } catch (ResponseStatusException rse) {
-                throw rse;
-            } catch (Exception ex) {
-                // Post-Hold Exception Guardrail: Auto-release held balance ONLY if failure happened before T24 POSTED
-                log.error("[remittance-orchestrator] Unhandled error post-hold for ref={}. Releasing held balance: {}",
-                        referenceNo, ex.getMessage());
-                ledgerService.releaseHoldFunds(remittance, sourceAcc.id(), request.getAmount(),
-                        "System error post-hold: " + ex.getMessage());
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                        "Transfer process encountered an error after hold. Funds have been released.");
+            } else if ("REJECTED".equalsIgnoreCase(t24.status())) {
+                // Instant Reversal (0 Retries)
+                String reason = "Core banking T24 rejected transfer: " + t24.reason();
+                ledgerService.releaseHoldFunds(remittance, sourceAcc.id(), request.getAmount(), reason);
+                remittance.setInternalStatus(Remittance.INTERNAL_T24_REJECTED);
+                remittanceRepository.save(remittance);
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
+            } else {
+                // PROCESSING / Timeout SLA: Bounded Retry with Exponential Backoff
+                remittance.setStatus("PROCESSING");
+                remittance.setInternalStatus(Remittance.STEP_AUTHORIZED);
+                remittance.setCurrentService("t24-adapter");
+                remittance.setRetryCount(0);
+                remittance.setMaxRetries(3);
+                remittance.setNextRetryAt(LocalDateTime.now().plusSeconds(15));
+                remittance.setReason("T24 Core Banking processing delay. Status will update via saga worker.");
+                remittanceRepository.save(remittance);
+
+                finalResponse = new RemittanceResponse(
+                        "PROCESSING",
+                        referenceNo,
+                        t24.ftReference(),
+                        request.getSourceAccountId(),
+                        request.getTargetAccountId(),
+                        request.getAmount(),
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        risk != null ? risk.score() : null,
+                        risk != null ? risk.decision() : null,
+                        "T24 Core Banking processing delay. Status will update via saga worker.",
+                        false
+                );
             }
+        } catch (ResponseStatusException rse) {
+            throw rse;
+        } catch (Exception ex) {
+            // Post-Hold Exception Guardrail: Auto-release held balance ONLY if failure happened before T24 POSTED
+            log.error("[remittance-orchestrator] Unhandled error post-hold for ref={}. Releasing held balance: {}",
+                    referenceNo, ex.getMessage());
+            ledgerService.releaseHoldFunds(remittance, sourceAcc.id(), request.getAmount(),
+                    "System error post-hold: " + ex.getMessage());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Transfer process encountered an error after hold. Funds have been released.");
+        }
 
-            // Cache in Redis for Idempotency — final outcomes only. A PROCESSING response must not be
-            // cached, or a retry after the saga worker posts it would keep replaying PROCESSING.
-            if (redisKey != null && "POSTED".equalsIgnoreCase(finalResponse.getStatus())) {
-                try {
-                    String json = objectMapper.writeValueAsString(finalResponse);
-                    redisTemplate.opsForValue().set(redisKey, json, Duration.ofDays(30));
-                } catch (Exception e) {
-                    log.warn("[remittance-orchestrator] Failed to cache response in Redis: {}", e.getMessage());
-                }
-            }
-
-            return finalResponse;
-
-        } finally {
-            if (lockKey != null) {
-                redisTemplate.delete(lockKey);
+        // Cache in Redis for Idempotency — final outcomes only.
+        if (redisKey != null && "POSTED".equalsIgnoreCase(finalResponse.getStatus())) {
+            try {
+                String json = objectMapper.writeValueAsString(finalResponse);
+                redisTemplate.opsForValue().set(redisKey, json, Duration.ofDays(30));
+            } catch (Exception e) {
+                log.warn("[remittance-orchestrator] Failed to cache response in Redis: {}", e.getMessage());
             }
         }
+
+        return finalResponse;
+    }
+
+    public void cancelTransferByUser(String referenceNo, Long callerCustomerId) {
+        Remittance remittance = remittanceRepository.findByReferenceNo(referenceNo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Remittance reference not found: " + referenceNo));
+
+        if (callerCustomerId != null && !remittance.getCallerCustomerId().equals(callerCustomerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: caller does not own this transfer");
+        }
+
+        if (Remittance.STATUS_CANCELLED.equalsIgnoreCase(remittance.getStatus())) {
+            return;
+        }
+
+        boolean isCancelable = Remittance.STATUS_RESERVED.equalsIgnoreCase(remittance.getStatus())
+                && Remittance.INTERNAL_CLIENT_CANCEL_WINDOW.equalsIgnoreCase(remittance.getInternalStatus());
+
+        if (!isCancelable || (remittance.getCancelUntil() != null && LocalDateTime.now().isAfter(remittance.getCancelUntil()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The 30-second cancellation window has expired. Transfer is being processed and cannot be cancelled.");
+        }
+
+        ledgerService.cancelAndReleaseHold(remittance, "Cancelled by user within 30-second window");
+    }
+
+    public RemittanceResponse getRemittanceStatus(String referenceNo, Long callerCustomerId) {
+        Remittance remittance = remittanceRepository.findByReferenceNo(referenceNo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Remittance reference not found: " + referenceNo));
+
+        if (callerCustomerId != null && !remittance.getCallerCustomerId().equals(callerCustomerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: caller does not own this transfer");
+        }
+
+        boolean canCancel = Remittance.STATUS_RESERVED.equalsIgnoreCase(remittance.getStatus())
+                && Remittance.INTERNAL_CLIENT_CANCEL_WINDOW.equalsIgnoreCase(remittance.getInternalStatus())
+                && remittance.getCancelUntil() != null
+                && LocalDateTime.now().isBefore(remittance.getCancelUntil());
+
+        int remaining = 0;
+        if (canCancel && remittance.getCancelUntil() != null) {
+            remaining = (int) Math.max(0, Duration.between(LocalDateTime.now(), remittance.getCancelUntil()).toSeconds());
+        }
+
+        RemittanceResponse resp = new RemittanceResponse(
+                remittance.getStatus(),
+                remittance.getReferenceNo(),
+                remittance.getFtReference(),
+                remittance.getSourceAccountId(),
+                remittance.getTargetAccountId(),
+                remittance.getAmount(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                remittance.getRiskScore(),
+                remittance.getRiskDecision(),
+                remittance.getReason(),
+                false
+        );
+        resp.setCancelUntil(remittance.getCancelUntil());
+        resp.setCancelWindowSeconds(remaining);
+        resp.setCanCancel(canCancel);
+        resp.setTransactionId(ledgerService.findTransactionId(remittance.getReferenceNo()));
+        return resp;
     }
 
     private String deriveReferenceNo(Long customerId, String idempotencyKey) {

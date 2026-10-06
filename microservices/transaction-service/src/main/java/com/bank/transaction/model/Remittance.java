@@ -57,14 +57,32 @@ public class Remittance {
     public static final String STEP_NOTIFICATION = "NOTIFICATION";
     public static final String STEP_RECONCILIATION = "RECONCILIATION";
 
+    // ── Additional Internal Reversal & Retry Lifecycle Steps ───────────
+    public static final String INTERNAL_CLIENT_CANCEL_WINDOW = "CLIENT_CANCEL_WINDOW";
+    public static final String INTERNAL_CANCELLED_BY_USER = "CANCELLED_BY_USER";
+    public static final String INTERNAL_AUTO_REVERSED = "AUTO_REVERSED";
+    public static final String INTERNAL_T24_REJECTED = "T24_REJECTED";
+
     @Column(name = "status", nullable = false, length = 30)
     private String status; // Initiated, Authorized, Processing, Posted, Failed, Reserved, Cancelled
 
     @Column(name = "internal_status", length = 40)
-    private String internalStatus; // Step 1 to 11
+    private String internalStatus; // Step 1 to 11 or reversal step
 
     @Column(name = "current_service", length = 40)
     private String currentService;
+
+    @Column(name = "cancel_until")
+    private LocalDateTime cancelUntil;
+
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
+    @Column(name = "max_retries", nullable = false)
+    private Integer maxRetries = 3;
+
+    @Column(name = "next_retry_at")
+    private LocalDateTime nextRetryAt;
 
     @Column(name = "risk_score", precision = 5, scale = 4)
     private BigDecimal riskScore;
@@ -148,6 +166,19 @@ public class Remittance {
     public String getCurrentService() { return currentService; }
     public void setCurrentService(String currentService) { this.currentService = currentService; }
 
+    public LocalDateTime getCancelUntil() { return cancelUntil; }
+    public void setCancelUntil(LocalDateTime cancelUntil) { this.cancelUntil = cancelUntil; }
+
+    public Integer getRetryCount() { return retryCount; }
+    public void setRetryCount(Integer retryCount) { this.retryCount = retryCount; }
+
+    public Integer getMaxRetries() { return maxRetries; }
+    public void setMaxRetries(Integer maxRetries) { this.maxRetries = maxRetries; }
+
+    public LocalDateTime getNextRetryAt() { return nextRetryAt; }
+    public void setNextRetryAt(LocalDateTime nextRetryAt) { this.nextRetryAt = nextRetryAt; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
