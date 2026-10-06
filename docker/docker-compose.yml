@@ -449,6 +449,21 @@ services:
       - ledger-net
 
   # ==========================================
+  # Layer 1: Mobile App (Flutter Web on Nginx)
+  # ==========================================
+  mobile-app:
+    build:
+      context: ../mobile
+      dockerfile: Dockerfile
+    container_name: mobile-app
+    depends_on:
+      - api-gateway
+    ports:
+      - "3002:80"
+    networks:
+      - ledger-net
+
+  # ==========================================
   # Layer 6: Observability & Telemetry
   # ==========================================
   otel-collector:

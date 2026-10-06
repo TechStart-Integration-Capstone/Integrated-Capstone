@@ -11,6 +11,7 @@ class TransactionItem {
   final double amount;
   final bool isCredit;
   final String ofscore;
+  final String status; // 'COMPLETED', 'REVERSED', 'FAILED_DLQ'
 
   TransactionItem({
     required this.id,
@@ -20,6 +21,7 @@ class TransactionItem {
     required this.amount,
     required this.isCredit,
     required this.ofscore,
+    this.status = 'COMPLETED',
   });
 }
 
@@ -34,13 +36,14 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   String _searchQuery = '';
-  String _filter = 'all'; // 'all', 'credit', 'debit'
+  String _filter = 'all'; // 'all', 'credit', 'debit', 'reversal'
 
   @override
   Widget build(BuildContext context) {
     var filtered = widget.transactions.where((tx) {
       if (_filter == 'credit' && !tx.isCredit) return false;
       if (_filter == 'debit' && tx.isCredit) return false;
+      if (_filter == 'reversal' && tx.status != 'REVERSED' && tx.status != 'FAILED_DLQ') return false;
 
       if (_searchQuery.trim().isNotEmpty) {
         final q = _searchQuery.toLowerCase();
@@ -105,6 +108,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     _buildFilterChip('Money in', 'credit'),
                     const SizedBox(width: 8),
                     _buildFilterChip('Money out', 'debit'),
+                    const SizedBox(width: 8),
+                    _buildFilterChip('Reversals', 'reversal'),
                   ],
                 ),
               ],
@@ -132,6 +137,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 separatorBuilder: (_, __) => const Divider(color: PayPinkTheme.line, height: 1),
                 itemBuilder: (context, index) {
                   final tx = filtered[index];
+                  final isReversed = tx.status == 'REVERSED';
+                  final isDlq = tx.status == 'FAILED_DLQ';
+
                   return Material(
                     color: Colors.transparent,
                     child: ListTile(
@@ -140,18 +148,29 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         width: 38,
                         height: 38,
                         decoration: BoxDecoration(
-                          color: tx.isCredit ? PayPinkTheme.greenBg : PayPinkTheme.pinkSubtle,
+                          color: isReversed
+                              ? PayPinkTheme.amberBg
+                              : (isDlq ? PayPinkTheme.redBg : (tx.isCredit ? PayPinkTheme.greenBg : PayPinkTheme.pinkSubtle)),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-                          color: tx.isCredit ? PayPinkTheme.green : PayPinkTheme.wine,
+                          isReversed
+                              ? Icons.undo_rounded
+                              : (isDlq
+                                  ? Icons.sync_problem_rounded
+                                  : (tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded)),
+                          color: isReversed
+                              ? PayPinkTheme.amber
+                              : (isDlq ? PayPinkTheme.red : (tx.isCredit ? PayPinkTheme.green : PayPinkTheme.wine)),
                           size: 16,
                         ),
                       ),
                       title: Text(
                         tx.title,
-                        style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700),
+                        style: PayPinkTheme.display(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ).copyWith(decoration: isReversed ? TextDecoration.lineThrough : null),
                       ),
                       subtitle: Text(
                         '${tx.account} · ${tx.date}',
@@ -166,12 +185,22 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             style: PayPinkTheme.display(
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
-                              color: tx.isCredit ? PayPinkTheme.green : PayPinkTheme.ink,
+                              color: isReversed
+                                  ? PayPinkTheme.muted
+                                  : (tx.isCredit ? PayPinkTheme.green : PayPinkTheme.ink),
                             ),
                           ),
                           Text(
-                            'Completed',
-                            style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
+                            isReversed
+                                ? '• Reversed'
+                                : (isDlq ? '• DLQ Retrying' : 'Completed'),
+                            style: PayPinkTheme.body(
+                              fontSize: 9.5,
+                              color: isReversed
+                                  ? PayPinkTheme.amber
+                                  : (isDlq ? PayPinkTheme.red : PayPinkTheme.muted),
+                              fontWeight: (isReversed || isDlq) ? FontWeight.w700 : FontWeight.normal,
+                            ),
                           ),
                         ],
                       ),
@@ -190,7 +219,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 },
               ),
             ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 90),
         ],
       ),
     );
