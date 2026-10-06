@@ -2,6 +2,8 @@ package com.bank.transaction.service;
 
 import com.bank.transaction.client.RiskEngineClient;
 import com.bank.transaction.client.T24AdapterClient;
+import com.bank.transaction.dto.InternalTransferRequest;
+import com.bank.transaction.dto.InternalTransferResponse;
 import com.bank.transaction.dto.RemittanceRequest;
 import com.bank.transaction.dto.RemittanceResponse;
 import com.bank.transaction.dto.RiskResult;
@@ -47,6 +49,7 @@ public class RemittanceOrchestratorService {
     private final T24AdapterClient t24AdapterClient;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final RiskDecisionPublisher riskDecisionPublisher;
 
     public RemittanceOrchestratorService(
             RemittanceRepository remittanceRepository,
@@ -54,17 +57,60 @@ public class RemittanceOrchestratorService {
             RiskEngineClient riskEngineClient,
             T24AdapterClient t24AdapterClient,
             StringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            RiskDecisionPublisher riskDecisionPublisher) {
 
-        this.remittanceRepository = remittanceRepository;
-        this.ledgerService = ledgerService;
-        this.riskEngineClient = riskEngineClient;
-        this.t24AdapterClient = t24AdapterClient;
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
+        this.remittanceRepository   = remittanceRepository;
+        this.ledgerService          = ledgerService;
+        this.riskEngineClient       = riskEngineClient;
+        this.t24AdapterClient       = t24AdapterClient;
+        this.redisTemplate          = redisTemplate;
+        this.objectMapper           = objectMapper;
+        this.riskDecisionPublisher  = riskDecisionPublisher;
     }
 
+    /** Public customer transfer: always a plain TRANSFER with full risk screening and ownership check. */
     public RemittanceResponse processRemittance(
+            RemittanceRequest request,
+            String idempotencyKey,
+            String correlationId,
+            Long callerCustomerId) {
+        request.setTransactionType(RemittanceRequest.TYPE_TRANSFER);
+        return execute(request, idempotencyKey, correlationId, callerCustomerId);
+    }
+
+    /**
+     * Internal service-to-service transfer (loan-service only).
+     * The caller is the source account's owner, so the ownership check always passes — that is how
+     * bank-funded disbursements from PH1000000LOAN get through. LOAN_DISBURSEMENT skips the risk engine;
+     * LOAN_REPAYMENT runs the normal flow. Outcomes are reported in the body instead of as HTTP errors.
+     */
+    public InternalTransferResponse processInternalTransfer(InternalTransferRequest internal, String correlationId) {
+        RemittanceRequest request = new RemittanceRequest(
+                internal.getSourceAccountNo(), internal.getTargetAccountNo(), internal.getAmount(), "PHP");
+        request.setTransactionType(internal.getTransactionType());
+        try {
+            Long sourceOwnerId = ledgerService.resolveAccount(internal.getSourceAccountNo()).customerId();
+            RemittanceResponse response = execute(request, internal.getIdempotencyKey(), correlationId, sourceOwnerId);
+            if ("POSTED".equalsIgnoreCase(response.getStatus())) {
+                return InternalTransferResponse.posted(response.getTransactionId(), response.getFtReference());
+            }
+            return InternalTransferResponse.pendingCore(response.getFtReference(), response.getReason());
+        } catch (ResponseStatusException e) {
+            String reason = e.getReason() != null ? e.getReason() : e.getMessage();
+            if (e.getStatusCode().value() == HttpStatus.CONFLICT.value() && reason.contains("in progress")) {
+                return InternalTransferResponse.pendingCore(null, reason);
+            }
+            if (e.getStatusCode().value() == HttpStatus.UNPROCESSABLE_ENTITY.value() && reason.startsWith("Insufficient")) {
+                reason = InternalTransferResponse.REASON_INSUFFICIENT_FUNDS;
+            }
+            log.warn("[remittance-orchestrator] Internal {} transfer rejected key={} status={} reason={}",
+                    internal.getTransactionType(), internal.getIdempotencyKey(), e.getStatusCode().value(), reason);
+            return InternalTransferResponse.rejected(reason);
+        }
+    }
+
+    private RemittanceResponse execute(
             RemittanceRequest request,
             String idempotencyKey,
             String correlationId,
@@ -109,7 +155,7 @@ public class RemittanceOrchestratorService {
 
                 if ("POSTED".equalsIgnoreCase(existing.getStatus())) {
                     log.info("[remittance-orchestrator] DB idempotency hit for key={} ref={}", idempotencyKey, existing.getReferenceNo());
-                    return new RemittanceResponse(
+                    RemittanceResponse replay = new RemittanceResponse(
                             existing.getStatus(),
                             existing.getReferenceNo(),
                             existing.getFtReference(),
@@ -123,7 +169,11 @@ public class RemittanceOrchestratorService {
                             existing.getReason(),
                             true
                     );
-                } else if ("T24_POSTED".equalsIgnoreCase(existing.getStatus()) || "PROCESSING".equalsIgnoreCase(existing.getStatus()) || "PENDING_CORE".equalsIgnoreCase(existing.getStatus())) {
+                    replay.setTransactionId(ledgerService.findTransactionId(existing.getReferenceNo()));
+                    return replay;
+                } else if ("T24_POSTED".equalsIgnoreCase(existing.getStatus()) || "PROCESSING".equalsIgnoreCase(existing.getStatus())
+                        || "PENDING_CORE".equalsIgnoreCase(existing.getStatus()) || "RESERVED".equalsIgnoreCase(existing.getStatus())
+                        || "AUTHORIZED".equalsIgnoreCase(existing.getStatus())) {
                     return new RemittanceResponse(
                             "PROCESSING",
                             existing.getReferenceNo(),
@@ -138,12 +188,12 @@ public class RemittanceOrchestratorService {
                             "Transfer is currently processing. Status will update via saga worker.",
                             true
                     );
-                } else if ("REJECTED".equalsIgnoreCase(existing.getStatus())) {
+                } else if ("REJECTED".equalsIgnoreCase(existing.getStatus()) || "FAILED".equalsIgnoreCase(existing.getStatus())) {
                     String reason = existing.getReason() != null ? existing.getReason() : "Transfer was previously rejected.";
                     throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
-                } else if ("FAILED".equalsIgnoreCase(existing.getStatus())) {
-                    String reason = existing.getReason() != null ? existing.getReason() : "Transfer previously failed.";
-                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, reason);
+                } else if ("CANCELLED".equalsIgnoreCase(existing.getStatus())) {
+                    String reason = existing.getReason() != null ? existing.getReason() : "Transfer was cancelled.";
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
                 }
             }
 
@@ -156,31 +206,109 @@ public class RemittanceOrchestratorService {
         }
 
         try {
-            // Generate deterministic reference number from idempotency key
+            // ── Step 1: Initiated ────────────────────────────────────────────────────
             String referenceNo = deriveReferenceNo(callerCustomerId, idempotencyKey);
 
-            // ── Step 2: Risk Engine Screening FIRST ──────────────────────────────────
-            RiskResult risk = riskEngineClient.evaluateRisk(
-                    request.getSourceAccountId(),
-                    request.getTargetAccountId(),
-                    request.getAmount(),
-                    request.getCurrency(),
-                    correlationId
-            );
+            // ── Step 2 & 3: Validated & Authenticated ────────────────────────────────
+            RemittanceLedgerService.AccountInfo sourceAcc = ledgerService.resolveAccount(request.getSourceAccountId());
+            RemittanceLedgerService.AccountInfo targetAcc = ledgerService.resolveAccount(request.getTargetAccountId());
 
-            if ("UNAVAILABLE".equalsIgnoreCase(risk.decision())) {
-                log.warn("[remittance-orchestrator] Risk screening UNAVAILABLE ref={}", referenceNo);
-                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                        "Risk screening service is temporarily unavailable. Transfer aborted for security.");
+            if (callerCustomerId != null && !sourceAcc.customerId().equals(callerCustomerId)) {
+                log.warn("[remittance-orchestrator] Account ownership mismatch! Caller customerId={} does not own source accountId={}",
+                        callerCustomerId, sourceAcc.id());
+                try {
+                    ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
+                            Remittance.STEP_AUTHENTICATED, "Caller does not own source account", null, "transaction-service");
+                } catch (Exception ignored) {}
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Access denied: caller does not own source account " + request.getSourceAccountId());
             }
 
-            if ("REJECT".equalsIgnoreCase(risk.decision()) || (risk.score() != null && risk.score().doubleValue() > 0.85)) {
-                String reason = "Transfer rejected by fraud risk screening: " + String.join(", ", risk.reasons());
-                log.warn("[remittance-orchestrator] Transfer REJECTED by Risk Engine! ref={} score={}", referenceNo, risk.score());
+            if (sourceAcc.id().equals(targetAcc.id())) {
+                try {
+                    ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
+                            Remittance.STEP_VALIDATED, "Source and target accounts cannot be the same account", null, "transaction-service");
+                } catch (Exception ignored) {}
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Source and target accounts cannot be the same account");
+            }
+
+            // ── Step 4: Fraud Check (Risk Engine Screening) ──────────────────────────
+            RiskResult risk = null;
+            if (RemittanceRequest.TYPE_LOAN_DISBURSEMENT.equals(request.getTransactionType())) {
+                log.info("[remittance-orchestrator] LOAN_DISBURSEMENT ref={} skips risk screening", referenceNo);
+            } else {
+                risk = riskEngineClient.evaluateRisk(
+                        sourceAcc.id(),
+                        targetAcc.id(),
+                        request.getAmount(),
+                        request.getCurrency(),
+                        correlationId
+                );
+
+                if ("UNAVAILABLE".equalsIgnoreCase(risk.decision())) {
+                    log.warn("[remittance-orchestrator] Risk screening UNAVAILABLE ref={}", referenceNo);
+                    // Publish UNAVAILABLE decision to audit log before aborting
+                    riskDecisionPublisher.publish(referenceNo, risk);
+                    try {
+                        ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
+                                Remittance.STEP_FRAUD_CHECK, "Risk screening service unavailable", risk, "risk-engine");
+                    } catch (Exception ignored) {}
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                            "Risk screening service is temporarily unavailable. Transfer aborted for security.");
+                }
+
+                if ("REJECT".equalsIgnoreCase(risk.decision()) || (risk.score() != null && risk.score().doubleValue() > 0.85)) {
+                    String reason = "Transfer rejected by fraud risk screening: " + String.join(", ", risk.reasons());
+                    log.warn("[remittance-orchestrator] Transfer REJECTED by Risk Engine! ref={} score={}", referenceNo, risk.score());
+                    // Publish REJECT decision to audit log before aborting — captures rejected transfers too
+                    riskDecisionPublisher.publish(referenceNo, risk);
+                    try {
+                        ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
+                                Remittance.STEP_FRAUD_CHECK, reason, risk, "risk-engine");
+                    } catch (Exception ignored) {}
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
+                }
+
+                // APPROVE — publish to audit log and proceed with the saga
+                riskDecisionPublisher.publish(referenceNo, risk);
+            }
+
+            // ── Step 5: Limit Check (For funds transfers within bank) ────────────────
+            if (RemittanceRequest.TYPE_TRANSFER.equals(request.getTransactionType())) {
+                RemittanceLedgerService.CustomerLimits limits = ledgerService.getCustomerLimits(callerCustomerId);
+                if (request.getAmount().compareTo(limits.perTxLimit()) > 0) {
+                    String reason = String.format("Transaction amount (₱%s) exceeds per-transaction limit of ₱%s",
+                            request.getAmount().toPlainString(), limits.perTxLimit().toPlainString());
+                    try {
+                        ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
+                                Remittance.STEP_LIMIT_CHECK, reason, risk, "transaction-service");
+                    } catch (Exception ignored) {}
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
+                }
+                BigDecimal todaySum = ledgerService.getTodayCumulativeTransferAmount(callerCustomerId);
+                if (todaySum.add(request.getAmount()).compareTo(limits.dailyLimit()) > 0) {
+                    String reason = String.format("Daily transfer limit of ₱%s exceeded. Cumulative today: ₱%s, attempted: ₱%s",
+                            limits.dailyLimit().toPlainString(), todaySum.toPlainString(), request.getAmount().toPlainString());
+                    try {
+                        ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
+                                Remittance.STEP_LIMIT_CHECK, reason, risk, "transaction-service");
+                    } catch (Exception ignored) {}
+                    throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
+                }
+            }
+
+            // ── Step 6: Funds Check ──────────────────────────────────────────────────
+            if (sourceAcc.availableBalance().compareTo(request.getAmount()) < 0) {
+                String reason = "Insufficient available funds in source account (Available: " + sourceAcc.availableBalance() + ")";
+                try {
+                    ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
+                            Remittance.STEP_FUNDS_CHECK, reason, risk, "transaction-service");
+                } catch (Exception ignored) {}
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, reason);
             }
 
-            // ── Step 3: Hold Funds SECOND (Ownership Check + Same-Account Check + Atomic held_balance) ──────
+            // ── Step 7: Authorized & Reserved (Hold Funds) ───────────────────────────
             Remittance remittance;
             try {
                 remittance = ledgerService.holdFunds(request, referenceNo, idempotencyKey, callerCustomerId);
@@ -190,10 +318,8 @@ public class RemittanceOrchestratorService {
                         "A transfer request with this Idempotency-Key is currently in progress. Please retry shortly.");
             }
 
-            // ── Step 4 & 5: T24 Core Adapter & Ledger Commit (With Exception Guardrail) ──────
+            // ── Step 8 & 9: T24 Core Adapter & Ledger Commit (With Exception Guardrail) ──────
             RemittanceResponse finalResponse;
-            RemittanceLedgerService.AccountInfo sourceAcc = ledgerService.resolveAccount(request.getSourceAccountId());
-            RemittanceLedgerService.AccountInfo targetAcc = ledgerService.resolveAccount(request.getTargetAccountId());
 
             try {
                 T24Result t24 = t24AdapterClient.executeTransfer(
@@ -230,8 +356,8 @@ public class RemittanceOrchestratorService {
                                 request.getAmount(),
                                 BigDecimal.ZERO,
                                 BigDecimal.ZERO,
-                                risk.score(),
-                                risk.decision(),
+                                risk != null ? risk.score() : null,
+                                risk != null ? risk.decision() : null,
                                 "T24 Core Banking posted transfer. Local ledger update will be finalized shortly by saga worker.",
                                 false
                         );
@@ -255,8 +381,8 @@ public class RemittanceOrchestratorService {
                             request.getAmount(),
                             BigDecimal.ZERO,
                             BigDecimal.ZERO,
-                            risk.score(),
-                            risk.decision(),
+                            risk != null ? risk.score() : null,
+                            risk != null ? risk.decision() : null,
                             "T24 Core Banking processing delay. Status will update via saga worker.",
                             false
                     );
@@ -273,8 +399,9 @@ public class RemittanceOrchestratorService {
                         "Transfer process encountered an error after hold. Funds have been released.");
             }
 
-            // Cache in Redis for Idempotency
-            if (redisKey != null) {
+            // Cache in Redis for Idempotency — final outcomes only. A PROCESSING response must not be
+            // cached, or a retry after the saga worker posts it would keep replaying PROCESSING.
+            if (redisKey != null && "POSTED".equalsIgnoreCase(finalResponse.getStatus())) {
                 try {
                     String json = objectMapper.writeValueAsString(finalResponse);
                     redisTemplate.opsForValue().set(redisKey, json, Duration.ofDays(30));

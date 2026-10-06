@@ -11,4 +11,5 @@ public interface RemittanceRepository extends JpaRepository<Remittance, Long> {
     Optional<Remittance> findByReferenceNo(String referenceNo);
     Optional<Remittance> findByCallerCustomerIdAndIdempotencyKey(Long callerCustomerId, String idempotencyKey);
     java.util.List<Remittance> findByStatus(String status);
+    java.util.List<Remittance> findByStatusIn(java.util.Collection<String> statuses);
 }

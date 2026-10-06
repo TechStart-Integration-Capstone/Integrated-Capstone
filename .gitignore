@@ -9,6 +9,8 @@ target/
 *.jar
 *.war
 !.mvn/wrapper/maven-wrapper.jar
+!*opentelemetry-javaagent.jar
+!**/opentelemetry-javaagent.jar
 .mvn/timing.properties
 pom.xml.tag
 pom.xml.releaseBackup

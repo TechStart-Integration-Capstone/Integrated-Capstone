@@ -102,7 +102,7 @@ public class OutboxPollerService {
             try {
                 CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(
                         TOPIC,
-                        String.valueOf(event.getTransactionId()),
+                        event.kafkaKey(),
                         event.getPayload()
                 );
 

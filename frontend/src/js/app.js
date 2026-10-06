@@ -91,6 +91,11 @@ let currentCustomerId = 1;
 let selectedSourceAccountId = 1;
 let accountsData = [];
 let recentTransactions = [];
+// The monitor accepts only database responses; simulation/broadcast rows use recentTransactions.
+let monitorTransactions = [];
+let monitorLoadState = 'loading';
+let monitorError = '';
+let monitorRequest = null;
 let oracleAuditLogs = [];
 let outboxEvents = [];
 let postgresAudits = [
@@ -110,6 +115,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCustomerAndAccounts();
     await loadAllCustomers(false);
     await loadRecentTransactions();
+    setInterval(() => {
+        if (currentJwtToken) loadRecentTransactions();
+        else renderTransactionMonitor();
+    }, 5000);
     await loadInitialAuditLogs();
     await loadReconciliationLogs(); // Live report preview & reconciliation records
     setupRailsSelector();
@@ -137,39 +146,19 @@ async function initializeAuthSession() {
 
     if (savedToken && savedUser) {
         try {
-            currentJwtToken = savedToken;
-            currentAdminSession = JSON.parse(savedUser);
-            updateAdminUI(currentAdminSession);
-            closeAdminLoginModal();
-            return;
+            const claims = JSON.parse(atob(savedToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            if (claims.roles?.includes('ROLE_ADMIN') && claims.exp * 1000 > Date.now()) {
+                currentJwtToken = savedToken;
+                currentAdminSession = JSON.parse(savedUser);
+                updateAdminUI(currentAdminSession);
+                closeAdminLoginModal();
+                return;
+            }
         } catch (e) {}
     }
-
-    // Authenticate via banking login endpoint
-    try {
-        const res = await fetch(`${API_BASE}/auth/banking/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'lviernes', password: 'password123' })
-        });
-        if (res.ok) {
-            const data = await res.json();
-            currentJwtToken = data.token;
-            currentAdminSession = {
-                ...data,
-                fullName: 'Levi Viernes',
-                roles: ['ROLE_ADMIN', 'ROLE_CORE_ENGINEER']
-            };
-            sessionStorage.setItem('paypink_admin_jwt', data.token);
-            sessionStorage.setItem('paypink_admin_user', JSON.stringify(currentAdminSession));
-            updateAdminUI(currentAdminSession);
-            closeAdminLoginModal();
-            return;
-        }
-    } catch (ignored) {}
-
-    // Display privileged admin login modal gate
-    closeAdminLoginModal();
+    sessionStorage.removeItem('paypink_admin_jwt');
+    sessionStorage.removeItem('paypink_admin_user');
+    showAdminLoginModal();
 }
 
 function showAdminLoginModal() {
@@ -215,6 +204,8 @@ async function handleAdminLoginSubmit(event) {
                 updateAdminUI(data);
                 closeAdminLoginModal();
                 showAdminToast(`Authenticated as ${data.fullName} (ROLE_ADMIN)`);
+                if (monitorRequest) await monitorRequest;
+                await loadRecentTransactions();
                 return;
             } else {
                 throw new Error('Access Denied: Account lacks ROLE_ADMIN privilege.');
@@ -224,25 +215,6 @@ async function handleAdminLoginSubmit(event) {
             throw new Error(errData.detail || errData.message || 'Invalid administrator username or password.');
         }
     } catch (e) {
-        // Fallback demo authentication for offline / standalone mode
-        if (username === 'admin' && (password === 'Admin@PayPink2026!' || password === 'admin123' || password === 'password123')) {
-            const mockAdminData = {
-                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGVzIjpbIlJPTEVfQURNSU4iLCJST0xFX0NPUkVfRU5HSU5FRVIiXX0.admin",
-                username: "admin",
-                fullName: "PayPink Core System Administrator",
-                roles: ["ROLE_ADMIN", "ROLE_CORE_ENGINEER"],
-                customerId: 0
-            };
-            currentJwtToken = mockAdminData.token;
-            currentAdminSession = mockAdminData;
-            sessionStorage.setItem('paypink_admin_jwt', mockAdminData.token);
-            sessionStorage.setItem('paypink_admin_user', JSON.stringify(mockAdminData));
-            updateAdminUI(mockAdminData);
-            closeAdminLoginModal();
-            showAdminToast('Authenticated as System Administrator (ROLE_ADMIN)');
-            return;
-        }
-
         if (errorEl) {
             errorEl.textContent = e.message || 'Authentication failed. Please verify credentials.';
             errorEl.style.display = 'block';
@@ -282,6 +254,10 @@ function handleAdminLogout() {
     sessionStorage.removeItem('paypink_admin_user');
     currentJwtToken = null;
     currentAdminSession = null;
+    monitorTransactions = [];
+    monitorLoadState = 'error';
+    monitorError = 'Please sign in as an administrator to view today\'s transactions.';
+    renderTransactionMonitor();
     showAdminLoginModal();
     showAdminToast('Signed out of Administrator Portal.');
 }
@@ -1016,6 +992,7 @@ function switchTab(tabName) {
         loadAllCustomers();
     } else if (tabName === 'transactions') {
         renderTransactionMonitor();
+        loadRecentTransactions();
     } else if (tabName === 'audit') {
         loadInitialAuditLogs();
         loadPostgresAuditLogs();
@@ -1349,6 +1326,143 @@ async function toggleAccountStatus(accountId, currentStatus) {
 /**
  * 11. Transaction Monitoring, Audit Views & Report Exporting
  */
+function monitorDateKey(value) {
+    if (!value) return null;
+    const date = getPhilippineDate(value);
+    return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+}
+
+function escapeMonitorText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[char]));
+}
+
+function normalizeDashboardStatus(raw) {
+    if (!raw) return 'Initiated';
+    const s = String(raw).trim();
+    const upper = s.toUpperCase();
+    if (upper === 'SUCCESS' || upper === 'COMPLETED' || upper === 'POSTED' || upper === 'LEDGER_UPDATE' || upper === 'NOTIFICATION' || upper === 'RECONCILIATION') return 'Posted';
+    if (upper === 'PENDING' || upper === 'RESERVED' || upper === 'PENDING_CORE') return 'Reserved';
+    if (upper === 'AUTHORIZED') return 'Authorized';
+    if (upper === 'PROCESSING' || upper === 'T24_POSTED' || upper === 'IN_PROGRESS') return 'Processing';
+    if (upper === 'FAILED' || upper === 'REJECTED' || upper === 'INSUFFICIENT_FUNDS' || upper === 'LIMIT_EXCEEDED' || upper === 'FRAUD_REJECTED' || upper === 'ERROR') return 'Failed';
+    if (upper === 'CANCELLED' || upper === 'CANCELED' || upper === 'ROLLBACK' || upper === 'REVERSED') return 'Cancelled';
+    if (upper === 'INITIATED' || upper === 'VALIDATED' || upper === 'AUTHENTICATED') return 'Initiated';
+    if (['Initiated', 'Authorized', 'Processing', 'Posted', 'Failed', 'Reserved', 'Cancelled'].includes(s)) return s;
+    return 'Processing';
+}
+
+function matchesStatusFilter(txStatus, filter) {
+    if (!filter || filter === 'ALL') return true;
+    const normalized = normalizeDashboardStatus(txStatus);
+    if (normalized.toUpperCase() === filter.toUpperCase()) return true;
+    if (String(txStatus).toUpperCase() === filter.toUpperCase()) return true;
+    if (filter.toUpperCase() === 'SUCCESS' && normalized === 'Posted') return true;
+    if (filter.toUpperCase() === 'PENDING' && normalized === 'Reserved') return true;
+    if (filter.toUpperCase() === 'COMPLETED' && normalized === 'Posted') return true;
+    return false;
+}
+
+function getStatusTagClass(status) {
+    const s = String(status || '').toLowerCase();
+    switch (s) {
+        case 'initiated': return 'tag-initiated';
+        case 'authorized': return 'tag-authorized';
+        case 'processing': return 'tag-processing';
+        case 'posted':
+        case 'success':
+        case 'completed': return 'tag-posted';
+        case 'failed':
+        case 'error': return 'tag-failed';
+        case 'reserved':
+        case 'pending': return 'tag-reserved';
+        case 'cancelled':
+        case 'canceled': return 'tag-cancelled';
+        default: return 'tag-processing';
+    }
+}
+
+const PIPELINE_STEPS = [
+    {
+        key: 'INITIATED',
+        num: 1,
+        title: 'Initiated',
+        service: 'api-gateway / transaction-service',
+        desc: 'Transfer request received at gateway perimeter; idempotency key locked & transaction ID generated.'
+    },
+    {
+        key: 'VALIDATED',
+        num: 2,
+        title: 'Validated',
+        service: 'transaction-service',
+        desc: 'JSR-380 payload verification; source and destination account formats & positive amount validated.'
+    },
+    {
+        key: 'AUTHENTICATED',
+        num: 3,
+        title: 'Authenticated',
+        service: 'auth-service',
+        desc: 'Cryptographic JWT claim validation; perimeter customer authentication & active role verification.'
+    },
+    {
+        key: 'FRAUD_CHECK',
+        num: 4,
+        title: 'Fraud Check',
+        service: 'fraud-detection-service',
+        desc: 'Velocity check & behavioral pattern analysis; blacklist and AML fraud rule evaluation.'
+    },
+    {
+        key: 'LIMIT_CHECK',
+        num: 5,
+        title: 'Limit Check',
+        service: 'transaction-service',
+        desc: 'Per-transaction ceiling (₱25,000) and daily cumulative limit (₱50,000) verification prior to funds reservation.'
+    },
+    {
+        key: 'FUNDS_CHECK',
+        num: 6,
+        title: 'Funds Check',
+        service: 'transaction-service',
+        desc: 'Source account available balance verification: (current_balance - held_balance) >= amount.'
+    },
+    {
+        key: 'AUTHORIZED',
+        num: 7,
+        title: 'Authorized',
+        service: 'transaction-service',
+        desc: 'Saga reserve hold: atomically reserves funds in held_balance with expiration TTL; status Reserved.'
+    },
+    {
+        key: 'POSTED',
+        num: 8,
+        title: 'Posted',
+        service: 't24-adapter',
+        desc: 'Core Banking host adapter execution: mock T24 posting payload emitted and host response validated.'
+    },
+    {
+        key: 'LEDGER_UPDATE',
+        num: 9,
+        title: 'Ledger Update',
+        service: 'transaction-service',
+        desc: 'ACID double-entry ledger mutation: atomically deducts source, credits destination, and commits audit trail.'
+    },
+    {
+        key: 'NOTIFICATION',
+        num: 10,
+        title: 'Notification',
+        service: 'notification-service',
+        desc: 'Asynchronous outbox event published: customer debit/credit alert dispatched via notification queue.'
+    },
+    {
+        key: 'RECONCILIATION',
+        num: 11,
+        title: 'Reconciliation',
+        service: 'settlement-service',
+        desc: 'End-of-day batch settlement matching core host journal with Azure SQL ACID double-entry ledger.'
+    }
+];
+
 function renderTransactionMonitor() {
     const tbody = document.getElementById('monitor-transactions-body');
     if (!tbody) return;
@@ -1356,31 +1470,157 @@ function renderTransactionMonitor() {
     const statusFilter = document.getElementById('monitor-status-filter')?.value || 'ALL';
     const typeFilter = document.getElementById('monitor-type-filter')?.value || 'ALL';
 
-    const list = recentTransactions.filter(tx => {
-        if (statusFilter !== 'ALL' && tx.status !== statusFilter) return false;
-        if (typeFilter !== 'ALL' && !tx.type.includes(typeFilter)) return false;
+    if (monitorLoadState !== 'ready') {
+        const message = monitorLoadState === 'error' ? monitorError : 'Loading today\'s transactions...';
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem;">${escapeMonitorText(message)}</td></tr>`;
+        return;
+    }
+
+    const today = monitorDateKey(new Date());
+    const list = monitorTransactions.filter(tx => {
+        if (monitorDateKey(tx.transactionDate) !== today) return false;
+        if (!matchesStatusFilter(tx.status, statusFilter)) return false;
+        if (typeFilter === 'TRANSFER' && !/TRANSFER|^EXT_/.test(tx.transactionType || '')) return false;
+        if ((typeFilter === 'CREDIT' || typeFilter === 'DEBIT') && tx.operation !== typeFilter) return false;
         return true;
-    });
+    }).sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
+        || String(b.transactionId).localeCompare(String(a.transactionId), 'en', { numeric: true }));
 
     if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">No transactions found matching filter criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">No transactions today matching the selected filters.</td></tr>';
         return;
     }
 
     tbody.innerHTML = list.map(tx => {
-        const accDisplay = tx.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : '001181233469');
-        const isCredit = tx.type.includes('CREDIT') || tx.type.includes('IN');
+        const isCredit = tx.operation === 'CREDIT';
+        const sign = isCredit ? '+' : tx.operation === 'DEBIT' ? '-' : '';
+        const currency = tx.currency === 'PHP' ? '₱' : `${escapeMonitorText(tx.currency)} `;
+        const displayStatus = normalizeDashboardStatus(tx.status);
         return `
         <tr>
-            <td><code>${tx.ref}</code></td>
-            <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${tx.date}</td>
-            <td><strong>${formatAccountNumber(accDisplay)}</strong></td>
-            <td><span class="badge-chip">${tx.type}</span></td>
-            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${isCredit ? '+' : '-'}₱${formatCurrency(tx.amount)}</strong></td>
-            <td><code>IDEMP-PH-${tx.id}</code></td>
-            <td><span class="status-tag ${tx.status === 'SUCCESS' || tx.status === 'COMPLETED' ? 'tag-success' : 'tag-error'}">${tx.status}</span></td>
+            <td><code>${escapeMonitorText(tx.referenceNo)}</code></td>
+            <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${escapeMonitorText(formatPhilippineDateTime(tx.transactionDate))}</td>
+            <td><strong>${escapeMonitorText(formatAccountNumber(tx.accountNumber))}</strong></td>
+            <td><span class="badge-chip">${escapeMonitorText(tx.transactionType)}</span></td>
+            <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${sign}${currency}${formatCurrency(tx.amount)}</strong></td>
+            <td>${escapeMonitorText(tx.operation || '—')}</td>
+            <td>
+                <div style="display: inline-flex; align-items: center; gap: 8px;">
+                    <span class="status-tag ${getStatusTagClass(displayStatus)}">${escapeMonitorText(displayStatus)}</span>
+                    <button class="btn-lifecycle" onclick="showTransactionLifecycle('${escapeMonitorText(tx.referenceNo)}')" title="Trace 11-Step Pipeline">Trace</button>
+                </div>
+            </td>
         </tr>
     `}).join('');
+}
+
+function showTransactionLifecycle(referenceNo) {
+    const tx = monitorTransactions.find(t => t.referenceNo === referenceNo)
+        || recentTransactions.find(t => t.ref === referenceNo);
+    if (!tx) {
+        alert('Transaction details not found for reference: ' + referenceNo);
+        return;
+    }
+
+    const modal = document.getElementById('modal-transaction-lifecycle');
+    if (!modal) return;
+
+    const displayStatus = normalizeDashboardStatus(tx.status);
+    const internalStatus = (tx.internalStatus || '').toUpperCase();
+    const currentService = tx.currentService || 'transaction-service';
+    const reason = tx.reason || '';
+
+    // Render metadata box
+    const metaEl = document.getElementById('lifecycle-metadata');
+    if (metaEl) {
+        metaEl.innerHTML = `
+            <div><strong>Reference:</strong> <code>${escapeMonitorText(tx.referenceNo || tx.ref)}</code></div>
+            <div><strong>Dashboard Status:</strong> <span class="status-tag ${getStatusTagClass(displayStatus)}">${escapeMonitorText(displayStatus)}</span></div>
+            <div><strong>Amount:</strong> <strong style="font-family: 'JetBrains Mono', monospace; color: var(--primary-rose);">₱${formatCurrency(tx.amount)}</strong></div>
+            <div><strong>Source Account:</strong> <code>${escapeMonitorText(formatAccountNumber(tx.accountNumber))}</code></div>
+            <div><strong>Target Account:</strong> <code>${escapeMonitorText(formatAccountNumber(tx.targetAccountNumber || 'Internal Transfer'))}</code></div>
+            <div><strong>Executing Service:</strong> <span class="badge-chip">${escapeMonitorText(currentService)}</span></div>
+            <div><strong>Internal State:</strong> <code>${escapeMonitorText(internalStatus || (displayStatus === 'Posted' ? 'RECONCILIATION' : displayStatus.toUpperCase()))}</code></div>
+            <div><strong>Timestamp:</strong> <span style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;">${escapeMonitorText(formatPhilippineDateTime(tx.transactionDate || tx.date))}</span></div>
+            ${reason ? `<div style="grid-column: 1 / -1; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 8px 12px; color: #991b1b; font-size: 0.82rem;"><strong>Failure / Termination Reason:</strong> ${escapeMonitorText(reason)}</div>` : ''}
+        `;
+    }
+
+    // Determine lifecycle state per step
+    let activeIdx = -1;
+    let failedIdx = -1;
+
+    if (displayStatus === 'Posted') {
+        activeIdx = 10;
+    } else if (displayStatus === 'Failed' || displayStatus === 'Cancelled') {
+        const found = PIPELINE_STEPS.findIndex(s => s.key === internalStatus);
+        failedIdx = found >= 0 ? found : (internalStatus === 'LIMIT_CHECK' ? 4 : 5);
+    } else if (displayStatus === 'Processing') {
+        activeIdx = 8;
+    } else if (displayStatus === 'Authorized' || displayStatus === 'Reserved') {
+        activeIdx = 6;
+    } else if (displayStatus === 'Initiated') {
+        activeIdx = 0;
+    } else {
+        activeIdx = 7;
+    }
+
+    const stepperEl = document.getElementById('lifecycle-stepper-container');
+    if (stepperEl) {
+        stepperEl.innerHTML = PIPELINE_STEPS.map((step, idx) => {
+            let stateClass = '';
+            let nodeIcon = `${step.num}`;
+            let extraBadge = '';
+            let extraDesc = '';
+
+            if (failedIdx >= 0) {
+                if (idx < failedIdx) {
+                    stateClass = 'completed';
+                    nodeIcon = '✓';
+                } else if (idx === failedIdx) {
+                    stateClass = 'failed';
+                    nodeIcon = '✕';
+                    extraBadge = `<span class="badge-chip pill-danger" style="font-size: 0.65rem; background: #fef2f2; color: #b91c1c; border-color: #fca5a5;">${displayStatus === 'Cancelled' ? 'Cancelled' : 'Failed'}</span>`;
+                    if (reason) {
+                        extraDesc = `<div style="margin-top: 6px; padding: 6px 10px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; font-size: 0.78rem; color: #991b1b; font-weight: 600;">Reason: ${escapeMonitorText(reason)}</div>`;
+                    }
+                } else {
+                    stateClass = '';
+                    extraDesc = `<div style="font-size: 0.75rem; color: #94a3b8; font-style: italic; margin-top: 2px;">Skipped due to pipeline failure at Step ${failedIdx + 1}</div>`;
+                }
+            } else if (displayStatus === 'Posted') {
+                stateClass = 'completed';
+                nodeIcon = '✓';
+            } else {
+                if (idx < activeIdx) {
+                    stateClass = 'completed';
+                    nodeIcon = '✓';
+                } else if (idx === activeIdx) {
+                    stateClass = 'active';
+                    extraBadge = `<span class="badge-chip pill-primary" style="font-size: 0.65rem;">Active</span>`;
+                } else {
+                    stateClass = '';
+                }
+            }
+
+            return `
+                <div class="stepper-step ${stateClass}">
+                    <div class="step-node">${nodeIcon}</div>
+                    <div class="step-content">
+                        <div class="step-title">
+                            ${step.num}. ${escapeMonitorText(step.title)}
+                            <span class="step-service-badge">${escapeMonitorText(step.service)}</span>
+                            ${extraBadge}
+                        </div>
+                        <div class="step-desc">${escapeMonitorText(step.desc)}</div>
+                        ${extraDesc}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.classList.add('active');
 }
 
 function renderTransactionFeed() {
@@ -1462,34 +1702,40 @@ function saveAuditsToStorage() {
 }
 
 async function loadRecentTransactions(isManualClick = false) {
-    const saved = localStorage.getItem('paypink_admin_recent_transactions');
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                recentTransactions = parsed;
-            }
-        } catch (e) {}
-    }
-
-    if (recentTransactions.length === 0) {
-        recentTransactions = [
-            { id: 103, ref: 'TX-PH-2026-0929-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 1500.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), status: 'SUCCESS' },
-            { id: 102, ref: 'TX-PH-2026-0929-000', accountNumber: '001381233467', type: 'DEBIT (PESONET)', amount: 5000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 3600000)), status: 'SUCCESS' },
-            { id: 101, ref: 'TX-PH-INIT-001', accountNumber: '001181233469', type: 'TRANSFER (INSTAPAY)', amount: 15000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 86400000)), status: 'SUCCESS' },
-            { id: 100, ref: 'TX-PH-INIT-000', accountNumber: '001981233461', type: 'PAYROLL (CREDIT)', amount: 25000.0000, currency: 'PHP', date: formatPhilippineDateTime(new Date(Date.now() - 172800000)), status: 'SUCCESS' }
-        ];
-        saveTransactionsToStorage();
-    }
-
-    renderTransactionFeed();
+    if (monitorRequest) return monitorRequest;
+    const requestToken = currentJwtToken;
     renderTransactionMonitor();
-
-    await syncBackendTransactions();
-
-    if (isManualClick) {
-        showAdminToast('Refreshed real-time transaction monitor with latest ledger records.');
-    }
+    monitorRequest = (async () => {
+        try {
+            const response = await fetch(`${API_BASE}/auth/admin/transactions/today`, {
+                headers: getAuthHeaders(), cache: 'no-store', signal: AbortSignal.timeout(15000)
+            });
+            if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    showAdminLoginModal();
+                    throw new Error('Please sign in as an administrator to view today\'s transactions.');
+                }
+                throw new Error('Unable to load today\'s transactions. Please try Refresh Monitor.');
+            }
+            const rows = await response.json();
+            if (!Array.isArray(rows)) throw new Error('Unable to load today\'s transactions. Invalid server response.');
+            if (currentJwtToken !== requestToken) return;
+            monitorTransactions = rows;
+            monitorLoadState = 'ready';
+            monitorError = '';
+            if (isManualClick) showAdminToast('Today\'s ledger transactions refreshed.');
+        } catch (error) {
+            if (currentJwtToken !== requestToken) return;
+            monitorTransactions = [];
+            monitorLoadState = 'error';
+            monitorError = error.message?.startsWith('Please sign in') ? error.message
+                : 'Unable to load today\'s transactions. Please try Refresh Monitor.';
+        } finally {
+            renderTransactionMonitor();
+        }
+    })();
+    try { await monitorRequest; }
+    finally { monitorRequest = null; }
 }
 
 async function loadInitialAuditLogs() {
@@ -1591,6 +1837,8 @@ function setupRealtimeSync() {
 
 async function handleIncomingTransferEvent(data) {
     if (!data) return;
+    // A browser event only triggers a database refresh; its payload never enters the monitor.
+    loadRecentTransactions();
 
     const txRef = data.reference || `TX-PH-${Date.now()}`;
     const normalizedStatus = (data.status === 'SUCCESS' || data.status === 'COMPLETED') ? 'COMPLETED' : (data.status || 'COMPLETED');
@@ -2089,4 +2337,6 @@ window.triggerScheduledReconciliation = triggerScheduledReconciliation;
 window.handleTransferSubmit = handleTransferSubmit;
 window.selectAccount = selectAccount;
 window.formatAccountNumber = formatAccountNumber;
+window.showTransactionLifecycle = showTransactionLifecycle;
+window.normalizeDashboardStatus = normalizeDashboardStatus;
 

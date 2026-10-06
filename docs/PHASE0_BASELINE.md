@@ -152,7 +152,7 @@ All 9 Java services returned `STATUS: UP`:
 ### 4f. DDL Schema — Oracle → T-SQL rewrite (1 file)
 
 **Source:** `backend/ledger-core/src/main/resources/schema-oracle.sql`
-**Target (new file):** `backend/ledger-core/src/main/resources/schema-azuresql.sql`
+**Target (new file):** `microservices/transaction-service/src/main/resources/schema-azuresql.sql`
 
 Key Oracle → T-SQL translations needed:
 

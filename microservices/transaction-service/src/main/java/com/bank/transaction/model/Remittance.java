@@ -1,5 +1,6 @@
 package com.bank.transaction.model;
 
+import com.bank.transaction.dto.RemittanceRequest;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,8 +35,36 @@ public class Remittance {
     @Column(name = "currency", nullable = false, length = 10)
     private String currency = "PHP";
 
+    // ── 7 Admin Dashboard Visible Statuses ─────────────────────────────
+    public static final String STATUS_INITIATED = "Initiated";
+    public static final String STATUS_AUTHORIZED = "Authorized";
+    public static final String STATUS_PROCESSING = "Processing";
+    public static final String STATUS_POSTED = "Posted";
+    public static final String STATUS_FAILED = "Failed";
+    public static final String STATUS_RESERVED = "Reserved";
+    public static final String STATUS_CANCELLED = "Cancelled";
+
+    // ── 11 Granular Internal Lifecycle Steps ───────────────────────────
+    public static final String STEP_INITIATED = "INITIATED";
+    public static final String STEP_VALIDATED = "VALIDATED";
+    public static final String STEP_AUTHENTICATED = "AUTHENTICATED";
+    public static final String STEP_FRAUD_CHECK = "FRAUD_CHECK";
+    public static final String STEP_LIMIT_CHECK = "LIMIT_CHECK";
+    public static final String STEP_FUNDS_CHECK = "FUNDS_CHECK";
+    public static final String STEP_AUTHORIZED = "AUTHORIZED";
+    public static final String STEP_POSTED = "POSTED";
+    public static final String STEP_LEDGER_UPDATE = "LEDGER_UPDATE";
+    public static final String STEP_NOTIFICATION = "NOTIFICATION";
+    public static final String STEP_RECONCILIATION = "RECONCILIATION";
+
     @Column(name = "status", nullable = false, length = 30)
-    private String status; // PENDING_CORE, POSTED, REJECTED, PROCESSING
+    private String status; // Initiated, Authorized, Processing, Posted, Failed, Reserved, Cancelled
+
+    @Column(name = "internal_status", length = 40)
+    private String internalStatus; // Step 1 to 11
+
+    @Column(name = "current_service", length = 40)
+    private String currentService;
 
     @Column(name = "risk_score", precision = 5, scale = 4)
     private BigDecimal riskScore;
@@ -54,6 +83,9 @@ public class Remittance {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @Column(name = "transaction_type", nullable = false, length = 30)
+    private String transactionType = RemittanceRequest.TYPE_TRANSFER; // TRANSFER, LOAN_DISBURSEMENT, LOAN_REPAYMENT
 
     public Remittance() {}
 
@@ -106,6 +138,15 @@ public class Remittance {
 
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
+
+    public String getTransactionType() { return transactionType; }
+    public void setTransactionType(String transactionType) { this.transactionType = transactionType; }
+
+    public String getInternalStatus() { return internalStatus; }
+    public void setInternalStatus(String internalStatus) { this.internalStatus = internalStatus; this.updatedAt = LocalDateTime.now(); }
+
+    public String getCurrentService() { return currentService; }
+    public void setCurrentService(String currentService) { this.currentService = currentService; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

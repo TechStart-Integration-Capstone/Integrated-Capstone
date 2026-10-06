@@ -1,0 +1,49 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: loan-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      pool-name: LoanHikariPool
+  jpa:
+    database-platform: org.hibernate.dialect.SQLServerDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+
+app:
+  orchestrator:
+    url: ${ORCHESTRATOR_URL:http://localhost:8083}
+    timeout-ms: 3000
+
+loan:
+  min-amount: 5000
+  min-term: 3
+  max-term: 60
+  affordability-ratio: 0.30        # monthly installment <= 30% of monthly income
+  decline-below-score: 500
+  offer-valid-days: 7
+  penalty-rate: 0.02               # 2% of an overdue installment, charged once
+  bank-account-no: PH1000000LOAN
+  bands:
+    LOW:    { min-score: 300, max-score: 579, max-amount: 30000,   annual-rate: 28.0, max-term: 12 }
+    NORMAL: { min-score: 580, max-score: 719, max-amount: 250000,  annual-rate: 18.0, max-term: 36 }
+    HIGH:   { min-score: 720, max-score: 850, max-amount: 1000000, annual-rate: 10.5, max-term: 60 }
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always

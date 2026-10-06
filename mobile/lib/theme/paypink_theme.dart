@@ -22,12 +22,48 @@ class PayPinkTheme {
   static const Color amberBg = Color(0xFFFEF3C7);
   static const Color red = Color(0xFFB91C1C);
   static const Color redBg = Color(0xFFFEE2E2);
+  static const Color indigo = Color(0xFF4F46E5);
+  static const Color indigoBg = Color(0xFFEEF2FF);
 
   // Glassmorphism tokens
   static const Color glassWhite = Color(0xB8FFFFFF);
   static const Color glassCardBg = Color(0xC7FFFFFF);
   static const Color glassBorder = Color(0xD9FFFFFF);
   static const Color glassBorderSubtle = Color(0x66FFFFFF);
+
+  // Dark Mode Tokens (Luminous Midnight Navy & Soft Rose Palette)
+  static const Color darkBg = Color(0xFF1B243B); // Rich Midnight Navy (Visibly vibrant blue, not black)
+  static const Color darkPaper = Color(0xFF232D4B); // Elevated Navy Paper
+  static const Color darkCard = Color(0xFF2C395E); // Floating Card Navy with distinct elevation
+  static const Color darkInk = Color(0xFFFFFFFF); // Pure Luminous White (Maximum Readability)
+  static const Color darkMuted = Color(0xFFB5C5E6); // Soft Cerulean Mist (Crisp, High-Legibility Secondary Text)
+  static const Color darkLine = Color(0xFF384770); // Distinct Navy Divider Line
+  static const Color darkGlassBorder = Color(0x66FF85B3); // Frosted Rose-Pink Hairline Border
+  static const Color darkGlassCardBg = Color(0xE6243054); // Deep Frosted Midnight Glass
+
+  static ThemeData get lightTheme => ThemeData(
+        fontFamily: 'DM Sans',
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: paper,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: wine,
+          brightness: Brightness.light,
+          surface: paper,
+        ),
+        useMaterial3: true,
+      );
+
+  static ThemeData get darkTheme => ThemeData(
+        fontFamily: 'DM Sans',
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: darkBg,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3B82F6),
+          brightness: Brightness.dark,
+          surface: darkBg,
+        ),
+        useMaterial3: true,
+      );
 
   // Typography with GoogleFonts fallback
   static TextStyle display({

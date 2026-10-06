@@ -101,4 +101,12 @@ class AuditKafkaConsumerTest {
         // Only operation provided — consumer catches any parse/null issues internally
         assertThatNoException().isThrownBy(() -> consumer.consume("{\"operation\":\"DEBIT\"}"));
     }
+
+    @Test
+    @DisplayName("consume: loan.* events are ignored, even when they carry transactionId and accountId")
+    void consume_loanEvent_ignored() {
+        assertThatNoException().isThrownBy(() -> consumer.consume(
+                "{\"eventType\":\"loan.disbursed\",\"transactionId\":501,\"accountId\":4,\"amount\":250000.00}"));
+        verifyNoInteractions(auditRepository);
+    }
 }

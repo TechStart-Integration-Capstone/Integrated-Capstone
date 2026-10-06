@@ -664,10 +664,13 @@
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
                             <select id="monitor-status-filter" class="form-control" onchange="renderTransactionMonitor()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
                                 <option value="ALL">All Statuses</option>
-                                <option value="SUCCESS">Committed (SUCCESS)</option>
-                                <option value="PENDING">Pending</option>
-                                <option value="COMPLETED">Completed</option>
-                                <option value="FAILED">Blocked / Insufficient Funds</option>
+                                <option value="Initiated">Initiated</option>
+                                <option value="Authorized">Authorized</option>
+                                <option value="Processing">Processing</option>
+                                <option value="Posted">Posted</option>
+                                <option value="Failed">Failed</option>
+                                <option value="Reserved">Reserved</option>
+                                <option value="Cancelled">Cancelled</option>
                             </select>
                             <select id="monitor-type-filter" class="form-control" onchange="renderTransactionMonitor()" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
                                 <option value="ALL">All Mutation Types</option>
@@ -943,6 +946,30 @@
         </div>
     </div>
 
+    <!-- Transaction Lifecycle Modal (Tab 3: 11-Step Pipeline) -->
+    <div id="modal-transaction-lifecycle" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 680px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="flex-shrink: 0;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; color: var(--primary-rose);">Transaction Lifecycle Trace</h3>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-muted);" id="lifecycle-modal-subtitle">11-Step Microservice Pipeline</p>
+                </div>
+                <button class="modal-close" onclick="closeModal('modal-transaction-lifecycle')" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1;">
+                <div id="lifecycle-metadata" style="background: var(--bg-card-subtle, #fcf8fa); border: 1px solid var(--border-rose-light, #f1d7e2); border-radius: 8px; padding: 12px 16px; margin-bottom: 1.25rem; font-size: 0.85rem; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <!-- Dynamically populated -->
+                </div>
+                <div id="lifecycle-stepper-container" class="lifecycle-stepper">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+            <div class="modal-footer" style="flex-shrink: 0; padding: 0.75rem 1.5rem; border-top: 1px solid var(--border-rose-light, #f1d7e2); display: flex; justify-content: flex-end;">
+                <button class="btn-primary" onclick="closeModal('modal-transaction-lifecycle')">Close Trace</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Dedicated Admin Security Sign-In Modal Gate -->
     <div id="modal-admin-login" class="modal-backdrop active" style="z-index: 10000; backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.75);">
         <div class="modal-card" style="max-width: 440px; border: 1px solid var(--primary-rose-medium); box-shadow: 0 25px 50px -12px rgba(225, 29, 72, 0.35);">
@@ -993,7 +1020,7 @@
     <div id="admin-toast" class="admin-toast" hidden></div>
 
     <!-- Script -->
-    <script src="src/js/app.js?v=20261003-live-monitor"></script>
+    <script src="src/js/app.js?v=20261005-db-monitor"></script>
     <script src="admin/admin.js?v=20260929-admin-sync"></script>
 </body>
 </html>
