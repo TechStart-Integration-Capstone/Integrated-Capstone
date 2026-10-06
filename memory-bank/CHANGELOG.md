@@ -1,5 +1,15 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
+- 2026-10-06 — Enforced project memory workflow in root `AGENTS.md`: read `memory-bank/CONTEXT.md` before code and update CONTEXT/CHANGELOG after every change, including migrations and deployments. Updated context to reflect actual local runtime rather than pending activation. — [Codex; uncommitted]
+
+- 2026-10-06 — Integrated interest postings with the existing PostgreSQL GL (`LEDGER_MUTATION_AUDIT`), replacing redundant Azure SQL `GL_ENTRY`:
+  - `microservices/transaction-service/.../interest/InterestLedger.java`: reuse unique `LEDGER_TRANSACTION.reference_no` for monthly duplicate protection; keep balance/transaction/outbox atomic; include interest period metadata in emitted credit events. Zero interest creates no financial entry.
+  - `microservices/audit-service`: deduplicate per transaction/account; propagate database failures and retry via Kafka instead of silently losing ledger entries. Added `config/AuditKafkaConfiguration.java`.
+  - `scripts/migrate_interest_azuresql.sql` and transaction bootstrap: retire GL_ENTRY only when empty; abort if historical rows exist. Applied guarded migration to hosted Azure SQL paypink and removed the empty table.
+  - Rebuilt/deployed transaction and audit containers, preserving enabled EOD runtime settings. Azure SQL and PostgreSQL health UP; audit consumer subscribed to ledger topics. Updated `docs/interest-eod.md`.
+  - Validation: 68 transaction tests (including 12 native SQL Server/PostgreSQL tests), 10 audit tests; all passed. No live interest posting triggered. — [Codex; uncommitted]
+
+- 2026-10-06 — Deployed Interest EOD locally against hosted Azure SQL paypink and Docker PostgreSQL: applied both additive migrations, created restricted `interest_eod_writer`, enabled runtime schedule starting 2026-10-06 (user-selected), daily 23:59:59 Asia/Manila and hourly recovery at :15. Native transaction suite 66/66 passed; unauthorized accrual returned 403. Settings supplied in memory, not persisted in Compose/.env; preserve them on recreation. No manual financial accrual/posting invoked. — [Codex]
 
 - 2026-10-06 — CI/CD Pipeline & Test Hardening (Java 17 & Trivy Scan Fixes):
   - **GitHub Self-Hosted Runner Activation:** Registered and started GitHub Actions self-hosted runner (v2.337.0) on Azure VM `vm-paypink` with labels `self-hosted,azure-vm` under systemd service `actions.runner.TechStart-Integration-Capstone-Integrated-Capstone.vm-paypink.service`, connecting automated Stage 3 production CD deploys.

@@ -1,5 +1,5 @@
 -- ============================================================================
--- PayPink 2.0 — Azure SQL (SQL Server 2022) Complete Unified Schema
+-- PayPink 2.0 â€” Azure SQL (SQL Server 2022) Complete Unified Schema
 -- Single Source of Truth for Database Setup & Migrations
 -- ============================================================================
 
@@ -239,7 +239,7 @@ CREATE INDEX idx_loan_customer        ON dbo.LOAN(customer_id, status);
 CREATE INDEX idx_loan_schedule_due    ON dbo.LOAN_SCHEDULE(status, due_date);
 GO
 
--- Seed data — demo users
+-- Seed data â€” demo users
 INSERT INTO dbo.CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
 VALUES ('lviernes', '$2a$10$wN3WpZgJ4g7N8dC5lRzPfeYk4GqU1xL8e9m3K7b0yU6r5T1w9P8a2', 'Levi', 'Viernes', 'jonlevi.jlv@gmail.com', '+63 922 758 4285', 'ACTIVE');
 INSERT INTO dbo.CUSTOMER (username, password_hash, first_name, last_name, email, contact_no, status)
@@ -304,23 +304,12 @@ BEGIN
         CONSTRAINT uq_eod_job_date UNIQUE (job_name, business_date)
     );
 END;
-IF OBJECT_ID('dbo.GL_ENTRY', 'U') IS NULL
+-- Interest postings use the existing LEDGER_TRANSACTION reference and PostgreSQL ledger.
+-- Refuse to discard historical GL data during migration.
+IF OBJECT_ID('dbo.GL_ENTRY', 'U') IS NOT NULL
 BEGIN
-    CREATE TABLE dbo.GL_ENTRY (
-        gl_entry_id BIGINT IDENTITY(1,1) PRIMARY KEY,
-        account_id BIGINT NOT NULL REFERENCES dbo.ACCOUNT(account_id),
-        amount DECIMAL(18,2) NOT NULL CHECK (amount >= 0),
-        entry_type NVARCHAR(10) NOT NULL CHECK (entry_type IN ('CREDIT', 'DEBIT')),
-        posting_type NVARCHAR(40) NOT NULL,
-        description NVARCHAR(255) NOT NULL,
-        business_date DATE NOT NULL,
-        period_start DATE NOT NULL,
-        period_end DATE NOT NULL,
-        job_run_id BIGINT NOT NULL REFERENCES dbo.EOD_JOB_RUN(job_run_id),
-        transaction_id BIGINT NULL REFERENCES dbo.LEDGER_TRANSACTION(transaction_id),
-        created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-        CONSTRAINT ck_gl_period CHECK (period_start <= period_end AND business_date = period_end),
-        CONSTRAINT uq_gl_interest_period UNIQUE (account_id, posting_type, period_end)
-    );
+    IF EXISTS (SELECT 1 FROM dbo.GL_ENTRY)
+        THROW 51000, 'GL_ENTRY contains historical entries; reconcile them before retiring this table.', 1;
+    DROP TABLE dbo.GL_ENTRY;
 END;
 COMMIT;

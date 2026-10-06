@@ -23,6 +23,7 @@ class InterestDatabaseTest {
     private JdbcTemplate pg;
     private InterestLedger ledger;
     private InterestAccrualStore audit;
+    private String sqlMigration;
     private static final LocalDate END = LocalDate.of(2026, 10, 31);
 
     @BeforeEach void setup() throws Exception {
@@ -39,7 +40,8 @@ class InterestDatabaseTest {
         while (!Files.isDirectory(root.resolve("scripts"))) root = root.getParent();
         String bootstrap = Files.readString(root.resolve("microservices/transaction-service/src/main/resources/schema-azuresql.sql"));
         for (String batch : bootstrap.split("(?im)^GO\\s*$")) if (!batch.isBlank()) sql.execute(batch);
-        sql.execute(Files.readString(root.resolve("scripts/migrate_interest_azuresql.sql"))); // migration is rerunnable
+        sqlMigration = Files.readString(root.resolve("scripts/migrate_interest_azuresql.sql"));
+        sql.execute(sqlMigration); // migration is rerunnable
         sql.update("UPDATE dbo.ACCOUNT SET status = 'INACTIVE'");
         pg.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
         String migration = Files.readString(root.resolve("scripts/migrate_interest_postgres.sql"));
@@ -80,12 +82,15 @@ class InterestDatabaseTest {
         assertThat(worker.postMonth(END).replayed()).isTrue();
         assertThat(balance(savings)).isEqualByComparingTo("10033.97");
         assertThat(balance(loan)).isEqualByComparingTo("10000");
-        assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.GL_ENTRY", Integer.class)).isEqualTo(1);
+        assertThat(sql.queryForObject("SELECT OBJECT_ID('dbo.GL_ENTRY', 'U')", Integer.class)).isNull();
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.LEDGER_TRANSACTION", Integer.class)).isEqualTo(1);
         String payload = sql.queryForObject("SELECT payload FROM dbo.OUTBOX_EVENT", String.class);
         var event = new ObjectMapper().readTree(payload);
         assertThat(event.path("operation").asText()).isEqualTo("CREDIT");
         assertThat(event.path("beforeBalance").asText()).isEqualTo("10000.0000");
         assertThat(event.path("afterBalance").asText()).isEqualTo("10033.9700");
+        assertThat(event.path("transactionType").asText()).isEqualTo("INTEREST_CREDIT");
+        assertThat(event.path("periodEnd").asText()).isEqualTo("2026-10-31");
     }
 
     @Test void postgresBlocksMutationTruncationLateInsertsAndDuplicateDays() {
@@ -128,14 +133,13 @@ class InterestDatabaseTest {
         assertThat(balance(id)).isEqualByComparingTo("20001.10");
     }
 
-    @Test void outboxFailureRollsBackBalanceLedgerGlAndJobThenRetryPostsOnce() {
+    @Test void outboxFailureRollsBackBalanceLedgerAndJobThenRetryPostsOnce() {
         long id = account("SAVINGS", "10000", "0");
         var worker = service(END, END);
         worker.accrue(END);
         sql.execute("ALTER TABLE dbo.OUTBOX_EVENT ADD CONSTRAINT injected_failure CHECK (event_type <> 'TRANSACTION_SUCCESS')");
         assertThatThrownBy(() -> worker.postMonth(END)).isInstanceOf(RuntimeException.class);
         assertThat(balance(id)).isEqualByComparingTo("10000");
-        assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.GL_ENTRY", Integer.class)).isZero();
         assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.LEDGER_TRANSACTION", Integer.class)).isZero();
         assertThat(ledger.postingComplete(END)).isFalse();
         assertThat(audit.completed(END)).isTrue();
@@ -170,11 +174,11 @@ class InterestDatabaseTest {
         assertThat(balance(id)).isEqualByComparingTo("10000");
     }
 
-    @Test void zeroInterestSealsGlPeriodWithoutZeroLedgerTransaction() {
+    @Test void zeroInterestCompletesJobWithoutFinancialEntry() {
         account("SAVINGS", "0", "0");
         var worker = service(END, END);
         worker.runToday();
-        assertThat(sql.queryForObject("SELECT amount FROM dbo.GL_ENTRY", BigDecimal.class)).isEqualByComparingTo("0");
+        assertThat(ledger.postingComplete(END)).isTrue();
         assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.LEDGER_TRANSACTION", Integer.class)).isZero();
         assertThat(worker.postMonth(END).replayed()).isTrue();
     }
@@ -185,6 +189,23 @@ class InterestDatabaseTest {
         service(END.plusDays(1), END).recoverClosedMonths();
         service(END.plusDays(1), END).recoverClosedMonths();
         assertThat(balance(id)).isEqualByComparingTo("10001.10");
+    }
+
+    @Test void replayChecksExistingTransactionAgainstImmutableAccrualAmount() {
+        long id = account("SAVINGS", "10000", "0");
+        var worker = service(END, END);
+        worker.runToday();
+        sql.update("UPDATE dbo.LEDGER_TRANSACTION SET amount = 2 WHERE reference_no = ?", "INT-" + END + "-" + id);
+        assertThatThrownBy(() -> worker.postMonth(END)).hasMessageContaining("differs from immutable accruals");
+        assertThat(balance(id)).isEqualByComparingTo("10001.10");
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.OUTBOX_EVENT", Integer.class)).isEqualTo(1);
+    }
+
+    @Test void retirementMigrationRefusesToDiscardHistoricalGlEntries() {
+        sql.execute("CREATE TABLE dbo.GL_ENTRY (legacy_id INT NOT NULL)");
+        sql.update("INSERT INTO dbo.GL_ENTRY VALUES (1)");
+        assertThatThrownBy(() -> sql.execute(sqlMigration)).hasMessageContaining("historical entries");
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.GL_ENTRY", Integer.class)).isEqualTo(1);
     }
 
     @Test void leapFebruaryUses365AndRealCalendarMonthEnd() {
