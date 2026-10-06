@@ -18,6 +18,12 @@ public class LedgerMutationAudit {
     @Column(name = "after_balance", precision = 18, scale = 4) private BigDecimal afterBalance;
     @Column(name = "created_date") private LocalDateTime createdDate;
 
+    public LedgerMutationAudit() {}
+    public LedgerMutationAudit(Long transactionId, BigDecimal amount) {
+        this.transactionId = transactionId;
+        this.amount = amount;
+    }
+
     public Long getTransactionId() { return transactionId; }
     public BigDecimal getAmount() { return amount; }
 }

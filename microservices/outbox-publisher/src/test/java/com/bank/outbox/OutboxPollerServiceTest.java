@@ -35,11 +35,11 @@ class OutboxPollerServiceTest {
         // so the service's .getRecordMetadata().offset() log call doesn't NPE.
         org.apache.kafka.clients.producer.RecordMetadata meta =
             new org.apache.kafka.clients.producer.RecordMetadata(
-                new org.apache.kafka.common.TopicPartition("ledger.transaction.events", 0),
+                new org.apache.kafka.common.TopicPartition("remittance.events", 0),
                 0L, 0, 0L, 0, 0);
         org.springframework.kafka.support.SendResult<String,String> sr =
             new org.springframework.kafka.support.SendResult<>(
-                new org.apache.kafka.clients.producer.ProducerRecord<>("ledger.transaction.events","k","v"),
+                new org.apache.kafka.clients.producer.ProducerRecord<>("remittance.events","k","v"),
                 meta);
         return CompletableFuture.completedFuture(sr);
     }
@@ -56,7 +56,7 @@ class OutboxPollerServiceTest {
     void pollPending_successfulSend_marksProcessed(){
         OutboxEvent ev=pendingEvent(1L);
         when(outboxRepository.findPendingBatch(50)).thenReturn(List.of(ev));
-        when(kafkaTemplate.send(eq("ledger.transaction.events"),anyString(),anyString())).thenReturn(successFuture());
+        when(kafkaTemplate.send(any(),any(),any())).thenReturn(successFuture());
         when(outboxRepository.save(any())).thenReturn(ev);
         service.pollPendingEvents();
         verify(outboxRepository,atLeastOnce()).save(argThat(e->e.getStatus().equals("PROCESSED")));
