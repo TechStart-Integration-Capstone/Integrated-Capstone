@@ -261,7 +261,7 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
   - Mobile PWA App: `http://20.69.157.88:3002`
   - API Gateway: `http://20.69.157.88:8080`
 - **Container Health:** 26/26 Docker containers running and healthy.
-- **GitHub Self-Hosted Runner:** v2.337.0 active as systemd service (`actions.runner.TechStart-Integration-Capstone-Integrated-Capstone.vm-paypink.service`) with labels `self-hosted,azure-vm` for automated Stage 3 CD deployments.
+- **GitHub Self-Hosted Runner:** v2.337.0 active as systemd service (`actions.runner.TechStart-Integration-Capstone-Integrated-Capstone.vm-paypink.service`) with labels `self-hosted,azure-vm` for automated Stage 3 CD deployments. Pipeline configured with `actions/setup-java@v4` (Temurin 17) and host fallback to guarantee Java 17 toolchain for Maven artifact packaging before Docker image builds.
 - **Budget Control:** Zero-cost / low-cost tier. Scheduled auto-shutdown active at 11:00 UTC (7:00 PM PHT). Deallocate when idle.
 - **Reconciliation Hotfix Migration:** Run `scripts/migrate_reconciliation_fix.sql` against `postgres-immutable-audit` container on the VM to sync `account_id` and `azure_sql_status` column renames.
 
