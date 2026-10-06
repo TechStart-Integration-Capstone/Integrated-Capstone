@@ -23,18 +23,21 @@ CREATE TABLE LEDGER_MUTATION_AUDIT (
 );
 
 -- 2. RECONCILIATION_LOG (Cross-Database Integrity & Drift Detection)
+--    oracle_status renamed to azure_sql_status (Phase 1 migration renamed the primary DB from Oracle XE to Azure SQL).
+--    account_id is nullable — reconciliation is done at transaction level; account_id is populated from
+--    LEDGER_MUTATION_AUDIT when available, but absent for failed/missing transactions.
 CREATE TABLE RECONCILIATION_LOG (
-    recon_id         BIGSERIAL PRIMARY KEY,
-    transaction_id   BIGINT NOT NULL,
-    account_id       BIGINT NOT NULL,
-    oracle_status    VARCHAR(30) NOT NULL,
-    postgres_status  VARCHAR(30) NOT NULL,
-    recon_status     VARCHAR(30) NOT NULL,          -- 'MATCHED', 'DRIFT_DETECTED'
-    mismatch_fields  VARCHAR(200),
-    check_count      INT DEFAULT 1 NOT NULL,
-    last_checked_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    recon_date       TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT uq_recon_tx_account UNIQUE (transaction_id, account_id)
+    recon_id          BIGSERIAL PRIMARY KEY,
+    transaction_id    BIGINT       NOT NULL,
+    account_id        BIGINT,                        -- nullable: populated from audit row when present
+    azure_sql_status  VARCHAR(30)  NOT NULL,         -- was oracle_status; maps to Azure SQL LEDGER_TRANSACTION.status
+    postgres_status   VARCHAR(30)  NOT NULL,
+    recon_status      VARCHAR(30)  NOT NULL,         -- 'MATCHED', 'DRIFT_DETECTED'
+    mismatch_fields   VARCHAR(200),
+    check_count       INT          NOT NULL DEFAULT 1,
+    last_checked_at   TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    recon_date        TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_recon_tx UNIQUE (transaction_id)   -- one recon row per transaction (account_id no longer in key)
 );
 
 -- Indexes
@@ -42,6 +45,8 @@ CREATE INDEX idx_audit_tx_id   ON LEDGER_MUTATION_AUDIT(transaction_id);
 CREATE INDEX idx_audit_acc_id  ON LEDGER_MUTATION_AUDIT(account_id);
 CREATE INDEX idx_audit_created ON LEDGER_MUTATION_AUDIT(created_date);
 CREATE INDEX idx_recon_status  ON RECONCILIATION_LOG(recon_status, recon_date);
+CREATE INDEX idx_recon_tx_id   ON RECONCILIATION_LOG(transaction_id);
+CREATE INDEX idx_recon_acct    ON RECONCILIATION_LOG(account_id) WHERE account_id IS NOT NULL;
 
 -- 3. RISK_DECISION (Phase 6 — Immutable Risk Decision Log)
 --    Append-only. One row per risk-engine scoring call (APPROVE and REJECT both recorded).
