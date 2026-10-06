@@ -120,4 +120,70 @@ class RemittanceSagaRecoveryTest {
         verify(ledger).recordT24Posted(waiting, "FT202610041002");
         verify(ledger).commitLedgerMutation(eq(waiting), any(), any(), any(), any(), any(), any());
     }
+
+    private Remittance heldInWindow() {
+        Remittance r = remittance(Remittance.STATUS_RESERVED, Remittance.INTERNAL_CLIENT_CANCEL_WINDOW, LocalDateTime.now());
+        r.setFtReference(null);
+        r.setCallerCustomerId(42L);
+        r.setCancelUntil(LocalDateTime.now().plusSeconds(10));
+        return r;
+    }
+
+    @Test
+    @DisplayName("Send now: claims the cancellation window and posts to core banking immediately")
+    void sendNow_dispatchesImmediately() {
+        Remittance held = heldInWindow();
+        when(remittanceRepository.findByReferenceNo("TX-PH-LOAN1")).thenReturn(java.util.Optional.of(held));
+        RemittanceLedgerService ledger = mock(RemittanceLedgerService.class);
+        when(ledger.claimCancelWindow(7L, Remittance.INTERNAL_WINDOW_CLOSED)).thenReturn(true);
+        when(ledger.resolveAccount(anyString())).thenReturn(
+                new RemittanceLedgerService.AccountInfo(10L, 42L, "001100000001", BigDecimal.TEN, BigDecimal.ZERO));
+        when(t24AdapterClient.executeTransfer(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new T24Result("POSTED", "FT202610041003", null, null, false));
+
+        new RemittanceSagaWorker(remittanceRepository, ledger, t24AdapterClient).sendNow("TX-PH-LOAN1", 42L);
+
+        verify(ledger).recordT24Posted(held, "FT202610041003");
+        verify(ledger).commitLedgerMutation(eq(held), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Send now after the window was already claimed (cancelled or sweeping) never sends a second time")
+    void sendNow_lostClaim_doesNotDispatch() {
+        Remittance held = heldInWindow();
+        when(remittanceRepository.findByReferenceNo("TX-PH-LOAN1")).thenReturn(java.util.Optional.of(held));
+        RemittanceLedgerService ledger = mock(RemittanceLedgerService.class);
+        when(ledger.claimCancelWindow(anyLong(), anyString())).thenReturn(false);
+
+        new RemittanceSagaWorker(remittanceRepository, ledger, t24AdapterClient).sendNow("TX-PH-LOAN1", 42L);
+
+        verifyNoInteractions(t24AdapterClient);
+        verify(ledger, never()).commitLedgerMutation(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Send now on someone else's transfer is forbidden")
+    void sendNow_otherCustomer_forbidden() {
+        when(remittanceRepository.findByReferenceNo("TX-PH-LOAN1")).thenReturn(java.util.Optional.of(heldInWindow()));
+        RemittanceLedgerService ledger = mock(RemittanceLedgerService.class);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        new RemittanceSagaWorker(remittanceRepository, ledger, t24AdapterClient).sendNow("TX-PH-LOAN1", 99L))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        verify(ledger, never()).claimCancelWindow(anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("Sweeper skips a matured window that Cancel or Send now already claimed")
+    void sweeper_skipsClaimedWindow() {
+        Remittance held = heldInWindow();
+        when(remittanceRepository.findByStatusAndInternalStatusAndCancelUntilBefore(
+                eq(Remittance.STATUS_RESERVED), eq(Remittance.INTERNAL_CLIENT_CANCEL_WINDOW), any())).thenReturn(List.of(held));
+        RemittanceLedgerService ledger = mock(RemittanceLedgerService.class);
+        when(ledger.claimCancelWindow(anyLong(), anyString())).thenReturn(false);
+
+        new RemittanceSagaWorker(remittanceRepository, ledger, t24AdapterClient).resolvePendingSagas();
+
+        verifyNoInteractions(t24AdapterClient);
+    }
 }

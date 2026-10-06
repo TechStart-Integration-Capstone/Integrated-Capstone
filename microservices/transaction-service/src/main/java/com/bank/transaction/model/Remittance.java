@@ -59,6 +59,7 @@ public class Remittance {
 
     // ── Additional Internal Reversal & Retry Lifecycle Steps ───────────
     public static final String INTERNAL_CLIENT_CANCEL_WINDOW = "CLIENT_CANCEL_WINDOW";
+    public static final String INTERNAL_WINDOW_CLOSED = "WINDOW_CLOSED"; // window ended (timer or "Send now"); core posting under way
     public static final String INTERNAL_CANCELLED_BY_USER = "CANCELLED_BY_USER";
     public static final String INTERNAL_AUTO_REVERSED = "AUTO_REVERSED";
     public static final String INTERNAL_T24_REJECTED = "T24_REJECTED";

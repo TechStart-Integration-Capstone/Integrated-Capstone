@@ -34,13 +34,23 @@ public class TransactionReportService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a valid date range of up to 366 days, ending today or earlier.");
         var start = from.atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
         var end = to.plusDays(1).atStartOfDay(ZONE).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
-        var rows = jdbc.query("SELECT t.transaction_date, t.reference_no, t.transaction_type, t.status, "
-            + "COALESCE((SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
-            + "CASE WHEN t.transaction_type IN ('CREDIT','WELCOME_GIFT','TRANSFER_IN') THEN 'CREDIT' WHEN t.transaction_type IN ('DEBIT','TRANSFER_OUT') OR t.transaction_type LIKE 'EXT_%' THEN 'DEBIT' END), "
-            + "t.amount, c.first_name + ' ' + c.last_name, t.transaction_id FROM LEDGER_TRANSACTION t LEFT JOIN ACCOUNT a ON a.account_id = t.to_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
-            + "WHERE t.from_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ? ORDER BY t.transaction_date, t.transaction_id OFFSET 0 ROWS FETCH NEXT 10001 ROWS ONLY",
-            (rs, n) -> new Row(rs.getTimestamp(1).toLocalDateTime(), BankingIdentifiers.reference(rs.getLong(8), rs.getTimestamp(1).toLocalDateTime()), rs.getString(3), rs.getString(4), rs.getString(5), rs.getBigDecimal(6), rs.getString(7)),
-            accountId, Timestamp.valueOf(start), Timestamp.valueOf(end));
+        // Outgoing rows are the account's own ledger rows. Transfers posted by transaction-service (P2P_REMITTANCE)
+        // and loan payouts are a single row for both sides, so the account's incoming leg is added as a CREDIT.
+        var rows = jdbc.query("SELECT * FROM (SELECT t.transaction_date, t.reference_no, t.transaction_type, t.status, "
+            + "COALESCE("
+            + "(SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
+            + "CASE WHEN t.transaction_type IN ('CREDIT','WELCOME_GIFT','TRANSFER_IN') THEN 'CREDIT' WHEN t.transaction_type IN ('DEBIT','TRANSFER_OUT') OR t.transaction_type LIKE 'EXT_%' THEN 'DEBIT' END) AS operation, "
+            + "t.amount, c.first_name + ' ' + c.last_name AS counterparty, t.transaction_id, 0 AS leg FROM LEDGER_TRANSACTION t "
+            + "LEFT JOIN ACCOUNT a ON a.account_id = t.to_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
+            + "WHERE t.from_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ? "
+            + "UNION ALL SELECT t.transaction_date, t.reference_no, CASE WHEN t.transaction_type = 'P2P_REMITTANCE' THEN 'TRANSFER_IN' ELSE t.transaction_type END, "
+            + "t.status, 'CREDIT', t.amount, c.first_name + ' ' + c.last_name, t.transaction_id, 1 FROM LEDGER_TRANSACTION t "
+            + "LEFT JOIN ACCOUNT a ON a.account_id = t.from_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
+            + "WHERE t.to_account_id = ? AND t.transaction_type IN ('P2P_REMITTANCE','LOAN_DISBURSEMENT') AND t.transaction_date >= ? AND t.transaction_date < ?) statement "
+            + "ORDER BY transaction_date, transaction_id, leg OFFSET 0 ROWS FETCH NEXT 10001 ROWS ONLY",
+            (rs, n) -> new Row(rs.getTimestamp(1).toLocalDateTime(), BankingIdentifiers.reference(rs.getLong(8), rs.getTimestamp(1).toLocalDateTime()), rs.getString(3), rs.getString(4), rs.getString(5), rs.getBigDecimal(6),
+                    "LOAN_DISBURSEMENT".equals(rs.getString(3)) ? "PayPink Loans" : rs.getString(7)),
+            accountId, Timestamp.valueOf(start), Timestamp.valueOf(end), accountId, Timestamp.valueOf(start), Timestamp.valueOf(end));
         if (rows.size() > 10000) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "This period contains over 10,000 transactions. Choose a shorter date range.");
         return pdf(profile, account, from, to, rows);
     }
@@ -117,7 +127,8 @@ public class TransactionReportService {
                     var row = rows.get(i);
                     float y = 391 - (i % pageSize) * 34;
                     String date = row.date().atOffset(ZoneOffset.UTC).atZoneSameInstant(ZONE).format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm", Locale.ENGLISH));
-                    String type = row.type().startsWith("EXT_") ? (row.type().contains("PESONET") ? "PESONet transfer" : "InstaPay transfer") : row.type().replace('_', ' ');
+                    String type = row.type().startsWith("EXT_") ? (row.type().contains("PESONET") ? "PESONet transfer" : "InstaPay transfer")
+                            : "P2P_REMITTANCE".equals(row.type()) ? "TRANSFER OUT" : row.type().replace('_', ' ');
                     var recipient = ExternalTransferService.recipientForType(row.type());
                     String name = recipient == null ? row.recipient() : recipient.name();
                     if (name != null && !name.isBlank()) type += " - " + name.strip();

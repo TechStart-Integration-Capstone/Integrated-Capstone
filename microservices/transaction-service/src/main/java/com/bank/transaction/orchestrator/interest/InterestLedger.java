@@ -12,7 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.Supplier;
 
-/** All methods are called inside locked(), keeping balance, GL, ledger and outbox atomic. */
+/** Balance, transaction and outbox commit together; the existing PostgreSQL ledger consumes the event. */
 public class InterestLedger {
     public record Account(long id, long customerId, String type, String currency,
                           BigDecimal balance, BigDecimal contractRate) {}
@@ -88,22 +88,25 @@ public class InterestLedger {
         if (!InterestPolicy.isSavings(account.type()))
             throw new IllegalStateException("Accrued account type changed: " + account.id());
 
+        String reference = "INT-" + end + "-" + account.id();
         List<BigDecimal> posted = jdbc.query("""
-                SELECT amount FROM dbo.GL_ENTRY
-                WHERE account_id = ? AND posting_type = 'MONTHLY_INTEREST' AND period_end = ?
-                """, (rs, n) -> rs.getBigDecimal(1), account.id(), Date.valueOf(end));
+                SELECT amount FROM dbo.LEDGER_TRANSACTION
+                WHERE reference_no = ? AND from_account_id = ?
+                    AND transaction_type = 'INTEREST_CREDIT' AND status = 'SUCCESS'
+                """, (rs, n) -> rs.getBigDecimal(1), reference, account.id());
         if (!posted.isEmpty()) {
             if (posted.get(0).compareTo(total.amount()) != 0)
                 throw new IllegalStateException("Posted interest differs from immutable accruals for " + account.id());
             return false;
         }
         if (total.amount().signum() < 0) throw new IllegalArgumentException("Negative monthly interest");
+        // No financial entry for zero interest. The successful EOD job records completion.
+        if (total.amount().signum() == 0) return false;
 
         Long transactionId = null;
         if (total.amount().signum() > 0) {
             jdbc.update("UPDATE dbo.ACCOUNT SET current_balance = current_balance + ? WHERE account_id = ?",
                     total.amount(), account.id());
-            String reference = "INT-" + end + "-" + account.id();
             transactionId = jdbc.queryForObject("""
                     INSERT INTO dbo.LEDGER_TRANSACTION
                         (from_account_id, amount, source_currency, target_currency, transaction_type, reference_no, status)
@@ -121,6 +124,9 @@ public class InterestLedger {
             payload.put("beforeBalance", account.balance().toPlainString());
             payload.put("afterBalance", account.balance().add(total.amount()).toPlainString());
             payload.put("businessDate", end.toString());
+            payload.put("periodStart", start.toString());
+            payload.put("periodEnd", end.toString());
+            payload.put("description", "Monthly Interest Posting - Period End: " + end);
             try {
                 jdbc.update("""
                         INSERT INTO dbo.OUTBOX_EVENT (transaction_id, event_type, payload, status)
@@ -130,13 +136,6 @@ public class InterestLedger {
                 throw new IllegalStateException("Cannot serialize interest posting", ex);
             }
         }
-        // A zero-value GL record seals the period without violating the ledger's positive amount constraint.
-        jdbc.update("""
-                INSERT INTO dbo.GL_ENTRY (account_id, amount, entry_type, posting_type, description,
-                    business_date, period_start, period_end, job_run_id, transaction_id)
-                VALUES (?, ?, 'CREDIT', 'MONTHLY_INTEREST', ?, ?, ?, ?, ?, ?)
-                """, account.id(), total.amount(), "Monthly Interest Posting - Period End: " + end,
-                Date.valueOf(end), Date.valueOf(start), Date.valueOf(end), jobId, transactionId);
         return true;
     }
 }

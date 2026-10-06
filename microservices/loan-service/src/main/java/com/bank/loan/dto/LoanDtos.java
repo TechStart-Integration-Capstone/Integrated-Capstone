@@ -44,11 +44,15 @@ public final class LoanDtos {
 
     public record NextDue(LocalDate dueDate, BigDecimal amount) {}
 
+    /** Last EOD auto-debit: status PAID | INSUFFICIENT_FUNDS | FAILED. */
+    public record AutoDebit(LocalDate date, String status, BigDecimal amount) {}
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record LoanSummary(Long loanId, String referenceNo, String accountNo, BigDecimal principal,
                               BigDecimal annualRate, Integer termMonths, BigDecimal monthlyInstallment,
                               BigDecimal outstandingPrincipal, BigDecimal penaltyDue, String status,
-                              NextDue nextDue, LocalDate disbursedDate, LocalDate maturityDate, String ftReference) {}
+                              NextDue nextDue, LocalDate disbursedDate, LocalDate maturityDate, String ftReference,
+                              AutoDebit lastAutoDebit) {}
 
     public record ScheduleRow(Integer installmentNo, LocalDate dueDate, BigDecimal principalDue, BigDecimal interestDue,
                               BigDecimal totalDue, BigDecimal amountPaid, String status) {}
@@ -58,5 +62,6 @@ public final class LoanDtos {
     public record RepaymentResponse(String referenceNo, Long loanId, BigDecimal amount, Long transactionId,
                                     String loanStatus, BigDecimal outstandingPrincipal, BigDecimal penaltyDue) {}
 
-    public record EodResult(LocalDate businessDate, int loansAffected, int installmentsMarkedOverdue, int penaltiesCharged) {}
+    public record EodResult(LocalDate businessDate, int loansAffected, int installmentsMarkedOverdue, int penaltiesCharged,
+                            int autoDebitsPaid, int autoDebitsInsufficientFunds, int autoDebitsFailed) {}
 }

@@ -4,6 +4,7 @@ import com.bank.audit.model.LedgerMutationAudit;
 import com.bank.audit.repository.LedgerMutationAuditRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -51,7 +52,7 @@ public class AuditKafkaConsumer {
             }
 
             // Idempotency: skip if already audited
-            if (auditRepository.findByTransactionId(transactionId).isPresent()) {
+            if (auditRepository.findByTransactionIdAndAccountId(transactionId, accountId).isPresent()) {
                 log.info("[audit-service] Audit already exists for transactionId {} — skipped.", transactionId);
                 return;
             }
@@ -61,7 +62,7 @@ public class AuditKafkaConsumer {
 
             log.info("[audit-service] Audit record saved for transactionId {}", transactionId);
 
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             log.error("[audit-service] Failed to process audit event: {}", e.getMessage());
         }
     }

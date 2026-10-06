@@ -7,6 +7,7 @@ import com.bank.transaction.model.Remittance;
 import com.bank.transaction.repository.RemittanceRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +15,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * PayPink 2.0 — Remittance Saga Background Worker.
@@ -23,8 +25,9 @@ import java.util.List;
  *   1. Forward Recovery: Scans for REMITTANCE rows that T24 already posted (status Processing + internal_status POSTED,
  *      or the legacy T24_POSTED status) whose local ledger commit never finished, and completes the debit, credit,
  *      and outbox event idempotently.
- *   2. Matured Client Window: Scans for REMITTANCE rows in Reserved status whose 30s client cancellation window
- *      has elapsed (cancel_until <= NOW), and dispatches them to T24 core banking.
+ *   2. Matured Client Window: Scans for REMITTANCE rows in Reserved status whose client cancellation window
+ *      has elapsed (cancel_until <= NOW), claims the window and dispatches them to T24 core banking.
+ *      "Send now" ({@link #sendNow}) does the same on request, before the timer runs out.
  *   3. Bounded Retry & Auto-Reversal: Scans for REMITTANCE rows waiting on T24 (Processing or old PENDING_CORE).
  *      Applies exponential backoff retries up to maxRetries (3). When max retries are exceeded or core banking
  *      returns a deterministic rejection, automatically reverses held funds back to the customer.
@@ -75,60 +78,24 @@ public class RemittanceSagaWorker {
             commit(remittance);
         }
 
-        // ── 2. Matured Client 30s Cancellation Window Sweeper ───────────────────────
+        // ── 2. Matured Client Cancellation Window Sweeper ────────────────────────────
         List<Remittance> matureWindowList = remittanceRepository.findByStatusAndInternalStatusAndCancelUntilBefore(
                 Remittance.STATUS_RESERVED,
                 Remittance.INTERNAL_CLIENT_CANCEL_WINDOW,
                 LocalDateTime.now()
         );
         for (Remittance remittance : matureWindowList) {
-            try {
-                log.info("[saga-worker] 30s cancellation window matured for ref={}. Executing core banking saga...",
-                        remittance.getReferenceNo());
-
-                RemittanceLedgerService.AccountInfo sourceAcc = ledgerService.resolveAccount(String.valueOf(remittance.getSourceAccountId()));
-                RemittanceLedgerService.AccountInfo targetAcc = ledgerService.resolveAccount(String.valueOf(remittance.getTargetAccountId()));
-
-                T24Result t24 = t24AdapterClient.executeTransfer(
-                        remittance.getReferenceNo(),
-                        sourceAcc.number(),
-                        targetAcc.number(),
-                        remittance.getAmount(),
-                        remittance.getCurrency(),
-                        "saga-window-matured-" + System.currentTimeMillis()
-                );
-
-                if ("POSTED".equalsIgnoreCase(t24.status())) {
-                    ledgerService.recordT24Posted(remittance, t24.ftReference());
-                    commit(remittance);
-                    log.info("[saga-worker] Matured transfer ref={} successfully posted to core banking.", remittance.getReferenceNo());
-                } else if ("REJECTED".equalsIgnoreCase(t24.status())) {
-                    // Instant Reversal (0 Retries)
-                    ledgerService.releaseHoldFunds(
-                            remittance,
-                            remittance.getSourceAccountId(),
-                            remittance.getAmount(),
-                            "Core banking T24 rejected transfer: " + t24.reason()
-                    );
-                    remittance.setInternalStatus(Remittance.INTERNAL_T24_REJECTED);
-                    remittanceRepository.save(remittance);
-                    log.info("[saga-worker] Matured transfer ref={} rejected by T24 (/-1). Held funds instantly reversed.", remittance.getReferenceNo());
-                } else {
-                    // Timeout SLA / Core Down: Transition to PROCESSING and schedule Retry 1 with backoff
-                    remittance.setStatus(Remittance.STATUS_PROCESSING);
-                    remittance.setInternalStatus(Remittance.STEP_AUTHORIZED);
-                    remittance.setCurrentService("t24-adapter");
-                    remittance.setRetryCount(0);
-                    remittance.setMaxRetries(3);
-                    remittance.setNextRetryAt(LocalDateTime.now().plusSeconds(15));
-                    remittance.setReason("T24 Core Banking processing delay. Status will update via saga worker.");
-                    remittanceRepository.save(remittance);
-                    log.info("[saga-worker] Matured transfer ref={} timed out. Scheduled retry 1 at {}",
-                            remittance.getReferenceNo(), remittance.getNextRetryAt());
-                }
-            } catch (Exception e) {
-                log.error("[saga-worker] Error executing matured saga for ref={}: {}", remittance.getReferenceNo(), e.getMessage());
-            }
+            // A user's Cancel or "Send now" may have claimed the window first.
+            if (!ledgerService.claimCancelWindow(remittance.getRemittanceId(), Remittance.INTERNAL_WINDOW_CLOSED)) continue;
+            remittance.setInternalStatus(Remittance.INTERNAL_WINDOW_CLOSED);
+            log.info("[saga-worker] Cancellation window matured for ref={}. Executing core banking saga...", remittance.getReferenceNo());
+            dispatchClosedWindow(remittance);
+        }
+        // Window closed but dispatch never finished (e.g. crash mid-call): try again once it has settled.
+        for (Remittance remittance : remittanceRepository.findByStatusAndInternalStatusAndCancelUntilBefore(
+                Remittance.STATUS_RESERVED, Remittance.INTERNAL_WINDOW_CLOSED, LocalDateTime.now().minus(SETTLE))) {
+            if (!settled(remittance, settledBefore)) continue;
+            dispatchClosedWindow(remittance);
         }
 
         // ── 3. Bounded Retry & Auto-Reversal Sweeper with Exponential Backoff ─────────
@@ -220,6 +187,77 @@ public class RemittanceSagaWorker {
                 log.error("[saga-worker] Error during T24 status inquiry for ref={}: {}",
                         remittance.getReferenceNo(), e.getMessage());
             }
+        }
+    }
+
+    /**
+     * "Send now": the customer skips the rest of the cancellation window. Claims the window (so the sweeper and a
+     * late Cancel can't act on it) and dispatches to core banking right away.
+     */
+    public Remittance sendNow(String referenceNo, Long callerCustomerId) {
+        Remittance remittance = remittanceRepository.findByReferenceNo(referenceNo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Remittance reference not found: " + referenceNo));
+        if (callerCustomerId != null && !remittance.getCallerCustomerId().equals(callerCustomerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: caller does not own this transfer");
+        }
+        if (!ledgerService.claimCancelWindow(remittance.getRemittanceId(), Remittance.INTERNAL_WINDOW_CLOSED)) {
+            if (Remittance.STATUS_CANCELLED.equalsIgnoreCase(remittance.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "This transfer was cancelled.");
+            }
+            return remittance; // already being sent by the sweeper — nothing to do
+        }
+        remittance.setInternalStatus(Remittance.INTERNAL_WINDOW_CLOSED);
+        remittance.setCancelUntil(LocalDateTime.now());
+        log.info("[saga-worker] Send now requested for ref={}. Executing core banking saga...", referenceNo);
+        dispatchClosedWindow(remittance);
+        return remittanceRepository.findByReferenceNo(referenceNo).orElse(remittance);
+    }
+
+    /** Sends a transfer whose cancellation window has closed to T24 and settles the outcome. */
+    void dispatchClosedWindow(Remittance remittance) {
+        try {
+            RemittanceLedgerService.AccountInfo sourceAcc = ledgerService.resolveAccount(String.valueOf(remittance.getSourceAccountId()));
+            RemittanceLedgerService.AccountInfo targetAcc = ledgerService.resolveAccount(String.valueOf(remittance.getTargetAccountId()));
+
+            T24Result t24 = t24AdapterClient.executeTransfer(
+                    remittance.getReferenceNo(),
+                    sourceAcc.number(),
+                    targetAcc.number(),
+                    remittance.getAmount(),
+                    remittance.getCurrency(),
+                    "saga-window-matured-" + System.currentTimeMillis()
+            );
+
+            if ("POSTED".equalsIgnoreCase(t24.status())) {
+                ledgerService.recordT24Posted(remittance, t24.ftReference());
+                commit(remittance);
+                log.info("[saga-worker] Matured transfer ref={} successfully posted to core banking.", remittance.getReferenceNo());
+            } else if ("REJECTED".equalsIgnoreCase(t24.status())) {
+                // Instant Reversal (0 Retries)
+                ledgerService.releaseHoldFunds(
+                        remittance,
+                        remittance.getSourceAccountId(),
+                        remittance.getAmount(),
+                        "Core banking T24 rejected transfer: " + t24.reason()
+                );
+                remittance.setInternalStatus(Remittance.INTERNAL_T24_REJECTED);
+                remittanceRepository.save(remittance);
+                log.info("[saga-worker] Matured transfer ref={} rejected by T24 (/-1). Held funds instantly reversed.", remittance.getReferenceNo());
+            } else {
+                // Timeout SLA / Core Down: Transition to PROCESSING and schedule Retry 1 with backoff
+                remittance.setStatus(Remittance.STATUS_PROCESSING);
+                remittance.setInternalStatus(Remittance.STEP_AUTHORIZED);
+                remittance.setCurrentService("t24-adapter");
+                remittance.setRetryCount(0);
+                remittance.setMaxRetries(3);
+                remittance.setNextRetryAt(LocalDateTime.now().plusSeconds(15));
+                remittance.setReason("T24 Core Banking processing delay. Status will update via saga worker.");
+                remittanceRepository.save(remittance);
+                log.info("[saga-worker] Matured transfer ref={} timed out. Scheduled retry 1 at {}",
+                        remittance.getReferenceNo(), remittance.getNextRetryAt());
+            }
+        } catch (Exception e) {
+            log.error("[saga-worker] Error executing matured saga for ref={}: {}", remittance.getReferenceNo(), e.getMessage());
         }
     }
 

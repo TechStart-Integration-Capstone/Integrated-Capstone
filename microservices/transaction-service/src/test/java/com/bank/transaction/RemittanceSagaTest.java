@@ -513,6 +513,7 @@ class RemittanceSagaTest {
 
         when(remittanceRepository.findByReferenceNo("TX-PH-CANCEL")).thenReturn(Optional.of(remittance));
         when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
+        when(jdbcTemplate.update(contains("SET internal_status = ?"), any(), any(), any(), any(), any())).thenReturn(1); // window claimed
 
         ResponseEntity<Map<String, Object>> response = controller.cancelRemittance("TX-PH-CANCEL", "1");
 
