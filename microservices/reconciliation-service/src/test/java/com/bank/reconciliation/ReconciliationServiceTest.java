@@ -36,30 +36,22 @@ class ReconciliationServiceTest {
     @Mock private TransactionRepository        transactionRepository;
     @Mock private LedgerMutationAuditRepository auditRepository;
     @Mock private ReconciliationLogRepository   reconLogRepository;
-    @InjectMocks private ReconciliationService  service;
+    private ReconciliationService               service;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach void setUp() {
-        try {
-            var f = ReconciliationService.class.getDeclaredField("objectMapper");
-            f.setAccessible(true); f.set(service, objectMapper);
-        } catch (Exception e) { throw new RuntimeException(e); }
+        service = new ReconciliationService(transactionRepository, auditRepository, reconLogRepository, objectMapper);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private TransactionRecord oracleTx(long id, String status, BigDecimal amount) {
-        TransactionRecord tx = new TransactionRecord();
-        sf(tx,"transactionId",id); sf(tx,"status",status); sf(tx,"amount",amount);
-        sf(tx,"referenceNo","REF-"+id); return tx;
+        return new TransactionRecord(id, status, amount, "REF-" + id);
     }
 
     private LedgerMutationAudit pgAudit(long txId, BigDecimal amount) {
-        LedgerMutationAudit a = new LedgerMutationAudit();
-        sf(a,"transactionId",txId); sf(a,"amount",amount); return a;
+        return new LedgerMutationAudit(txId, amount);
     }
-
-    private void sf(Object o,String n,Object v){try{var x=o.getClass().getDeclaredField(n);x.setAccessible(true);x.set(o,v);}catch(Exception e){throw new RuntimeException(e);}}
 
     // ── MATCHED: Oracle SUCCESS + Postgres amount matches ────────────────────
     @Test @DisplayName("reconcile: Oracle SUCCESS + matching Postgres audit = MATCHED")
