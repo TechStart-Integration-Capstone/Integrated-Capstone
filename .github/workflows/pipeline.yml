@@ -24,7 +24,7 @@ jobs:
   # ===================================================================
   dev-java:
     name: "Dev: build and unit tests (${{ matrix.service }})"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -41,8 +41,8 @@ jobs:
           - t24-adapter
           - loan-service
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -52,10 +52,10 @@ jobs:
 
   dev-python:
     name: "Dev: risk engine tests (pytest)"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -75,9 +75,9 @@ jobs:
 
   dev-security:
     name: "Dev: Trivy dependency and config scan"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate compose file
         run: |
           touch .env
@@ -99,15 +99,15 @@ jobs:
   test-stage:
     name: "Test: temporary stack and contract tests"
     needs: [dev-java, dev-python, dev-security]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       CI_SERVICES: "azure-sql redis kafka zookeeper account-service auth-service api-gateway transaction-service"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Java 17 for CI Build
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -155,7 +155,7 @@ jobs:
 
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: newman-report
           path: tests/postman/results
@@ -183,7 +183,7 @@ jobs:
       group: prod-deploy
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check free disk space
         run: |
@@ -192,7 +192,7 @@ jobs:
           if [ "$AVAIL_GB" -lt 5 ]; then echo "Less than 5 GB free"; exit 1; fi
 
       - name: Setup Java 17 Temurin
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"

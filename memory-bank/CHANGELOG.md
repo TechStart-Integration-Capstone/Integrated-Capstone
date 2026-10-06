@@ -1,6 +1,8 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-06 — CI/CD deprecation cleanup (`.github/workflows/pipeline.yml`): bumped `actions/checkout` v4→v5, `actions/setup-java` v4→v5, `actions/setup-python` v5→v6, `actions/upload-artifact` v4→v5 (Node 24 runtime; clears Node 20 and setup-java v4 deprecation warnings). Pinned GitHub-hosted jobs from `ubuntu-latest` to `ubuntu-24.04` ahead of the 19/10/2026 Ubuntu 26 migration. Self-hosted runner v2.337.0 supports Node 24. — [levi]
+
 - 2026-10-06 — CI/CD Production Deployment Java 17 Temurin Toolchain Fix:
   - Fixed `Prod: approve and deploy to Azure VM` failure where `Compile Java Service Artifacts` failed with `Fatal error compiling: error: release version 17 not supported` on `api-gateway`.
   - Added official `actions/setup-java@v4` (Eclipse Temurin 17) directly to `prod-deploy` in `.github/workflows/pipeline.yml` for the self-hosted runner (`vm-paypink`).
