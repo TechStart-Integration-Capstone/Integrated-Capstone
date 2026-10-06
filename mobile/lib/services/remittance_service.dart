@@ -66,8 +66,8 @@ class RemittanceService {
       );
     }
 
-    final debitAcct = sourceAccountId.contains('5046') ? '5046' : '8504';
-    final creditAcct = destinationAccountNumber.replaceAll(' ', '');
+    final debitAcct = sourceAccountId.trim();
+    final creditAcct = destinationAccountNumber.replaceAll(' ', '').trim();
     final idempotencyKey = 'REQ-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(1000)}';
     final correlationId = 'CORR-${DateTime.now().millisecondsSinceEpoch}';
 

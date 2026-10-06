@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class PayPinkTheme {
   // Brand colors matching Webapp and Capstone 2 design tokens
@@ -65,7 +64,7 @@ class PayPinkTheme {
         useMaterial3: true,
       );
 
-  // Typography with GoogleFonts fallback
+  // Typography with system fallback fonts
   static TextStyle display({
     double fontSize = 16,
     FontWeight fontWeight = FontWeight.w700,
@@ -73,7 +72,9 @@ class PayPinkTheme {
     double letterSpacing = -0.5,
     double? height,
   }) {
-    return GoogleFonts.manrope(
+    return TextStyle(
+      fontFamily: 'Manrope',
+      fontFamilyFallback: const ['Roboto', 'sans-serif'],
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
@@ -89,7 +90,9 @@ class PayPinkTheme {
     double? height,
     TextDecoration? decoration,
   }) {
-    return GoogleFonts.dmSans(
+    return TextStyle(
+      fontFamily: 'DM Sans',
+      fontFamilyFallback: const ['Roboto', 'sans-serif'],
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
@@ -103,7 +106,9 @@ class PayPinkTheme {
     FontWeight fontWeight = FontWeight.w500,
     Color color = ink,
   }) {
-    return GoogleFonts.jetBrainsMono(
+    return TextStyle(
+      fontFamily: 'JetBrains Mono',
+      fontFamilyFallback: const ['monospace'],
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,

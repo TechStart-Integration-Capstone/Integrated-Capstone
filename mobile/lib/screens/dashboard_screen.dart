@@ -523,7 +523,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: Border.all(color: PayPinkTheme.pink),
                     ),
                     child: Text(
-                      '3 linked',
+                      '${widget.accounts != null && widget.accounts!.isNotEmpty ? widget.accounts!.length : 2} linked',
                       style: PayPinkTheme.body(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
@@ -548,239 +548,361 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Everyday Account Card
-          GlassCard(
-            onTap: () => PayPinkBottomSheets.showAccountDetails(
-              context,
-              name: 'Everyday account',
-              fullNumber: '001 1 5046 8001',
-              balance: 50.00,
-              type: 'EVERYDAY_ACCOUNT',
-              status: 'Active',
-              ledgerId: 'everyday-5046',
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: PayPinkTheme.greenBg,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.account_balance_wallet_rounded,
-                            color: PayPinkTheme.green,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Everyday account',
-                              style: PayPinkTheme.display(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
+          // Dynamic Accounts Cards (rendered from live database accounts)
+          if (widget.accounts != null && widget.accounts!.isNotEmpty)
+            ...widget.accounts!.map((account) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: GlassCard(
+                  onTap: () => PayPinkBottomSheets.showAccountDetails(
+                    context,
+                    name: account.displayName,
+                    fullNumber: account.formattedNumber,
+                    balance: account.currentBalance,
+                    type: account.accountType,
+                    status: account.status,
+                    ledgerId: 'acct-${account.accountId}',
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: account.accountType == 'SAVINGS_ACCOUNT'
+                                      ? PayPinkTheme.pinkSubtle
+                                      : PayPinkTheme.greenBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  account.accountType == 'SAVINGS_ACCOUNT'
+                                      ? Icons.savings_rounded
+                                      : Icons.account_balance_wallet_rounded,
+                                  color: account.accountType == 'SAVINGS_ACCOUNT'
+                                      ? PayPinkTheme.wine
+                                      : PayPinkTheme.green,
+                                  size: 18,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            GestureDetector(
-                              onTap: () => setState(() => _maskEveryday = !_maskEveryday),
-                              child: Row(
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    _maskEveryday ? '•••• •••• 5046' : '001 1 5046 8001',
+                                    account.displayName,
+                                    style: PayPinkTheme.display(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    account.maskedNumber,
                                     style: PayPinkTheme.mono(
                                       fontSize: 10,
                                       color: PayPinkTheme.muted,
                                     ),
                                   ),
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    _maskEveryday
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
-                                    size: 12,
-                                    color: PayPinkTheme.muted,
-                                  ),
                                 ],
                               ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: PayPinkTheme.greenBg,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: PayPinkTheme.greenBg,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '• Active',
-                        style: PayPinkTheme.body(
-                          fontSize: 9.5,
-                          color: PayPinkTheme.green,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  widget.hideBalances ? '••••••' : '₱50.00',
-                  style: PayPinkTheme.display(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Divider(color: PayPinkTheme.line, height: 1),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Available balance',
-                        style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Details →',
-                      style: PayPinkTheme.body(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.wine,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Savings Account Card
-          GlassCard(
-            onTap: () => PayPinkBottomSheets.showAccountDetails(
-              context,
-              name: 'Savings account',
-              fullNumber: '001 1 5968504 7',
-              balance: 0.00,
-              type: 'SAVINGS_ACCOUNT',
-              status: 'Active',
-              ledgerId: 'savings-8504',
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: PayPinkTheme.pinkSubtle,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.savings_rounded,
-                            color: PayPinkTheme.wine,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Savings account',
-                              style: PayPinkTheme.display(
-                                fontSize: 13,
+                            child: Text(
+                              '• ${account.status}',
+                              style: PayPinkTheme.body(
+                                fontSize: 9.5,
+                                color: PayPinkTheme.green,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '001 1 5968504 7',
-                              style: PayPinkTheme.mono(
-                                fontSize: 10,
-                                color: PayPinkTheme.muted,
-                              ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        widget.hideBalances ? '••••••' : '₱${account.currentBalance.toStringAsFixed(2)}',
+                        style: PayPinkTheme.display(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(color: PayPinkTheme.line, height: 1),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Available balance (${account.currency})',
+                              style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: PayPinkTheme.greenBg,
-                        borderRadius: BorderRadius.circular(12),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Details →',
+                            style: PayPinkTheme.body(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: PayPinkTheme.wine,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        '• Active',
-                        style: PayPinkTheme.body(
-                          fontSize: 9.5,
-                          color: PayPinkTheme.green,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  widget.hideBalances ? '••••••' : '₱0.00',
-                  style: PayPinkTheme.display(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Divider(color: PayPinkTheme.line, height: 1),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Available balance',
-                        style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
-                        overflow: TextOverflow.ellipsis,
+              );
+            })
+          else ...[
+            // Fallback Everyday Account Card
+            GlassCard(
+              onTap: () => PayPinkBottomSheets.showAccountDetails(
+                context,
+                name: 'Everyday account',
+                fullNumber: '001 1 5046 8001',
+                balance: 50.00,
+                type: 'EVERYDAY_ACCOUNT',
+                status: 'Active',
+                ledgerId: 'everyday-5046',
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: PayPinkTheme.greenBg,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.account_balance_wallet_rounded,
+                              color: PayPinkTheme.green,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Everyday account',
+                                style: PayPinkTheme.display(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              GestureDetector(
+                                onTap: () => setState(() => _maskEveryday = !_maskEveryday),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      _maskEveryday ? '•••• •••• 5046' : '001 1 5046 8001',
+                                      style: PayPinkTheme.mono(
+                                        fontSize: 10,
+                                        color: PayPinkTheme.muted,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      _maskEveryday
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      size: 12,
+                                      color: PayPinkTheme.muted,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Details →',
-                      style: PayPinkTheme.body(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.wine,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: PayPinkTheme.greenBg,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '• Active',
+                          style: PayPinkTheme.body(
+                            fontSize: 9.5,
+                            color: PayPinkTheme.green,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    widget.hideBalances ? '••••••' : '₱50.00',
+                    style: PayPinkTheme.display(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(color: PayPinkTheme.line, height: 1),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Available balance',
+                          style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Details →',
+                        style: PayPinkTheme.body(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: PayPinkTheme.wine,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: 12),
+
+            // Savings Account Card (Fallback)
+            GlassCard(
+              onTap: () => PayPinkBottomSheets.showAccountDetails(
+                context,
+                name: 'Savings account',
+                fullNumber: '001 1 5968504 7',
+                balance: 0.00,
+                type: 'SAVINGS_ACCOUNT',
+                status: 'Active',
+                ledgerId: 'savings-8504',
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: PayPinkTheme.pinkSubtle,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.savings_rounded,
+                              color: PayPinkTheme.wine,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Savings account',
+                                style: PayPinkTheme.display(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '001 1 5968504 7',
+                                style: PayPinkTheme.mono(
+                                  fontSize: 10,
+                                  color: PayPinkTheme.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: PayPinkTheme.greenBg,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '• Active',
+                          style: PayPinkTheme.body(
+                            fontSize: 9.5,
+                            color: PayPinkTheme.green,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    widget.hideBalances ? '••••••' : '₱0.00',
+                    style: PayPinkTheme.display(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Divider(color: PayPinkTheme.line, height: 1),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Available balance',
+                          style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Details →',
+                        style: PayPinkTheme.body(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: PayPinkTheme.wine,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Personal Loan Preview Card

@@ -3,11 +3,17 @@ import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
 import '../services/remittance_service.dart';
+import '../services/account_service.dart';
 
 class RemittanceScreen extends StatefulWidget {
   final Function(double amount, String refId, String source, String recipient) onTransferSuccess;
+  final List<BankAccount>? accounts;
 
-  const RemittanceScreen({super.key, required this.onTransferSuccess});
+  const RemittanceScreen({
+    super.key,
+    required this.onTransferSuccess,
+    this.accounts,
+  });
 
   @override
   State<RemittanceScreen> createState() => _RemittanceScreenState();
@@ -15,8 +21,8 @@ class RemittanceScreen extends StatefulWidget {
 
 class _RemittanceScreenState extends State<RemittanceScreen> {
   int _selectedModeIndex = 0; // 0: My own, 1: Another PayPink, 2: Outside
-  String _sourceAccount = 'everyday-5046';
-  String _ownTargetAccount = 'savings-8504';
+  String _sourceAccount = '';
+  String _ownTargetAccount = '';
 
   final TextEditingController _amountController = TextEditingController(text: '');
   final TextEditingController _recipientController = TextEditingController();
@@ -39,14 +45,40 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   @override
   void initState() {
     super.initState();
+    _initDefaultAccounts();
     _updateCalculations();
+  }
+
+  void _initDefaultAccounts() {
+    if (widget.accounts != null && widget.accounts!.isNotEmpty) {
+      _sourceAccount = widget.accounts!.first.accountNumber;
+      if (widget.accounts!.length > 1) {
+        _ownTargetAccount = widget.accounts![1].accountNumber;
+      } else {
+        _ownTargetAccount = widget.accounts!.first.accountNumber;
+      }
+    } else {
+      _sourceAccount = 'everyday-5046';
+      _ownTargetAccount = 'savings-8504';
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant RemittanceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.accounts != oldWidget.accounts && widget.accounts != null && widget.accounts!.isNotEmpty) {
+      if (_sourceAccount.isEmpty || _sourceAccount.contains('everyday-5046')) {
+        _initDefaultAccounts();
+        _updateCalculations();
+      }
+    }
   }
 
   void _updateCalculations() {
     final amt = double.tryParse(_amountController.text) ?? 0.0;
-    final debitAcct = _sourceAccount.contains('everyday') ? '5046' : '8504';
+    final debitAcct = _sourceAccount.isNotEmpty ? _sourceAccount : '5046';
     final creditAcct = _selectedModeIndex == 0
-        ? (_ownTargetAccount.contains('savings') ? '8504' : '5046')
+        ? (_ownTargetAccount.isNotEmpty ? _ownTargetAccount : '8504')
         : (_recipientController.text.isNotEmpty ? _recipientController.text.replaceAll(' ', '') : '2234567');
 
     setState(() {
@@ -92,11 +124,23 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       return;
     }
 
-    if (_sourceAccount.contains('everyday') && amt > 50.00) {
+    // Dynamic balance check against selected account's live balance
+    double maxAvailable = 50.00;
+    String sourceName = 'Selected Account';
+    if (widget.accounts != null && widget.accounts!.isNotEmpty) {
+      final match = widget.accounts!.firstWhere(
+        (a) => a.accountNumber == _sourceAccount,
+        orElse: () => widget.accounts!.first,
+      );
+      maxAvailable = match.currentBalance;
+      sourceName = match.displayName;
+    }
+
+    if (amt > maxAvailable) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           backgroundColor: PayPinkTheme.red,
-          content: Text('Insufficient balance in Everyday account (₱50.00)'),
+          content: Text('Insufficient balance in $sourceName (₱${maxAvailable.toStringAsFixed(2)})'),
         ),
       );
       return;
@@ -112,11 +156,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       return;
     }
 
-    final fromAccountName = _sourceAccount.contains('everyday')
-        ? 'Everyday account (•••• 5046)'
-        : 'Savings account (•••• 8504)';
+    final fromAccountName = '$sourceName (${_sourceAccount.length >= 4 ? _sourceAccount.substring(_sourceAccount.length - 4) : _sourceAccount})';
     final toAccountName = _selectedModeIndex == 0
-        ? 'Savings account · 001 1 5968504 7'
+        ? 'Target Account · $_ownTargetAccount'
         : (_verifiedName != null ? '$_verifiedName · ${_recipientController.text}' : 'External Account');
 
     _showConfirmationBottomSheet(amt, fromAccountName, toAccountName);
@@ -236,7 +278,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
 
   void _executeTransferBiometric(double amt, String fromAcc, String toAcc) async {
     final cleanDest = _selectedModeIndex == 0
-        ? (_ownTargetAccount.contains('savings') ? '8504' : '5046')
+        ? _ownTargetAccount
         : _recipientController.text.replaceAll(' ', '');
 
     final result = await RemittanceService.submitRemittance(
@@ -509,18 +551,25 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
-                      value: _sourceAccount,
+                      value: _sourceAccount.isNotEmpty ? _sourceAccount : null,
                       isExpanded: true,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'everyday-5046',
-                          child: Text('Everyday account · •••• 5046 · ₱50.00'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'savings-8504',
-                          child: Text('Savings account · 001 1 5968504 7 · ₱0.00'),
-                        ),
-                      ],
+                      items: widget.accounts != null && widget.accounts!.isNotEmpty
+                          ? widget.accounts!.map((a) {
+                              return DropdownMenuItem<String>(
+                                value: a.accountNumber,
+                                child: Text('${a.displayName} · ${a.maskedNumber} · ₱${a.currentBalance.toStringAsFixed(2)}'),
+                              );
+                            }).toList()
+                          : const [
+                              DropdownMenuItem(
+                                value: 'everyday-5046',
+                                child: Text('Everyday account · •••• 5046 · ₱50.00'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'savings-8504',
+                                child: Text('Savings account · 001 1 5968504 7 · ₱0.00'),
+                              ),
+                            ],
                       onChanged: (val) {
                         if (val != null) {
                           setState(() {
@@ -564,18 +613,25 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        value: _ownTargetAccount,
+                        value: _ownTargetAccount.isNotEmpty ? _ownTargetAccount : null,
                         isExpanded: true,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'savings-8504',
-                            child: Text('Savings account · 001 1 5968504 7 · ₱0.00'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'everyday-5046',
-                            child: Text('Everyday account · •••• 5046 · ₱50.00'),
-                          ),
-                        ],
+                        items: widget.accounts != null && widget.accounts!.isNotEmpty
+                            ? widget.accounts!.map((a) {
+                                return DropdownMenuItem<String>(
+                                  value: a.accountNumber,
+                                  child: Text('${a.displayName} · ${a.maskedNumber} · ₱${a.currentBalance.toStringAsFixed(2)}'),
+                                );
+                              }).toList()
+                            : const [
+                                DropdownMenuItem(
+                                  value: 'savings-8504',
+                                  child: Text('Savings account · 001 1 5968504 7 · ₱0.00'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'everyday-5046',
+                                  child: Text('Everyday account · •••• 5046 · ₱50.00'),
+                                ),
+                              ],
                         onChanged: (val) {
                           if (val != null) {
                             setState(() {

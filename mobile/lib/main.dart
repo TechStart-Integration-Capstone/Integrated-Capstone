@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,8 +14,17 @@ import 'services/auth_service.dart';
 import 'services/account_service.dart';
 import 'widgets/bottom_sheets.dart';
 
+class DevHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  HttpOverrides.global = DevHttpOverrides();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -450,6 +460,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       ),
       RemittanceScreen(
         onTransferSuccess: _handleTransferSuccess,
+        accounts: _userProfile?.accounts,
       ),
       TransactionsScreen(
         transactions: _transactions,
