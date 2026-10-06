@@ -127,11 +127,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     testScenario('valid'); // Pre-populate RFC-7807 tab
     setupRealtimeSync(); // Cross-tab & broadcast real-time sync
 
-    // Periodic live synchronization with Oracle XE Database
+    // Periodic live synchronization with Azure SQL Database
     setInterval(async () => {
-        await loadCustomerAndAccounts();
-        await loadAllCustomers(true); // Silent continuous background refresh
-        await syncBackendTransactions(); // Sync live transactions & reconciliation
+        if (currentJwtToken) {
+            await loadCustomerAndAccounts();
+            await loadAllCustomers(true); // Silent continuous background refresh
+            await syncBackendTransactions(); // Sync live transactions & reconciliation
+        }
     }, 2000);
 });
 
@@ -747,8 +749,9 @@ async function triggerScheduledReconciliation() {
 
     if (!succeeded) {
         try {
-            const directRes = await fetch('http://localhost:8086/api/v1/reconciliation/run', {
-                method: 'POST'
+            const directRes = await fetch(`${API_BASE}/reconciliation/run`, {
+                method: 'POST',
+                headers: getAuthHeaders()
             });
             if (directRes.ok) succeeded = true;
         } catch (e) {}
@@ -757,7 +760,7 @@ async function triggerScheduledReconciliation() {
     await loadReconciliationLogs();
     await syncBackendTransactions();
     renderTransactionMonitor();
-    alert('Scheduled 15-minute system-wide reconciliation sweep completed successfully: Oracle XE vs PostgreSQL matched.');
+    alert('Scheduled 15-minute system-wide reconciliation sweep completed successfully: Azure SQL vs PostgreSQL matched.');
 }
 
 let latestReconciliationLogs = [];
@@ -775,7 +778,9 @@ async function loadReconciliationLogs() {
 
     if (!logs || logs.length === 0) {
         try {
-            const directRes = await fetch('http://localhost:8086/api/v1/reconciliation/logs');
+            const directRes = await fetch(`${API_BASE}/reconciliation/logs`, {
+                headers: getAuthHeaders()
+            });
             if (directRes.ok) {
                 logs = await directRes.json();
             }
@@ -840,8 +845,11 @@ function renderMockReconciliationTable() {
  */
 function startTelemetryPolling() {
     setInterval(async () => {
+        if (!currentJwtToken) return;
         try {
-            const res = await fetch(`${API_BASE}/telemetry/stats`);
+            const res = await fetch(`${API_BASE}/telemetry/stats`, {
+                headers: getAuthHeaders()
+            });
             if (res.ok) {
                 const stats = await res.json();
                 document.getElementById('metric-p95').textContent = `≤${stats.p95LatencyMs} ms`;
@@ -1022,7 +1030,7 @@ let userLimitsMap = {
 async function loadAllCustomers(silent = false) {
     const tbody = document.getElementById('customer-table-body');
     if (!silent && tbody && (!allCustomersData || allCustomersData.length === 0)) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading customer directory from Oracle XE...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading customer directory from Azure SQL...</td></tr>';
     }
 
     try {
@@ -2025,7 +2033,9 @@ async function syncBackendTransactions() {
 
     if (!logs || logs.length === 0) {
         try {
-            const directRes = await fetch('http://localhost:8086/api/v1/reconciliation/logs');
+            const directRes = await fetch(`${API_BASE}/reconciliation/logs`, {
+                headers: getAuthHeaders()
+            });
             if (directRes.ok) {
                 logs = await directRes.json();
             }

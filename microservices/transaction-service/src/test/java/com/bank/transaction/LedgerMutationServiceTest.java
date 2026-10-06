@@ -64,7 +64,6 @@ class LedgerMutationServiceTest {
     @Mock private ValueOperations<String,String> valueOps;
     @Mock private TelemetryService        telemetryService;
 
-    @InjectMocks
     private LedgerMutationService service;
 
     private final ObjectMapper objectMapper = new ObjectMapper()
@@ -73,16 +72,24 @@ class LedgerMutationServiceTest {
 
     private void sf(Object o,String n,Object v){try{var x=o.getClass().getDeclaredField(n);x.setAccessible(true);x.set(o,v);}catch(Exception e){throw new RuntimeException(e);}}
 
-    @BeforeEach void setUp() throws Exception {
+    @BeforeEach void setUp() {
         account = new Account();
         sf(account,"accountId",1L); sf(account,"customerId",10L);
         sf(account,"accountNumber","ACC-001"); sf(account,"currency","PHP");
         sf(account,"currentBalance",new BigDecimal("1000.0000"));
         sf(account,"status","ACTIVE");
 
-        // Inject ObjectMapper (not via @InjectMocks because it is final-constructed)
-        var omField = LedgerMutationService.class.getDeclaredField("objectMapper");
-        omField.setAccessible(true); omField.set(service, objectMapper);
+        service = new LedgerMutationService(
+                accountRepository,
+                transactionRepository,
+                outboxEventRepository,
+                auditLogRepository,
+                kafkaTemplate,
+                objectMapper,
+                redisTemplate,
+                telemetryService
+        );
+        sf(service, "idempotencyTtlHours", 24L);
 
         // Wire valueOps stub so Redis calls don't NPE
         when(redisTemplate.opsForValue()).thenReturn(valueOps);

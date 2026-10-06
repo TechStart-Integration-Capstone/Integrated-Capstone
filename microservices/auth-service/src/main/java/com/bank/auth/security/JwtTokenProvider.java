@@ -36,7 +36,7 @@ public class JwtTokenProvider {
     public Long customerId(String authorization) {
         Claims claims = claims(authorization);
         Number id = claims.get("customerId", Number.class);
-        if (id == null || id.longValue() <= 0) throw new IllegalArgumentException("Invalid customer");
+        if (id == null || id.longValue() < 0) throw new IllegalArgumentException("Invalid customer");
         return id.longValue();
     }
 

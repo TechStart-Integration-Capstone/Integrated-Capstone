@@ -119,9 +119,21 @@ public class ReconciliationService {
             }
         }
 
-        ReconciliationLog recon = reconLogRepository.save(
-                new ReconciliationLog(tx.getTransactionId(), accountId,
-                        azureSqlStatus, postgresStatus, reconStatus));
+        Optional<ReconciliationLog> existingOpt = reconLogRepository.findByTransactionId(tx.getTransactionId());
+        ReconciliationLog recon;
+        if (existingOpt.isPresent()) {
+            recon = existingOpt.get();
+            recon.setAccountId(accountId);
+            recon.setAzureSqlStatus(azureSqlStatus);
+            recon.setPostgresStatus(postgresStatus);
+            recon.setReconStatus(reconStatus);
+            recon.setReconDate(java.time.LocalDateTime.now());
+        } else {
+            recon = new ReconciliationLog(tx.getTransactionId(), accountId,
+                    azureSqlStatus, postgresStatus, reconStatus);
+        }
+
+        recon = reconLogRepository.save(recon);
 
         log.info("[reconciliation-service] txId={} azureSql={} postgres={} recon={}",
                 tx.getTransactionId(), azureSqlStatus, postgresStatus, reconStatus);

@@ -17,6 +17,14 @@ public class TransactionRecord {
     @Column(name = "status") private String status;
     @Column(name = "transaction_date") private LocalDateTime transactionDate;
 
+    public TransactionRecord() {}
+    public TransactionRecord(Long transactionId, String status, BigDecimal amount, String referenceNo) {
+        this.transactionId = transactionId;
+        this.status = status;
+        this.amount = amount;
+        this.referenceNo = referenceNo;
+    }
+
     public Long getTransactionId() { return transactionId; }
     public BigDecimal getAmount() { return amount; }
     public String getReferenceNo() { return referenceNo; }
