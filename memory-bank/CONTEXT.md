@@ -188,8 +188,8 @@ Demo credentials (password: password123):
 ## Git
 
 - Freeze tag: capstone1-freeze → commit 1e51aea
-- Working branch (2026-10-05): aly-feature
-- Latest commit at last update: b6ee3e4 — Merge branch 'main' of https://github.com/TechStart-Integration-Capstone/Integrated-Capstone
+- Working branch (2026-10-06): levi-feature
+- Latest CI update: CI/CD Dev stage hardened for Java 17 Temurin; all 11 microservices pass parallel unit tests; Trivy scan configured with official action.
 
 ---
 
