@@ -41,7 +41,7 @@ public class OrchestratorClient {
     }
 
     public OrchestratorClient(@Value("${app.orchestrator.url:http://transaction-service:8083}") String baseUrl,
-                              @Value("${app.orchestrator.timeout-ms:3000}") long timeoutMs) {
+                              @Value("${app.orchestrator.timeout-ms:10000}") long timeoutMs) {
         this.timeout = Duration.ofMillis(timeoutMs);
         HttpClient httpClient = HttpClient.create().responseTimeout(timeout);
         this.webClient = WebClient.builder()

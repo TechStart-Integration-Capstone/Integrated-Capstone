@@ -226,9 +226,11 @@ public class RemittanceLedgerService {
 
     /** LEDGER_TRANSACTION id for a POSTED remittance, or null if the ledger row is not there yet. */
     public Long findTransactionId(String referenceNo) {
-        return transactionRepository.findByReferenceNo(referenceNo)
-                .map(TransactionRecord::getTransactionId)
-                .orElse(null);
+        // First row wins: older data can hold a duplicate ledger row for one remittance.
+        List<Long> ids = jdbcTemplate.queryForList(
+                "SELECT transaction_id FROM dbo.LEDGER_TRANSACTION WHERE reference_no = ? ORDER BY transaction_id",
+                Long.class, referenceNo);
+        return ids.isEmpty() ? null : ids.get(0);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -273,6 +275,36 @@ public class RemittanceLedgerService {
     public RemittanceResponse commitLedgerMutation(Remittance remittance, RemittanceRequest request,
                                                        Long sourceAccId, Long targetAccId,
                                                        BigDecimal amount, RiskResult risk, String ftReference) {
+
+        // The orchestrator and the saga worker can both try to commit the same remittance. Lock the REMITTANCE
+        // row first so they serialize, then skip the debit/credit if the ledger row already exists — otherwise
+        // the second caller would post the same transfer twice (two LEDGER_TRANSACTION rows, double credit).
+        String currentStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM dbo.REMITTANCE WITH (UPDLOCK, ROWLOCK) WHERE remittance_id = ?",
+                String.class, remittance.getRemittanceId());
+        List<Long> existingTx = jdbcTemplate.queryForList(
+                "SELECT transaction_id FROM dbo.LEDGER_TRANSACTION WHERE reference_no = ? ORDER BY transaction_id",
+                Long.class, remittance.getReferenceNo());
+        if (Remittance.STATUS_POSTED.equalsIgnoreCase(currentStatus) || !existingTx.isEmpty()) {
+            Long transactionId = existingTx.isEmpty() ? null : existingTx.get(0);
+            if (!Remittance.STATUS_POSTED.equalsIgnoreCase(currentStatus)) {
+                // Ledger row exists but the status was left behind (e.g. overwritten by a stale saga update).
+                remittance.setStatus(Remittance.STATUS_POSTED);
+                remittance.setInternalStatus(Remittance.STEP_LEDGER_UPDATE);
+                remittance.setCurrentService("transaction-service");
+                if (ftReference != null) remittance.setFtReference(ftReference);
+                remittanceRepository.save(remittance);
+            }
+            log.warn("[ledger-service] Ledger mutation for ref={} already committed (txId={}); not posting again",
+                    remittance.getReferenceNo(), transactionId);
+            RemittanceResponse replay = new RemittanceResponse("POSTED", remittance.getReferenceNo(),
+                    ftReference != null ? ftReference : remittance.getFtReference(),
+                    request.getSourceAccountId(), request.getTargetAccountId(), amount,
+                    BigDecimal.ZERO, BigDecimal.ZERO, risk != null ? risk.score() : null,
+                    risk != null ? risk.decision() : null, null, true);
+            replay.setTransactionId(transactionId);
+            return replay;
+        }
 
         AccountInfo currentSource = resolveAccount(String.valueOf(sourceAccId));
         AccountInfo currentTarget = resolveAccount(String.valueOf(targetAccId));
