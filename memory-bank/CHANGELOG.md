@@ -1,6 +1,13 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-07 — Safety Net Phase & Baseline Checkpoint for Domain Architecture Refactor:
+  - Committed untracked documentation (`docs/project-review.md`) and pushed 17 commits on `feature/capstone2-paypink-2.0-dom` to GitHub.
+  - Created and pushed immutable fallback tag `pre-domain-refactor` to GitHub remote.
+  - Created isolated refactor branch `refactor/domain-t24-core`.
+  - Executed unit test baseline: api-gateway (16/16), account-service (9/9), t24-adapter (11/11), transaction-service (96/96), loan-service (41/41), audit-service (10/10) all passing cleanly. Recorded pre-existing timezone failure in auth-service (52/53).
+  - Confirmed mobile directory (`mobile/`) remains frozen and untouched. — [Antigravity / dom]
+
 - 2026-10-07 — Implemented single-admin simulation workflow and deployed Interest Admin UI:
   - Allowed same-admin historical backfill submission and separate review/approval in `InterestEodService.java` while recording distinct audit entries.
   - Applied `scripts/migrate_interest_single_admin_postgres.sql` to PostgreSQL `postgres-immutable-audit` container to drop same-admin trigger guard.

@@ -210,8 +210,10 @@ Demo credentials (password: password123):
 ## Git
 
 - Freeze tag: capstone1-freeze → commit 1e51aea
-- Working branch (2026-10-06): levi-feature
-- Latest CI update: CI/CD Dev stage hardened for Java 17 Temurin; all 11 microservices pass parallel unit tests; Trivy scan configured with official action.
+- Fallback checkpoint tag: pre-domain-refactor → commit f935ce3 (96 tests passing baseline)
+- Working branch (2026-10-07): refactor/domain-t24-core
+- Previous working branch: feature/capstone2-paypink-2.0-dom (synced to origin)
+- Active initiative: T24-First Domain Architecture Refactoring (Phases 0–9)
 
 ---
 
@@ -273,10 +275,11 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 
 ## Current Focus
 
-All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temurin runners. Remaining work:
-- **Interest EOD monitoring & operations** — local Docker is running with single-admin simulation workflow (`InterestEodService.java`), PostgreSQL migration applied (`scripts/migrate_interest_single_admin_postgres.sql`), and Interest Admin UI deployed in `frontend-spa`. Monitor scheduled snapshots and end-of-month posting. Preserve runtime Azure SQL and EOD settings when recreating containers; unchanged Compose defaults disable EOD. Azure VM deployment was left unchanged per request.
-- **Phase 7** — Mobile Frontend (PWA)
-- **Phase 8** — Chaos + Load Testing
+T24-First Domain Architecture Refactoring in progress on branch `refactor/domain-t24-core`:
+- **Safety Net Phase:** Completed (code pushed, tag `pre-domain-refactor` created, baselines verified, mobile directory frozen).
+- **Next: Phase 0 (Perimeter Lockdown):** Guard admin/stress endpoints (`ROLE_ADMIN`), eliminate un-scored direct transfer bypass in auth-service, block direct external routing to internal risk/t24 engines, re-verify with contract tests.
+- **Next: Phases 1–9:** Azure SQL schema split (`app` vs `t24`), stateful `t24-core`, lean orchestrator, CQRS history, consolidated account-service, EOD Option B, 3-way recon, and Azure VM milestone deployment.
+- **Mobile PWA (`mobile/`):** Explicitly frozen; all 6 mobile API contracts preserved.
 
 ---
 
