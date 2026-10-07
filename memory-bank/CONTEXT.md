@@ -1,8 +1,8 @@
 # PayPink 2.0 — Project Context
 
-_Owner: **dom**_
-_Latest source change: 2026-10-07 - single-admin simulation workflow implemented; interest admin UI deployed locally; 96 tests passed - dom / aly_
-_Last updated: 2026-10-07 (Single-admin interest workflow and Admin UI deployed to local Docker)_
+_Owner: **Team 4**_
+_Latest source change: 2026-10-07 - Phase 0 Perimeter Lockdown and Bypass Elimination complete; direct transfer deprecated; admin role guards active - dom_
+_Last updated: 2026-10-07 (Phase 0 completed on branch refactor/domain-t24-core)_
 
 ---
 
@@ -277,8 +277,8 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 
 T24-First Domain Architecture Refactoring in progress on branch `refactor/domain-t24-core`:
 - **Safety Net Phase:** Completed (code pushed, tag `pre-domain-refactor` created, baselines verified, mobile directory frozen).
-- **Next: Phase 0 (Perimeter Lockdown):** Guard admin/stress endpoints (`ROLE_ADMIN`), eliminate un-scored direct transfer bypass in auth-service, block direct external routing to internal risk/t24 engines, re-verify with contract tests.
-- **Next: Phases 1–9:** Azure SQL schema split (`app` vs `t24`), stateful `t24-core`, lean orchestrator, CQRS history, consolidated account-service, EOD Option B, 3-way recon, and Azure VM milestone deployment.
+- **Phase 0 (Perimeter Lockdown):** Completed (guarded admin/stress/t24 routes with `ROLE_ADMIN`, added defense-in-depth role check in account-service, deprecated direct transfers in auth-service).
+- **Next: Phase 1 (Azure SQL Schema Split):** Split database into `t24` and `app` schemas, drop cross-boundary foreign keys, create `dbo.*` synonyms, qualify JPA `@Table(schema=...)`.
 - **Mobile PWA (`mobile/`):** Explicitly frozen; all 6 mobile API contracts preserved.
 
 ---

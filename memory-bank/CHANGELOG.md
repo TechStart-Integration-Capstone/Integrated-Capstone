@@ -1,12 +1,17 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-07 — Phase 0: Perimeter Lockdown and Bypass Elimination:
+  - Enforced `ROLE_ADMIN` in `api-gateway` (`JwtAuthFilter.java`) for `/api/v1/accounts/*/reset-balance`, `/api/v1/accounts/*/status`, `/api/v1/stress/**`, `/api/v1/ledger/**`, and internal core/risk routes `/api/v1/t24/**` and `/api/v1/risk/**`. Added 4 unit tests (20/20 passing).
+  - Added defense-in-depth `ROLE_ADMIN` assertion in `account-service` (`AccountController.java`) for status updates and balance reset endpoints; added unit test suite `AccountControllerTest.java` (12/12 passing).
+  - Deprecated unscored direct transfer bypass in `auth-service` (`POST /api/v1/auth/banking/transfers`) with `410 GONE`, redirecting all transfers to `/api/v1/remittance/transfer` via Remittance Orchestrator. Updated unit test suite (3/3 passing). — [dom]
+
 - 2026-10-07 — Safety Net Phase & Baseline Checkpoint for Domain Architecture Refactor:
   - Committed untracked documentation (`docs/project-review.md`) and pushed 17 commits on `feature/capstone2-paypink-2.0-dom` to GitHub.
   - Created and pushed immutable fallback tag `pre-domain-refactor` to GitHub remote.
   - Created isolated refactor branch `refactor/domain-t24-core`.
   - Executed unit test baseline: api-gateway (16/16), account-service (9/9), t24-adapter (11/11), transaction-service (96/96), loan-service (41/41), audit-service (10/10) all passing cleanly. Recorded pre-existing timezone failure in auth-service (52/53).
-  - Confirmed mobile directory (`mobile/`) remains frozen and untouched. — [Antigravity / dom]
+  - Confirmed mobile directory (`mobile/`) remains frozen and untouched. — [dom]
 
 - 2026-10-07 — Implemented single-admin simulation workflow and deployed Interest Admin UI:
   - Allowed same-admin historical backfill submission and separate review/approval in `InterestEodService.java` while recording distinct audit entries.
