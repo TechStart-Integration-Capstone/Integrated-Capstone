@@ -1,6 +1,13 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Phase 8: Events, Audit & Reconciliation Re-point:
+  - Audited and verified event consumption pipelines for T24 Core double-entry ledger postings across `remittance.events` and `ledger.transaction.events`.
+  - Confirmed `audit-service` immutably captures `LEDGER_MUTATION_AUDIT` records in PostgreSQL for all transfer, loan, and interest debits.
+  - Confirmed `reconciliation-service` reconciles `t24.LEDGER_TRANSACTION` against PostgreSQL audit logs with zero drift across real-time and scheduled jobs.
+  - Confirmed `notification-service` dispatches multi-channel alerts and `analytics-service` streams ledger metrics with dedicated consumer groups.
+  - All test suites passing cleanly: audit-service (10/10), reconciliation-service (8/8), notification-service (16/16), outbox-publisher (9/9), and analytics-service (17/17). — [dom]
+
 - 2026-10-08 — Phase 7: EOD Service Alignment:
   - Aligned `InterestLedger` in `transaction-service` with Phase 1 DDD schema boundaries, qualifying raw SQL operations to `t24.ACCOUNT`, `t24.EOD_JOB_RUN`, `t24.LEDGER_TRANSACTION`, and `app.OUTBOX_EVENT`.
   - Verified Interest EOD accrual and monthly posting flows, with outbox events emitted for downstream ledger consumers.
