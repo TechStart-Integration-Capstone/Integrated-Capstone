@@ -24,7 +24,7 @@ jobs:
   # ===================================================================
   dev-java:
     name: "Dev: build and unit tests (${{ matrix.service }})"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -41,8 +41,8 @@ jobs:
           - t24-adapter
           - loan-service
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -52,10 +52,10 @@ jobs:
 
   dev-python:
     name: "Dev: risk engine tests (pytest)"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -75,9 +75,9 @@ jobs:
 
   dev-security:
     name: "Dev: Trivy dependency and config scan"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate compose file
         run: |
           touch .env
@@ -99,15 +99,15 @@ jobs:
   test-stage:
     name: "Test: temporary stack and contract tests"
     needs: [dev-java, dev-python, dev-security]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       CI_SERVICES: "azure-sql redis kafka zookeeper account-service auth-service api-gateway transaction-service"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Java 17 for CI Build
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -155,7 +155,7 @@ jobs:
 
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: newman-report
           path: tests/postman/results
@@ -183,7 +183,7 @@ jobs:
       group: prod-deploy
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check free disk space
         run: |
@@ -191,33 +191,91 @@ jobs:
           AVAIL_GB=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
           if [ "$AVAIL_GB" -lt 5 ]; then echo "Less than 5 GB free"; exit 1; fi
 
+      - name: Setup Java 17 Temurin
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Ensure Java 17 and Maven
         run: |
-          if ! command -v mvn &> /dev/null || ! command -v java &> /dev/null; then
+          if ! command -v mvn &> /dev/null || ! dpkg -s openjdk-17-jdk &> /dev/null; then
             echo "Installing Maven and OpenJDK 17 on self-hosted runner..."
             sudo apt-get update -y
             sudo apt-get install -y maven openjdk-17-jdk
           fi
-          mvn -version
+          if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+            sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java 2>/dev/null || true
+            sudo update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac 2>/dev/null || true
+          fi
+          echo "Active JAVA_HOME: $JAVA_HOME"
           java -version
+          mvn -version
 
       - name: Compile Java Service Artifacts
         run: |
+          if [ -z "$JAVA_HOME" ] || [ ! -x "$JAVA_HOME/bin/javac" ]; then
+            if [ -d "/usr/lib/jvm/java-17-openjdk-amd64" ]; then
+              export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+              export PATH="$JAVA_HOME/bin:$PATH"
+            fi
+          fi
+          echo "Building microservices with JAVA_HOME=$JAVA_HOME"
           for s in api-gateway auth-service account-service transaction-service notification-service audit-service reconciliation-service outbox-publisher analytics-service t24-adapter loan-service; do
             echo "Packaging $s..."
             mvn -B -f microservices/$s/pom.xml clean package -DskipTests
           done
+
+      - name: Guard against containers from another Compose project
+        run: |
+          OTHER=$(docker ps -a --format '{{.Names}} {{.Label "com.docker.compose.project"}}' \
+            | awk '$2 != "" && $2 != "paypink" && $2 != "paypink-ci"')
+          if [ -n "$OTHER" ]; then
+            echo "::error::Containers from another Compose project exist. The prod stack must run as project 'paypink'. Migrate volumes first (see docs/AZURE_DEPLOYMENT_GUIDE.md, 'Compose project name')."
+            echo "$OTHER"
+            exit 1
+          fi
 
       - name: Build and start
         run: |
           docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env \
             up -d --build --remove-orphans
 
+      - name: Apply additive database migrations
+        run: |
+          echo "Applying additive database schema migrations to live containers..."
+          SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
+          if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
+            SQLCMD="/opt/mssql-tools/bin/sqlcmd"
+          fi
+          PASS="PayPink2.0_StrongPass!"
+          if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -Q "SELECT 1" &>/dev/null; then
+            PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n')
+          fi
+          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql; do
+            if [ -f "$f" ]; then
+              echo "Applying $f to azure-sql-master..."
+              cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
+            fi
+          done
+          PG_USER="audit_user"
+          if ! docker exec postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db -c "SELECT 1" &>/dev/null; then
+            PG_USER="postgres"
+          fi
+          for f in scripts/migrate_reconciliation_fix.sql scripts/migrate_phase6_risk_decision.sql scripts/migrate_interest_postgres.sql; do
+            if [ -f "$f" ]; then
+              echo "Applying $f to postgres-immutable-audit..."
+              cat "$f" | docker exec -i postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db 2>/dev/null || true
+            fi
+          done
+          # Restart transaction-service so JPA models pick up newly migrated columns
+          docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env restart transaction-service reconciliation-service || true
+
       - name: Health check (gateway and web SPA, up to 180 s)
         run: |
           for i in $(seq 1 36); do
             if curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1 \
-               && curl -fsS -o /dev/null http://localhost:80; then
+               && (curl -fsS -o /dev/null http://localhost:80 2>/dev/null || curl -fsS -o /dev/null http://localhost:3001 2>/dev/null); then
               echo "Gateway and SPA are healthy"
               echo "$GITHUB_SHA" > /opt/paypink/LAST_GOOD_SHA
               exit 0

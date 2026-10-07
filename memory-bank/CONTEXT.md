@@ -54,7 +54,7 @@ Built on top of the Capstone 1 ledger engine.
 - Cache: Redis 7 — idempotency keys, rate-limit buckets, display-only balance cache
 - Messaging: Apache Kafka — topics: ledger.transaction.events, loan.*
 - Observability: OTel Collector → Prometheus + Loki + Tempo → Grafana + Jaeger
-- Frontend: Vanilla JS SPA served by Nginx (port 3001)
+- Frontend: Vanilla JS SPA served by Nginx (ports 80 and 3001), Flutter PWA (port 3002)
 
 > The running auth-service (as of 2026-10-05) uses a hosted Azure SQL database named `paypink`. Checked-in Compose defaults still point to local SQL Server. Preserve runtime connection settings when restarting.
 
@@ -264,8 +264,9 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
   - Mobile PWA App: `http://20.69.157.88:3002`
   - API Gateway: `http://20.69.157.88:8080`
 - **Container Health:** 26/26 Docker containers running and healthy.
-- **GitHub Self-Hosted Runner:** v2.337.0 active as systemd service (`actions.runner.TechStart-Integration-Capstone-Integrated-Capstone.vm-paypink.service`) with labels `self-hosted,azure-vm` for automated Stage 3 CD deployments.
+- **GitHub Self-Hosted Runner:** v2.337.0 active as systemd service (`actions.runner.TechStart-Integration-Capstone-Integrated-Capstone.vm-paypink.service`) with labels `self-hosted,azure-vm` for automated Stage 3 CD deployments. Pipeline uses Node 24 actions (`checkout@v5`, `setup-java@v5`, `setup-python@v6`, `upload-artifact@v5`), hosted jobs pinned to `ubuntu-24.04`, and `setup-java@v5` (Temurin 17) and host fallback to guarantee Java 17 toolchain for Maven artifact packaging before Docker image builds.
 - **Budget Control:** Zero-cost / low-cost tier. Scheduled auto-shutdown active at 11:00 UTC (7:00 PM PHT). Deallocate when idle.
+- **Compose project:** Prod runs as `-p paypink` (volumes `paypink_*`). On 2026-10-06 the manual `docker` project stack was removed and its data copied to `paypink_*` with `scripts/04-migrate-compose-project.sh`; old `docker_*` volumes kept as backup until the pipeline-deployed stack is verified. Pipeline guard blocks deploys while foreign-project containers exist.
 - **Reconciliation Hotfix Migration:** Run `scripts/migrate_reconciliation_fix.sql` against `postgres-immutable-audit` container on the VM to sync `account_id` and `azure_sql_status` column renames.
 
 ---
