@@ -39,23 +39,36 @@ public class AccountController {
     }
 
     @PostMapping("/{accountId}/status")
-    public ResponseEntity<AccountDto> updateAccountStatus(@PathVariable Long accountId,
+    public ResponseEntity<AccountDto> updateAccountStatus(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+                                                          @PathVariable Long accountId,
                                                           @RequestBody Map<String, String> payload) {
+        assertAdmin(roles);
         String status = payload.getOrDefault("status", "ACTIVE");
         return ResponseEntity.ok(accountService.updateAccountStatus(accountId, status));
     }
 
     @PostMapping("/customer/{customerId}/status")
-    public ResponseEntity<CustomerDto> updateCustomerStatus(@PathVariable Long customerId,
+    public ResponseEntity<CustomerDto> updateCustomerStatus(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+                                                            @PathVariable Long customerId,
                                                             @RequestBody Map<String, String> payload) {
+        assertAdmin(roles);
         String status = payload.getOrDefault("status", "ACTIVE");
         return ResponseEntity.ok(accountService.updateCustomerStatus(customerId, status));
     }
 
     @PostMapping("/{accountId}/reset-balance")
-    public ResponseEntity<AccountDto> resetBalance(@PathVariable Long accountId,
+    public ResponseEntity<AccountDto> resetBalance(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+                                                   @PathVariable Long accountId,
                                                    @RequestBody Map<String, BigDecimal> payload) {
+        assertAdmin(roles);
         BigDecimal targetBalance = payload.getOrDefault("targetBalance", new BigDecimal("60.0000"));
         return ResponseEntity.ok(accountService.resetAccountBalance(accountId, targetBalance));
+    }
+
+    private void assertAdmin(String roles) {
+        if (roles == null || java.util.Arrays.stream(roles.split(",")).map(String::trim).noneMatch("ROLE_ADMIN"::equals)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "Admin role required");
+        }
     }
 }

@@ -43,13 +43,12 @@ public class BankingController {
         recipients.remove(token,number);
     }
 
+    @Deprecated
     @PostMapping("/transfers")
     public BankingTransferService.Receipt transfer(@RequestHeader(value = "Authorization", required = false) String token,
                                                    @Valid @RequestBody BankingTransferService.Request request) {
-        try { return transfers.transfer(token, request); }
-        catch (DataIntegrityViolationException ex) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This request conflicts with another transfer. Check your history before starting a new one.");
-        }
+        throw new ResponseStatusException(HttpStatus.GONE,
+                "Direct database transfer is deprecated. All transfers must be routed via /api/v1/remittance/transfer.");
     }
 
     @PostMapping("/register")
