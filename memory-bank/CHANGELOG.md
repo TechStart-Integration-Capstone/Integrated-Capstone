@@ -1,6 +1,12 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — PostgreSQL Notification Schema Provisioning & Volume Fix:
+  - Created missing microservices/notification-service/src/main/resources/schema-postgres.sql defining the NOTIFICATION table (UQ on reference_no, account_id).
+  - Provisioned the NOTIFICATION table in PostgreSQL ledger_audit_db, eliminating consumer failures in notification-service.
+  - Corrected Docker Compose PostgreSQL init mount path from legacy backend/ directory to microservices/ directory.
+  - Restarted notification-service; Kafka consumer group rebalanced and operational across remittance.events and ledger.transaction.events. — [dom]
+
 - 2026-10-08 — Account Service Live Balance Client Fix & Frontend Guard:
   - Resolved 500 Internal Server Error on /api/v1/accounts/customers and /api/v1/accounts/customer/{id} by adding missing MediaType import in T24AccountClient and cleanly recompiling/restarting account-service.
   - Added null element guards in frontend/src/js/app.js (testScenario) preventing unhandled TypeError when rendering admin tabs without perimeter badge elements.
