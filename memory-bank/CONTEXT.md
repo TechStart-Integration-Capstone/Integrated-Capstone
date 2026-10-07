@@ -1,8 +1,8 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **Team 4**_
-_Latest source change: 2026-10-07 - Phase 2 Stateful T24 Core Banking complete; hold lock/release engine, double-entry posting, and POSTING_JOURNAL live - dom_
-_Last updated: 2026-10-07 (Phase 2 completed on branch refactor/domain-t24-core)_
+_Latest source change: 2026-10-07 - Phase 3 Remittance Saga Hold Integration & Cutover complete; T24HoldClient integrated into RemittanceLedgerService with circuit breaker fallback - dom_
+_Last updated: 2026-10-07 (Phase 3 completed on branch refactor/domain-t24-core)_
 
 ---
 

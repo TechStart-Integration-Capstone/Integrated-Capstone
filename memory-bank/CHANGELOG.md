@@ -1,6 +1,12 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-07 — Phase 3: Remittance Saga Hold Integration & Cutover:
+  - Built `T24HoldClient` in `transaction-service` with circuit breaker and fallback support calling `t24-adapter` (`/api/v1/t24/holds/lock` and `/api/v1/t24/holds/release`).
+  - Configured `app.t24-adapter.base-url` in `transaction-service`'s `application.yml`.
+  - Refactored `RemittanceLedgerService` to delegate hold placement (`holdFunds`) and hold releases (`releaseHoldFunds`, `cancelAndReleaseHold`) to `t24HoldClient` with seamless fallback for backward compatibility.
+  - Added test suite `T24HoldIntegrationTest` verifying hold placement delegation, rejection exception handling, and cancellation/reversal release calls. All 76/76 unit tests passing cleanly in `transaction-service`. — [dom]
+
 - 2026-10-07 — Phase 2: Stateful T24 Core Banking Engine (Sub-phases 2a, 2b, 2c):
   - Sub-phase 2a (Persistence & Schema): Created migration script `scripts/migrate_phase2_t24_core.sql` adding `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables with `dbo.*` synonyms; created `scripts/rollback_phase2_t24_core.sql`. Applied migration to local SQL Server. Added Spring Data JPA and SQL Server dependencies to `t24-adapter` (`pom.xml`, `application.yml`, and `docker-compose.yml`). Created JPA entities (`Account`, `LockedAmount`, `PostingJournal`) and repositories (`AccountRepository`, `LockedAmountRepository`, `PostingJournalRepository`).
   - Sub-phase 2b (Hold/Lock Engine): Built `T24HoldService` and `T24HoldController` providing `POST /api/v1/t24/holds/lock`, `POST /api/v1/t24/holds/release`, and `GET /api/v1/t24/holds/{referenceNo}` with atomic pessimistic locking, available balance verification, and idempotent hold management.

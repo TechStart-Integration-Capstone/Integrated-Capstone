@@ -26,6 +26,9 @@ spring:
       connect-timeout: 3000ms
 
 app:
+  t24-adapter:
+    base-url: ${T24_ADAPTER_BASE_URL:http://t24-adapter:8090/api/v1/t24}
+    url: ${T24_ADAPTER_URL:http://t24-adapter:8090/api/v1/t24/transfer}
   interest:
     enabled: ${INTEREST_EOD_ENABLED:false}
     start-date: ${INTEREST_START_DATE:}
