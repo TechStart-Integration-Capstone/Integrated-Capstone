@@ -20,8 +20,8 @@ The PayPink system is being refactored from a shared-database monolithic ledger 
 | **Phase 3** | Remittance Saga Hold Integration & Cutover | Integrated `T24HoldClient` with circuit breaker into `RemittanceLedgerService`. Replaced local SQL balance lock updates with T24 Core hold API calls. | Done (Commit `3b3f9e2`) |
 | **Phase 4** | Transaction History & CQRS Read-Model | Built CQRS read-store in `transaction-service`: `TransactionActivityService`, PDF statement generation (`TransactionStatementReportService`), and Operations Desk admin monitor. Added gateway routes. | Done (Commit `801b044`) |
 | **Phase 5** | Account Service Consolidation | Move `/me`, recipient lookup, recipients directory, and banking favorites/beneficiaries into `account-service`. Route live balance inquiries to T24 Core. | Done (Commit `9982ba3`) |
-| **Phase 6** | Auth Slimming & Loan Service Alignment | Slim `auth-service` down to login/register/JWT only. Move loan disbursements/repayments to post directly into T24 Core. | Up Next |
-| **Phase 7** | EOD Service Alignment | Align Interest EOD and Loan EOD to post settlements via T24 Core posting API. | Pending |
+| **Phase 6** | Auth Slimming & Loan Service Alignment | Slim `auth-service` perimeter via gateway route cutover for recipients, favorites, and admin monitor; loan disbursements & repayments routed via T24 Core posting saga. | Done |
+| **Phase 7** | EOD Service Alignment | Align Interest EOD and Loan EOD to post settlements via T24 Core posting API. | Up Next |
 | **Phase 8** | Events, Audit & Reconciliation Re-point | Relate outbox events with T24 core journal feed; update reconciliation and notification consumers. | Pending |
 | **Phase 9** | Frontend Polish, Synonym Cleanup & Final Verification | Final end-to-end verification across Web SPA and frozen Mobile contracts; retire `dbo` synonyms. | Pending |
 
@@ -29,32 +29,14 @@ The PayPink system is being refactored from a shared-database monolithic ledger 
 
 ## Architecture Overview
 
-```
-                      +-----------------------------------------+
-                      |    API Gateway (:8080) — Public Port    |
-                      |  JWT Validation, Rate Limiting, RBAC    |
-                      +--------------------+--------------------+
-                                           |
-         +------------------+--------------+-----+------------------+
-         |                  |                    |                  |
-         v                  v                    v                  v
-   auth-service      account-service     transaction-service    loan-service
-      (:8081)            (:8082)               (:8083)             (:8091)
-    Login/Tokens     Profiles/Balances      Saga / Ledger /      Loan Engine
-         |                  |               CQRS / Interest          |
-         |                  |                    |                   |
-         |                  +---------->         |                   |
-         |                             v         v                   |
-         |                         t24-adapter (:8090) <-------------+
-         |                   Stateful T24 Core Banking Engine
-         |                   Holds, Postings, Double-Entry Ledger
-         |                             |
-         v                             v
-   +-----------+                 +-----------+
-   | app.* DB  |                 | t24.* DB  |
-   | (Azure)   |                 | (Azure)   |
-   +-----------+                 +-----------+
-```
+PayPink 2.0 operates as an event-driven, domain-partitioned microservices banking platform behind a centralized Spring Cloud API Gateway:
+
+- **Perimeter (Edge):** `api-gateway` (:8080) acts as the sole public ingress, validating JWTs, enforcing RBAC (Customer vs. Admin), and applying rate limits.
+- **Core Domain (SoR):** `t24-adapter` (:8090) serves as the authoritative Core Banking System of Record (simulating Temenos T24), managing live balances, holds (`t24.LOCKED_AMOUNT`), and double-entry general ledger journals (`t24.POSTING_JOURNAL`).
+- **Remittance Orchestrator & Transactions:** Hosted inside `transaction-service` (:8083), executing the 4-step distributed transfer saga (Idempotency -> Fraud Scoring -> T24 Core Hold -> Ledger Settlement & Outbox) along with CQRS transaction history, PDF statement generation, and Operations Desk admin monitoring.
+- **Fraud & Risk Scoring:** `risk-engine` (:8000) is a standalone Python 3.11 FastAPI microservice providing two-layer real-time fraud scoring (Rules Engine + Isolation Forest ML) invoked directly by the Remittance Orchestrator before any funds are locked or moved.
+- **Customer & Loan Domains:** `account-service` (:8082) manages customer profiles, live T24 balance inquiry, and beneficiary management; `loan-service` (:8091) handles loan origination, credit evaluation, and repayments routed via T24 Core.
+- **Async Events & Audit:** Kafka topics distribute immutable audit records to `audit-service` (:8085) and PostgreSQL, transaction alerts to `notification-service` (:8084), stream metrics to `analytics-service` (:8088), and verify consistency via `reconciliation-service` (:8086).
 
 ---
 

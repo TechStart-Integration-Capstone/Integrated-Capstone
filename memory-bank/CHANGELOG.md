@@ -1,6 +1,11 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Phase 6: Auth Slimming & Loan Service Alignment:
+  - Slimmed `auth-service` perimeter responsibilities by introducing API Gateway backward-compatible routing cutovers: mapped legacy `/api/v1/auth/admin/transactions/today` to `transaction-service` CQRS monitor (`/api/v1/transactions/admin/today`), and legacy `/api/v1/auth/banking/recipients/**` and `/favorites/**` to `account-service` (`/api/v1/accounts/recipients/**` and `/favorites/**`).
+  - Verified loan money movements in `loan-service`: loan disbursements (`LOAN_DISBURSEMENT`) and loan repayments (`LOAN_REPAYMENT`) route exclusively through the internal saga orchestrator in `transaction-service` to post double-entry entries in T24 Core (`t24.POSTING_JOURNAL`).
+  - Ran and verified unit test suites across affected domains: loan-service (41/41 passing), api-gateway (20/20 passing), account-service (17/17 passing), t24-adapter (30/30 passing), and transaction-service (105/105 passing). — [dom]
+
 - 2026-10-08 — Phase 5: Account Service Consolidation:
   - Added authoritative Core Account balance inquiry endpoint in `t24-adapter`: `GET /api/v1/t24/accounts/{accountIdOrNumber}/balance` with `T24AccountInquiryControllerTest` (2/2 passing, 30/30 total in `t24-adapter`).
   - Built `T24AccountClient` in `account-service` to query live core account balances from T24 Core.
