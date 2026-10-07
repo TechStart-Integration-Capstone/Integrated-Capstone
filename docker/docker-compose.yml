@@ -423,6 +423,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=sa
       - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - ORCHESTRATOR_URL=http://transaction-service:8083
+      - LOAN_SCHEMA_MIGRATION_ENABLED=false
     volumes:
       - ./../microservices/loan-service/target/loan-service.jar:/app/app.jar
     healthcheck:

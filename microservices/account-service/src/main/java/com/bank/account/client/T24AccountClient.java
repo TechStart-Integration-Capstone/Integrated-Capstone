@@ -3,6 +3,7 @@ package com.bank.account.client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -20,14 +21,15 @@ public class T24AccountClient {
 
     private static final Logger log = LoggerFactory.getLogger(T24AccountClient.class);
     private final RestClient restClient;
+    private final String baseUrl;
 
     public T24AccountClient(@Value("${app.t24-adapter.base-url:http://t24-adapter:8090/api/v1/t24}") String baseUrl) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(1000);
         factory.setReadTimeout(3000);
 
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.restClient = RestClient.builder()
-                .baseUrl(baseUrl)
                 .requestFactory(factory)
                 .build();
     }
@@ -47,7 +49,8 @@ public class T24AccountClient {
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> resp = restClient.get()
-                    .uri("/accounts/{id}/balance", accountIdOrNumber)
+                    .uri(this.baseUrl + "/accounts/{id}/balance", accountIdOrNumber)
+                    .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(Map.class);
 

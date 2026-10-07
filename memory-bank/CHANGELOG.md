@@ -1,6 +1,18 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Account Service Live Balance Client Fix & Frontend Guard:
+  - Resolved 500 Internal Server Error on /api/v1/accounts/customers and /api/v1/accounts/customer/{id} by adding missing MediaType import in T24AccountClient and cleanly recompiling/restarting account-service.
+  - Added null element guards in frontend/src/js/app.js (testScenario) preventing unhandled TypeError when rendering admin tabs without perimeter badge elements.
+  - Reloaded nginx static assets in frontend-spa; confirmed 200 OK responses with live T24 balances on customer directory endpoints. — [dom]
+
+- 2026-10-08 — Transfer Saga Double-Debit/Credit Fix & Hold Deadlock Elimination:
+  - Eliminated duplicate balance deductions and credits during transfers in RemittanceLedgerService: when T24 Core double-entry posting succeeds (ftReference != null), local SQL balance updates on dbo.ACCOUNT are skipped because T24PostingService has already authoritatively settled both legs on t24.ACCOUNT.
+  - Eliminated distributed HTTP-to-SQL deadlock between transaction-service and t24-adapter by removing conflicting WITH (UPDLOCK, ROWLOCK) hints in RemittanceLedgerService.resolveAccount.
+  - Corrected T24HoldClient HTTP request routing and MediaType.APPLICATION_JSON negotiation with T24HoldController.
+  - Fixed API Gateway RewritePath regex syntax for recipient and favorite routes.
+  - Verified clean container rebuild and live deployment of transaction-service. — [dom]
+
 - 2026-10-08 — Phase 9: Frontend Polish, Synonym Cleanup Script & Final Global Test Verification:
   - Verified `mobile/` directory remains 100% frozen with zero diffs against `pre-domain-refactor` baseline tag; confirmed strict backward compatibility across all 6 core mobile API contracts.
   - Verified Web SPA (`frontend/`) contracts, routes, and API clients seamlessly operate against refactored backend and API gateway routing.

@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,7 +26,7 @@ public class T24HoldController {
         this.holdService = holdService;
     }
 
-    @PostMapping("/lock")
+    @PostMapping(value = "/lock", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> placeHold(@Valid @RequestBody T24HoldRequest request) {
         try {
             T24HoldResponse response = holdService.placeHold(request);
@@ -42,7 +43,7 @@ public class T24HoldController {
         }
     }
 
-    @PostMapping("/release")
+    @PostMapping(value = "/release", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> releaseHold(@Valid @RequestBody T24ReleaseRequest request) {
         try {
             T24HoldResponse response = holdService.releaseHold(request);
@@ -56,7 +57,7 @@ public class T24HoldController {
         }
     }
 
-    @GetMapping("/{referenceNo}")
+    @GetMapping(value = "/{referenceNo}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getHold(@PathVariable String referenceNo) {
         return holdService.getHold(referenceNo)
                 .map(ResponseEntity::ok)

@@ -81,7 +81,7 @@ public class RemittanceLedgerService {
     }
 
     public AccountInfo resolveAccount(String accountIdOrNumber) {
-        String sql = "SELECT account_id, customer_id, account_number, current_balance, held_balance FROM dbo.ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_number = ? OR CAST(account_id AS NVARCHAR(50)) = ?";
+        String sql = "SELECT account_id, customer_id, account_number, current_balance, held_balance FROM dbo.ACCOUNT WHERE account_number = ? OR CAST(account_id AS NVARCHAR(50)) = ?";
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, accountIdOrNumber, accountIdOrNumber);
         if (rows.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found in ledger: " + accountIdOrNumber);
@@ -386,20 +386,34 @@ public class RemittanceLedgerService {
         AccountInfo currentSource = resolveAccount(String.valueOf(sourceAccId));
         AccountInfo currentTarget = resolveAccount(String.valueOf(targetAccId));
 
-        BigDecimal sourceBefore = currentSource.balance();
-        BigDecimal sourceAfter = sourceBefore.subtract(amount);
+        BigDecimal sourceBefore;
+        BigDecimal sourceAfter;
+        BigDecimal targetBefore;
+        BigDecimal targetAfter;
 
-        BigDecimal targetBefore = currentTarget.balance();
-        BigDecimal targetAfter = (targetBefore != null ? targetBefore : BigDecimal.ZERO).add(amount);
+        if (ftReference != null) {
+            // T24 Core double-entry posting has already updated balances in t24.ACCOUNT
+            sourceAfter = currentSource.balance();
+            sourceBefore = sourceAfter.add(amount);
+            targetAfter = currentTarget.balance() != null ? currentTarget.balance() : BigDecimal.ZERO;
+            targetBefore = targetAfter.subtract(amount);
+            log.info("[ledger-service] T24 Core posting authoritative (ftRef={}): source={} -> {}, target={} -> {}",
+                    ftReference, sourceBefore, sourceAfter, targetBefore, targetAfter);
+        } else {
+            // Fallback: local database balance update
+            sourceBefore = currentSource.balance();
+            sourceAfter = sourceBefore.subtract(amount);
+            targetBefore = currentTarget.balance();
+            targetAfter = (targetBefore != null ? targetBefore : BigDecimal.ZERO).add(amount);
 
-        // 1. Update balances: debit source & release hold; credit target
-        String updateSourceSql = "UPDATE dbo.ACCOUNT SET current_balance = ?, " +
-                                 "held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END " +
-                                 "WHERE account_id = ?";
-        jdbcTemplate.update(updateSourceSql, sourceAfter, amount, amount, currentSource.id());
+            String updateSourceSql = "UPDATE dbo.ACCOUNT SET current_balance = ?, " +
+                                     "held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END " +
+                                     "WHERE account_id = ?";
+            jdbcTemplate.update(updateSourceSql, sourceAfter, amount, amount, currentSource.id());
 
-        String updateTargetSql = "UPDATE dbo.ACCOUNT SET current_balance = ? WHERE account_id = ?";
-        jdbcTemplate.update(updateTargetSql, targetAfter, currentTarget.id());
+            String updateTargetSql = "UPDATE dbo.ACCOUNT SET current_balance = ? WHERE account_id = ?";
+            jdbcTemplate.update(updateTargetSql, targetAfter, currentTarget.id());
+        }
 
         // 2. Save LEDGER_TRANSACTION row (plain transfers keep their existing P2P_REMITTANCE type)
         String remittanceType = remittance.getTransactionType();

@@ -22,14 +22,15 @@ public class T24HoldClient {
 
     private static final Logger log = LoggerFactory.getLogger(T24HoldClient.class);
     private final RestClient restClient;
+    private final String baseUrl;
 
     public T24HoldClient(@Value("${app.t24-adapter.base-url:http://t24-adapter:8090/api/v1/t24}") String baseUrl) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(1000);
         factory.setReadTimeout(3000);
 
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.restClient = RestClient.builder()
-                .baseUrl(baseUrl)
                 .requestFactory(factory)
                 .build();
     }
@@ -51,8 +52,9 @@ public class T24HoldClient {
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restClient.post()
-                    .uri("/holds/lock")
+                    .uri(this.baseUrl + "/holds/lock")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .body(Map.class);
@@ -83,8 +85,9 @@ public class T24HoldClient {
 
         try {
             restClient.post()
-                    .uri("/holds/release")
+                    .uri(this.baseUrl + "/holds/release")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .toBodilessEntity();
