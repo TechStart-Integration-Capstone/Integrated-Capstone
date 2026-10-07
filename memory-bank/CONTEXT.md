@@ -1,8 +1,8 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **Team 4**_
-_Latest source change: 2026-10-07 - Phase 0 Perimeter Lockdown and Bypass Elimination complete; direct transfer deprecated; admin role guards active - dom_
-_Last updated: 2026-10-07 (Phase 0 completed on branch refactor/domain-t24-core)_
+_Latest source change: 2026-10-07 - Phase 1 Azure SQL Schema Split complete; t24 and app schemas isolated; dbo synonyms created; JPA entities qualified - dom_
+_Last updated: 2026-10-07 (Phase 1 completed on branch refactor/domain-t24-core)_
 
 ---
 
@@ -278,7 +278,11 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 T24-First Domain Architecture Refactoring in progress on branch `refactor/domain-t24-core`:
 - **Safety Net Phase:** Completed (code pushed, tag `pre-domain-refactor` created, baselines verified, mobile directory frozen).
 - **Phase 0 (Perimeter Lockdown):** Completed (guarded admin/stress/t24 routes with `ROLE_ADMIN`, added defense-in-depth role check in account-service, deprecated direct transfers in auth-service).
-- **Next: Phase 1 (Azure SQL Schema Split):** Split database into `t24` and `app` schemas, drop cross-boundary foreign keys, create `dbo.*` synonyms, qualify JPA `@Table(schema=...)`.
+- **Phase 1 (Azure SQL Schema Split):** Completed (split database into `t24` and `app` schemas, dropped cross-boundary foreign keys, created `dbo.*` synonyms, qualified JPA `@Table(schema=...)` across all microservices).
+- **Next: Phase 2 (Stateful T24 Core):**
+  - **Phase 2a:** T24 Core database persistence for accounts and idempotency store.
+  - **Phase 2b:** `t24.LOCKED_AMOUNT` engine (`POST /holds/lock`, `POST /holds/release`).
+  - **Phase 2c:** Double-entry posting engine, `t24.POSTING_JOURNAL`, and Kafka core event publishing.
 - **Mobile PWA (`mobile/`):** Explicitly frozen; all 6 mobile API contracts preserved.
 
 ---

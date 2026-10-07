@@ -1,6 +1,12 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-07 — Phase 1: Azure SQL Schema Split (T24 Core vs Application):
+  - Created idempotent migration script `scripts/migrate_phase1_schema_split.sql` establishing `t24` and `app` schemas, dynamically removing cross-boundary foreign key constraints, transferring domain tables (`ACCOUNT`, `LEDGER_TRANSACTION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT`, `EOD_JOB_RUN` -> `t24`; `CUSTOMER`, `BANKING_FAVORITE`, `AUDIT_LOG`, `OUTBOX_EVENT`, `REMITTANCE`, `LOAN_APPLICATION` -> `app`), and creating backward-compatible `dbo.*` synonyms.
+  - Created corresponding rollback script `scripts/rollback_phase1_schema_split.sql`.
+  - Qualified JPA `@Table(schema = "...")` annotations across all microservices: `account-service` (Account, Customer), `auth-service` (Customer), `loan-service` (Loan, LoanApplication, LoanRepayment, LoanSchedule, OutboxEvent), `outbox-publisher` (OutboxEvent), `reconciliation-service` (TransactionRecord), `transaction-service` (Account, AuditLog, OutboxEvent, Remittance, TransactionRecord).
+  - Executed and validated migration script on local SQL Server container `azure-sql-master`; verified synonym resolution and queries. All test suites pass cleanly across microservices. — [dom]
+
 - 2026-10-07 — Phase 0: Perimeter Lockdown and Bypass Elimination:
   - Enforced `ROLE_ADMIN` in `api-gateway` (`JwtAuthFilter.java`) for `/api/v1/accounts/*/reset-balance`, `/api/v1/accounts/*/status`, `/api/v1/stress/**`, `/api/v1/ledger/**`, and internal core/risk routes `/api/v1/t24/**` and `/api/v1/risk/**`. Added 4 unit tests (20/20 passing).
   - Added defense-in-depth `ROLE_ADMIN` assertion in `account-service` (`AccountController.java`) for status updates and balance reset endpoints; added unit test suite `AccountControllerTest.java` (12/12 passing).
