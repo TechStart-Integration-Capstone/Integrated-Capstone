@@ -45,7 +45,7 @@ public class InterestLedger {
         // Hold the source balances stable until the complete PostgreSQL snapshot has committed.
         return jdbc.query("""
                 SELECT account_id, customer_id, account_type, currency, current_balance, interest_rate
-                FROM dbo.ACCOUNT WITH (UPDLOCK, HOLDLOCK)
+                FROM t24.ACCOUNT WITH (UPDLOCK, HOLDLOCK)
                 WHERE status = 'ACTIVE' AND account_type IN ('SAVINGS', 'SAVINGS_ACCOUNT', 'LOAN') ORDER BY account_id
                 """, (rs, n) -> new Account(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
                 rs.getBigDecimal(5), rs.getBigDecimal(6)));
@@ -53,33 +53,33 @@ public class InterestLedger {
 
     public long startJob(LocalDate date, String name) {
         List<Long> existing = jdbc.queryForList(
-                "SELECT job_run_id FROM dbo.EOD_JOB_RUN WHERE business_date = ? AND job_name = ?",
+                "SELECT job_run_id FROM t24.EOD_JOB_RUN WHERE business_date = ? AND job_name = ?",
                 Long.class, Date.valueOf(date), name);
         if (!existing.isEmpty()) {
-            jdbc.update("UPDATE dbo.EOD_JOB_RUN SET status = 'RUNNING', ended_at = NULL WHERE job_run_id = ?",
+            jdbc.update("UPDATE t24.EOD_JOB_RUN SET status = 'RUNNING', ended_at = NULL WHERE job_run_id = ?",
                     existing.get(0));
             return existing.get(0);
         }
         return jdbc.queryForObject("""
-                INSERT INTO dbo.EOD_JOB_RUN (business_date, job_name, status, started_at)
+                INSERT INTO t24.EOD_JOB_RUN (business_date, job_name, status, started_at)
                 OUTPUT INSERTED.job_run_id VALUES (?, ?, 'RUNNING', SYSUTCDATETIME())
                 """, Long.class, Date.valueOf(date), name);
     }
 
     public void finishJob(long id) {
-        jdbc.update("UPDATE dbo.EOD_JOB_RUN SET status = 'SUCCESS', ended_at = SYSUTCDATETIME() WHERE job_run_id = ?", id);
+        jdbc.update("UPDATE t24.EOD_JOB_RUN SET status = 'SUCCESS', ended_at = SYSUTCDATETIME() WHERE job_run_id = ?", id);
     }
 
     public boolean postingComplete(LocalDate end) {
         return !jdbc.queryForList("""
-                SELECT job_run_id FROM dbo.EOD_JOB_RUN
+                SELECT job_run_id FROM t24.EOD_JOB_RUN
                 WHERE job_name = 'EOD_INTEREST_POSTING' AND business_date = ? AND status = 'SUCCESS'
                 """, Long.class, Date.valueOf(end)).isEmpty();
     }
 
     public boolean periodHasPostings(LocalDate end) {
         return postingComplete(end) || !jdbc.queryForList("""
-                SELECT TOP 1 transaction_id FROM dbo.LEDGER_TRANSACTION
+                SELECT TOP 1 transaction_id FROM t24.LEDGER_TRANSACTION
                 WHERE reference_no LIKE ? AND transaction_type = 'INTEREST_CREDIT' AND status = 'SUCCESS'
                 """, Long.class, "INT-" + end + "-%").isEmpty();
     }
@@ -89,7 +89,7 @@ public class InterestLedger {
         var cutoff = java.sql.Timestamp.valueOf(date.plusDays(1).atStartOfDay(zone)
                 .withZoneSameInstant(java.time.ZoneOffset.UTC).toLocalDateTime());
         var ids = jdbc.queryForList("""
-                SELECT account_id FROM dbo.ACCOUNT WITH (UPDLOCK, ROWLOCK)
+                SELECT account_id FROM t24.ACCOUNT WITH (UPDLOCK, ROWLOCK)
                 WHERE account_id = ? AND created_date < ?
                     AND (account_type = ? OR (account_type IN ('SAVINGS', 'SAVINGS_ACCOUNT')
                         AND ? IN ('SAVINGS', 'SAVINGS_ACCOUNT')))
@@ -101,7 +101,7 @@ public class InterestLedger {
     public boolean post(InterestAccrualStore.MonthlyTotal total, LocalDate start, LocalDate end, long jobId) {
         Account account = jdbc.queryForObject("""
                 SELECT account_id, customer_id, account_type, currency, current_balance, interest_rate
-                FROM dbo.ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id = ?
+                FROM t24.ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id = ?
                 """, (rs, n) -> new Account(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
                 rs.getBigDecimal(5), rs.getBigDecimal(6)), total.accountId());
         if (account == null) throw new IllegalStateException("Accrued account is missing: " + total.accountId());
@@ -111,7 +111,7 @@ public class InterestLedger {
 
         String reference = "INT-" + end + "-" + account.id();
         List<BigDecimal> posted = jdbc.query("""
-                SELECT amount FROM dbo.LEDGER_TRANSACTION
+                SELECT amount FROM t24.LEDGER_TRANSACTION
                 WHERE reference_no = ? AND from_account_id = ?
                     AND transaction_type = 'INTEREST_CREDIT' AND status = 'SUCCESS'
                 """, (rs, n) -> rs.getBigDecimal(1), reference, account.id());
@@ -126,10 +126,10 @@ public class InterestLedger {
 
         Long transactionId = null;
         if (total.amount().signum() > 0) {
-            jdbc.update("UPDATE dbo.ACCOUNT SET current_balance = current_balance + ? WHERE account_id = ?",
+            jdbc.update("UPDATE t24.ACCOUNT SET current_balance = current_balance + ? WHERE account_id = ?",
                     total.amount(), account.id());
             transactionId = jdbc.queryForObject("""
-                    INSERT INTO dbo.LEDGER_TRANSACTION
+                    INSERT INTO t24.LEDGER_TRANSACTION
                         (from_account_id, amount, source_currency, target_currency, transaction_type, reference_no, status)
                     OUTPUT INSERTED.transaction_id VALUES (?, ?, ?, ?, 'INTEREST_CREDIT', ?, 'SUCCESS')
                     """, Long.class, account.id(), total.amount(), account.currency(), account.currency(), reference);
@@ -150,7 +150,7 @@ public class InterestLedger {
             payload.put("description", "Monthly Interest Posting - Period End: " + end);
             try {
                 jdbc.update("""
-                        INSERT INTO dbo.OUTBOX_EVENT (transaction_id, event_type, payload, status)
+                        INSERT INTO app.OUTBOX_EVENT (transaction_id, event_type, payload, status)
                         VALUES (?, 'TRANSACTION_SUCCESS', ?, 'PENDING')
                         """, transactionId, mapper.writeValueAsString(payload));
             } catch (JsonProcessingException ex) {

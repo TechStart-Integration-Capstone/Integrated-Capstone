@@ -1,6 +1,12 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Phase 7: EOD Service Alignment:
+  - Aligned `InterestLedger` in `transaction-service` with Phase 1 DDD schema boundaries, qualifying raw SQL operations to `t24.ACCOUNT`, `t24.EOD_JOB_RUN`, `t24.LEDGER_TRANSACTION`, and `app.OUTBOX_EVENT`.
+  - Verified Interest EOD accrual and monthly posting flows, with outbox events emitted for downstream ledger consumers.
+  - Verified Loan EOD in `loan-service`: auto-debits route via `transaction-service` internal saga to settle against T24 Core double-entry ledger.
+  - All unit test suites passed cleanly: Interest EOD suite (53/53 passed) and Loan test suite (36/36 passed). — [dom]
+
 - 2026-10-08 — Phase 6: Auth Slimming & Loan Service Alignment:
   - Slimmed `auth-service` perimeter responsibilities by introducing API Gateway backward-compatible routing cutovers: mapped legacy `/api/v1/auth/admin/transactions/today` to `transaction-service` CQRS monitor (`/api/v1/transactions/admin/today`), and legacy `/api/v1/auth/banking/recipients/**` and `/favorites/**` to `account-service` (`/api/v1/accounts/recipients/**` and `/favorites/**`).
   - Verified loan money movements in `loan-service`: loan disbursements (`LOAN_DISBURSEMENT`) and loan repayments (`LOAN_REPAYMENT`) route exclusively through the internal saga orchestrator in `transaction-service` to post double-entry entries in T24 Core (`t24.POSTING_JOURNAL`).
