@@ -40,6 +40,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/api/v1/loans/eod",
             "/api/v1/interest/eod",
             "/api/v1/auth/admin",
+            "/api/v1/transactions/admin",
             "/api/v1/stress",
             "/api/v1/ledger",
             "/api/v1/t24",

@@ -1,6 +1,13 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-07 — Phase 4: Transaction History & CQRS Read-Model Consolidation:
+  - Added Apache PDFBox 3.0.8 dependency to `transaction-service`.
+  - Built CQRS query layer in `transaction-service`: `TransactionActivityService` (customer transaction activity with counterparty details), `TransactionStatementReportService` (PDF statement export), and `AdminTransactionMonitorService` (Operations Desk real-time feed).
+  - Implemented `TransactionQueryController` (`GET /api/v1/transactions/activity` and `GET /api/v1/transactions/reports/transactions.pdf`) and `AdminTransactionMonitorController` (`GET /api/v1/transactions/admin/today`).
+  - Added `transaction-queries` route in `api-gateway` and added `/api/v1/transactions/admin` to `ADMIN_PREFIXES` in `JwtAuthFilter`.
+  - Created test suite `TransactionQueryControllerTest` (5/5 passing). All 81/81 unit tests in `transaction-service` and 20/20 in `api-gateway` passing cleanly. — [dom]
+
 - 2026-10-07 — Phase 3: Remittance Saga Hold Integration & Cutover:
   - Built `T24HoldClient` in `transaction-service` with circuit breaker and fallback support calling `t24-adapter` (`/api/v1/t24/holds/lock` and `/api/v1/t24/holds/release`).
   - Configured `app.t24-adapter.base-url` in `transaction-service`'s `application.yml`.
