@@ -1,6 +1,12 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Interest EOD Schema Provisioning (PostgreSQL & Azure SQL):
+  - Applied `scripts/migrate_interest_postgres.sql` to live PostgreSQL `ledger_audit_db`, provisioning immutable tables `interest_accrual`, `interest_accrual_batch`, `interest_backfill_proposal`, and `interest_backfill_approval` with audit truncate/update guard triggers and rules.
+  - Applied `scripts/migrate_interest_azuresql.sql` to live Azure SQL Server, adding `interest_rate` column to `t24.ACCOUNT` and creating `t24.EOD_JOB_RUN` with backward-compatible `dbo.EOD_JOB_RUN` synonym.
+  - Mounted `./../scripts/migrate_interest_postgres.sql` as `/docker-entrypoint-initdb.d/03_interest.sql` in `docker/docker-compose.yml` for automated fresh container provisioning.
+  - Aligned `scripts/migrate_interest_azuresql.sql` with Phase 1 DDD schema split (`t24.*`). — [dom]
+
 - 2026-10-08 — PostgreSQL Notification Schema Provisioning & Volume Fix:
   - Created missing microservices/notification-service/src/main/resources/schema-postgres.sql defining the NOTIFICATION table (UQ on reference_no, account_id).
   - Provisioned the NOTIFICATION table in PostgreSQL ledger_audit_db, eliminating consumer failures in notification-service.
