@@ -388,9 +388,14 @@ services:
       context: ../microservices/t24-adapter
       dockerfile: Dockerfile
     container_name: t24-adapter
-    # No host port — internal only, called by Remittance Orchestrator via http://t24-adapter:8090
+    depends_on:
+      azure-sql:
+        condition: service_healthy
     environment:
       - T24_SIMULATOR_URL=http://localhost:8090/ofs/process
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - OTEL_SERVICE_NAME=t24-adapter
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     volumes:

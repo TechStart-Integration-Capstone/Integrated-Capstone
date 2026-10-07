@@ -1,6 +1,11 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-07 — Phase 2: Stateful T24 Core Banking Engine (Sub-phases 2a, 2b, 2c):
+  - Sub-phase 2a (Persistence & Schema): Created migration script `scripts/migrate_phase2_t24_core.sql` adding `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables with `dbo.*` synonyms; created `scripts/rollback_phase2_t24_core.sql`. Applied migration to local SQL Server. Added Spring Data JPA and SQL Server dependencies to `t24-adapter` (`pom.xml`, `application.yml`, and `docker-compose.yml`). Created JPA entities (`Account`, `LockedAmount`, `PostingJournal`) and repositories (`AccountRepository`, `LockedAmountRepository`, `PostingJournalRepository`).
+  - Sub-phase 2b (Hold/Lock Engine): Built `T24HoldService` and `T24HoldController` providing `POST /api/v1/t24/holds/lock`, `POST /api/v1/t24/holds/release`, and `GET /api/v1/t24/holds/{referenceNo}` with atomic pessimistic locking, available balance verification, and idempotent hold management.
+  - Sub-phase 2c (Double-Entry Posting Journal): Built `T24PostingService` and integrated into `T24SimulatorController` to atomically settle holds, deduct debit balance, credit target balance, and record immutable double-entry records in `t24.POSTING_JOURNAL`. Added unit test suites `T24CorePersistenceTest`, `T24HoldServiceTest`, `T24HoldControllerTest`, `T24PostingServiceTest` (all 28/28 passing in `t24-adapter`). — [dom]
+
 - 2026-10-07 — Phase 1: Azure SQL Schema Split (T24 Core vs Application):
   - Created idempotent migration script `scripts/migrate_phase1_schema_split.sql` establishing `t24` and `app` schemas, dynamically removing cross-boundary foreign key constraints, transferring domain tables (`ACCOUNT`, `LEDGER_TRANSACTION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT`, `EOD_JOB_RUN` -> `t24`; `CUSTOMER`, `BANKING_FAVORITE`, `AUDIT_LOG`, `OUTBOX_EVENT`, `REMITTANCE`, `LOAN_APPLICATION` -> `app`), and creating backward-compatible `dbo.*` synonyms.
   - Created corresponding rollback script `scripts/rollback_phase1_schema_split.sql`.

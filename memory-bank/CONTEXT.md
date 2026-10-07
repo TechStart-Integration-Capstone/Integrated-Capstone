@@ -1,8 +1,8 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **Team 4**_
-_Latest source change: 2026-10-07 - Phase 1 Azure SQL Schema Split complete; t24 and app schemas isolated; dbo synonyms created; JPA entities qualified - dom_
-_Last updated: 2026-10-07 (Phase 1 completed on branch refactor/domain-t24-core)_
+_Latest source change: 2026-10-07 - Phase 2 Stateful T24 Core Banking complete; hold lock/release engine, double-entry posting, and POSTING_JOURNAL live - dom_
+_Last updated: 2026-10-07 (Phase 2 completed on branch refactor/domain-t24-core)_
 
 ---
 
@@ -279,10 +279,11 @@ T24-First Domain Architecture Refactoring in progress on branch `refactor/domain
 - **Safety Net Phase:** Completed (code pushed, tag `pre-domain-refactor` created, baselines verified, mobile directory frozen).
 - **Phase 0 (Perimeter Lockdown):** Completed (guarded admin/stress/t24 routes with `ROLE_ADMIN`, added defense-in-depth role check in account-service, deprecated direct transfers in auth-service).
 - **Phase 1 (Azure SQL Schema Split):** Completed (split database into `t24` and `app` schemas, dropped cross-boundary foreign keys, created `dbo.*` synonyms, qualified JPA `@Table(schema=...)` across all microservices).
-- **Next: Phase 2 (Stateful T24 Core):**
-  - **Phase 2a:** T24 Core database persistence for accounts and idempotency store.
-  - **Phase 2b:** `t24.LOCKED_AMOUNT` engine (`POST /holds/lock`, `POST /holds/release`).
-  - **Phase 2c:** Double-entry posting engine, `t24.POSTING_JOURNAL`, and Kafka core event publishing.
+- **Phase 2 (Stateful T24 Core Banking):** Completed:
+  - **Phase 2a (Persistence & Schema):** Applied `scripts/migrate_phase2_t24_core.sql` creating `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL`. Added JPA and SQL Server dependencies and entities to `t24-adapter`.
+  - **Phase 2b (Hold Engine):** Implemented `T24HoldService` and `T24HoldController` for `/api/v1/t24/holds/lock` and `/api/v1/t24/holds/release` with pessimistic locking.
+  - **Phase 2c (Double-Entry Posting):** Implemented `T24PostingService` and integrated into `T24SimulatorController` writing immutable audit logs to `t24.POSTING_JOURNAL` (all 28/28 tests passing).
+- **Next: Phase 3 (Remittance Saga Hold Integration & Cutover):** Integrate `transaction-service` with T24 hold API (`/api/v1/t24/holds/lock` and `/release`), eliminating direct SQL `held_balance` mutations in `RemittanceLedgerService`.
 - **Mobile PWA (`mobile/`):** Explicitly frozen; all 6 mobile API contracts preserved.
 
 ---
