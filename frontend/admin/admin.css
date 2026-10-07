@@ -72,7 +72,10 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
     .admin-sidebar { position: static; width: 100%; padding: 20px; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
     .admin-brand { font-size: 26px; padding: 0; }.admin-sidebar > .admin-eyebrow { margin: 16px 0 10px; }.admin-sidebar-footer { display: none; }
     .tab-bar { flex-direction: row; overflow-x: auto; gap: 5px; padding-bottom: 3px; }.tab-item { width: auto; flex-shrink: 0; min-height: 42px; padding: 10px 12px; font-size: 12px; gap: 8px; }.tab-item svg { width: 17px; height: 17px; }.tab-item.active i { display: none; }
-    .top-nav { margin-left: 0; height: 64px; padding: 0 20px; }.main-body { margin-left: 0; padding: 26px 20px; }.admin-breadcrumb { gap: 10px; font-size: 10px; }
+    .top-nav { margin-left: 0; height: auto; min-height: 64px; padding: 12px 20px; flex-wrap: wrap; gap: 12px; }
+    .top-nav .user-profile-widget { gap: 10px; flex-wrap: wrap; }
+    .top-nav .ph-clock-badge { margin-left: 0; white-space: nowrap; }
+    .main-body { margin-left: 0; padding: 26px 20px; }.admin-breadcrumb { gap: 10px; font-size: 10px; }
     .admin-customer-button { display: none; }.admin-overview-banner { padding: 25px; }.admin-overview-banner h2 { font-size: 21px; }
     .section-card { padding: 20px; }.admin-architecture { gap: 6px; }.admin-architecture-label { width: 100%; }
 }

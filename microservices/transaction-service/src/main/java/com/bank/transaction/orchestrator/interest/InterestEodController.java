@@ -9,6 +9,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.function.Supplier;
+import jakarta.validation.Valid;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/interest/eod")
@@ -29,7 +31,48 @@ public class InterestEodController {
         return execute(roles, () -> service.postMonth(businessDate));
     }
 
-    private InterestEodService.Result execute(String roles, Supplier<InterestEodService.Result> work) {
+    @GetMapping("/missing")
+    public List<LocalDate> missing(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+        return execute(roles, () -> service.missingDays(periodEnd));
+    }
+
+    @GetMapping("/overview")
+    public InterestEodService.PeriodOverview overview(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodEnd) {
+        return execute(roles, () -> service.overview(periodEnd));
+    }
+
+    @PostMapping("/resolve")
+    public InterestAccrualStore.Proposal resolve(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+            @RequestHeader(value = "X-Auth-Username", required = false) String actor,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate businessDate,
+            @Valid @RequestBody InterestRecoveryRequest request) {
+        return execute(roles, () -> {
+            if (actor == null || actor.isBlank())
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated administrator identity required");
+            return service.prepareBackfill(businessDate, request, actor);
+        });
+    }
+
+    @GetMapping("/backfills/{id}")
+    public InterestAccrualStore.Proposal review(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+                                                @PathVariable java.util.UUID id) {
+        return execute(roles, () -> service.backfillProposal(id));
+    }
+
+    @PostMapping("/backfills/{id}/approve")
+    public InterestEodService.Result approve(@RequestHeader(value = "X-Auth-Roles", required = false) String roles,
+            @RequestHeader(value = "X-Auth-Username", required = false) String actor,
+            @PathVariable java.util.UUID id, @Valid @RequestBody InterestRecoveryRequest.Approval request) {
+        return execute(roles, () -> {
+            if (actor == null || actor.isBlank())
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated administrator identity required");
+            return service.approveBackfill(id, request, actor);
+        });
+    }
+
+    private <T> T execute(String roles, Supplier<T> work) {
         if (roles == null || Arrays.stream(roles.split(",")).map(String::trim).noneMatch("ROLE_ADMIN"::equals))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Administrator access required");
         try {

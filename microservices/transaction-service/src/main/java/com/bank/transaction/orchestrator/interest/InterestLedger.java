@@ -77,6 +77,27 @@ public class InterestLedger {
                 """, Long.class, Date.valueOf(end)).isEmpty();
     }
 
+    public boolean periodHasPostings(LocalDate end) {
+        return postingComplete(end) || !jdbc.queryForList("""
+                SELECT TOP 1 transaction_id FROM dbo.LEDGER_TRANSACTION
+                WHERE reference_no LIKE ? AND transaction_type = 'INTEREST_CREDIT' AND status = 'SUCCESS'
+                """, Long.class, "INT-" + end + "-%").isEmpty();
+    }
+
+    public void validateHistoricalAccount(InterestRecoveryRequest.HistoricalAccount account,
+                                          LocalDate date, java.time.ZoneId zone) {
+        var cutoff = java.sql.Timestamp.valueOf(date.plusDays(1).atStartOfDay(zone)
+                .withZoneSameInstant(java.time.ZoneOffset.UTC).toLocalDateTime());
+        var ids = jdbc.queryForList("""
+                SELECT account_id FROM dbo.ACCOUNT WITH (UPDLOCK, ROWLOCK)
+                WHERE account_id = ? AND created_date < ?
+                    AND (account_type = ? OR (account_type IN ('SAVINGS', 'SAVINGS_ACCOUNT')
+                        AND ? IN ('SAVINGS', 'SAVINGS_ACCOUNT')))
+                """, Long.class, account.accountId(), cutoff, account.accountType(), account.accountType());
+        if (ids.isEmpty()) throw new IllegalArgumentException(
+                "Historical account does not exist on that date or has a different type: " + account.accountId());
+    }
+
     public boolean post(InterestAccrualStore.MonthlyTotal total, LocalDate start, LocalDate end, long jobId) {
         Account account = jdbc.queryForObject("""
                 SELECT account_id, customer_id, account_type, currency, current_balance, interest_rate

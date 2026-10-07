@@ -1,7 +1,8 @@
 # PayPink 2.0 — Project Context
 
 _Owner: **dom**_
-_Last updated: 2026-10-06 (Interest EOD enabled locally; PostgreSQL GL integration deployed; memory workflow enforced)_
+_Latest source change: 2026-10-07 - single-admin simulation workflow implemented; interest admin UI deployed locally; 96 tests passed - dom / aly_
+_Last updated: 2026-10-07 (Single-admin interest workflow and Admin UI deployed to local Docker)_
 
 ---
 
@@ -24,7 +25,7 @@ Built on top of the Capstone 1 ledger engine.
 | 5 | Remittance Orchestrator & Saga Engine Hardening | Done |
 | 5b | Loans — apply / accept / disburse / repay / EOD | Implemented (unit-tested; not yet Docker end-to-end) |
 | 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Done |
-| Interest EOD | Daily interest accrual and monthly savings posting | Enabled in local Docker; PostgreSQL GL integration deployed; 78 change-specific tests passed |
+| Interest EOD | Daily interest accrual and monthly savings posting | Enabled in local Docker; single-admin simulation and Admin UI deployed |
 | 7 | Mobile Frontend (PWA) | Pending |
 | 8 | Chaos + Load Testing | Pending |
 
@@ -148,6 +149,8 @@ PostgreSQL migration run order (ledger_audit_db):
 1. microservices/audit-service/src/main/resources/schema-postgres.sql (full schema on new DB)
 2. scripts/migrate_phase6_risk_decision.sql (adds RISK_DECISION on existing DB — idempotent)
 3. scripts/migrate_interest_postgres.sql (immutable daily interest snapshots and completion records)
+4. scripts/migrate_interest_recovery_postgres.sql (existing installations: immutable resolution metadata)
+5. scripts/migrate_interest_approval_postgres.sql (after recovery migration: immutable proposals, independent approvals and rejection of new waivers)
 
 Interest EOD also requires scripts/migrate_interest_azuresql.sql on an existing ledger.
 The worker is in transaction-service's orchestrator.interest package. Enable with
@@ -270,7 +273,7 @@ docker exec -i postgres-immutable-audit psql -U audit_user -d ledger_audit_db -f
 ## Current Focus
 
 All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temurin runners. Remaining work:
-- **Interest EOD monitoring** — local Docker is enabled from 2026-10-06. Verify the first scheduled snapshot and month-end posting. Preserve runtime Azure SQL and EOD settings when recreating containers; unchanged Compose defaults disable EOD. This session did not deploy to the Azure VM.
+- **Interest EOD monitoring & operations** — local Docker is running with single-admin simulation workflow (`InterestEodService.java`), PostgreSQL migration applied (`scripts/migrate_interest_single_admin_postgres.sql`), and Interest Admin UI deployed in `frontend-spa`. Monitor scheduled snapshots and end-of-month posting. Preserve runtime Azure SQL and EOD settings when recreating containers; unchanged Compose defaults disable EOD. Azure VM deployment was left unchanged per request.
 - **Phase 7** — Mobile Frontend (PWA)
 - **Phase 8** — Chaos + Load Testing
 
@@ -283,12 +286,14 @@ All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temuri
 - **Immutable PostgreSQL records:** `interest_accrual` is unique per account/business date. `interest_accrual_batch` commits with all daily rows and seals the date, including empty batches. Rules ignore UPDATE/DELETE; triggers reject TRUNCATE and inserts into sealed dates. Neither table has a posting flag.
 - **Monthly posting:** after the final day's accrual, sum the period and round once to two decimals. Savings credits, `LEDGER_TRANSACTION`, `OUTBOX_EVENT` and `EOD_JOB_RUN` commit in one Azure SQL transaction. Outbox/Kafka delivers credits to the existing PostgreSQL `LEDGER_MUTATION_AUDIT` GL; there is no separate Azure GL table. Loans accrue only; existing loan repayment/overdue processing stays separate. Zero interest completes the EOD job without a financial transaction or GL entry.
 - **Retry and concurrency protection:** shared SQL Server application lock plus account locks; the application lock requires an explicit transaction before acquisition. The existing unique LEDGER_TRANSACTION reference `INT-<period-end>-<account-id>` prevents duplicate credits; replay verifies its amount against immutable accrual totals. Audit consumers deduplicate by transaction/account and retry database failures rather than acknowledge them. Retries reuse committed PostgreSQL snapshots after an Azure SQL failure. Missing dates block posting; historical snapshots are never fabricated from current balances. Hourly recovery retries unfinished closed months.
-- **Admin endpoints:** `POST /api/v1/interest/eod/accrue?businessDate=YYYY-MM-DD` and `POST /api/v1/interest/eod/post?businessDate=YYYY-MM-DD`. Gateway and controller require `ROLE_ADMIN`; posting requires a calendar month-end.
-- **Activation:** disabled by default. Apply `scripts/migrate_interest_azuresql.sql` and `scripts/migrate_interest_postgres.sql`; set `INTEREST_EOD_ENABLED=true`, a stable `INTEREST_START_DATE`, and `INTEREST_POSTGRES_URL`, `INTEREST_POSTGRES_USERNAME`, `INTEREST_POSTGRES_PASSWORD`. A midmonth start creates an explicit partial first period. Default cutoff: 23:59:59 Asia/Manila; recovery runs hourly at minute 15. Cron and timezone are configurable.
+- **Admin endpoints:** `POST /api/v1/interest/eod/accrue?businessDate=YYYY-MM-DD` and `POST /api/v1/interest/eod/post?businessDate=YYYY-MM-DD`. Recovery: `GET /api/v1/interest/eod/missing?periodEnd=YYYY-MM-DD`; `POST /api/v1/interest/eod/resolve?businessDate=YYYY-MM-DD` prepares a proposal only; `GET /api/v1/interest/eod/backfills/{id}` reviews it; `POST /api/v1/interest/eod/backfills/{id}/approve` requires a different admin. Gateway and controller require `ROLE_ADMIN`; posting requires a calendar month-end.
+- **Activation:** disabled by default. Apply `scripts/migrate_interest_azuresql.sql` and `scripts/migrate_interest_postgres.sql`; existing installations require recovery then approval PostgreSQL migrations. Set `INTEREST_EOD_ENABLED=true`, a stable `INTEREST_START_DATE`, and `INTEREST_POSTGRES_URL`, `INTEREST_POSTGRES_USERNAME`, `INTEREST_POSTGRES_PASSWORD`. A midmonth start creates an explicit partial first period. Source default cutoff remains 23:59:59 Asia/Manila (`59 59 23 * * *`); recovery runs hourly at minute 15. Preserve runtime overrides; do not change the banking cutoff as a scheduling workaround.
 - **Validation:** transaction-service 66/66 and api-gateway 16/16 passed, including 10 native PostgreSQL 15/SQL Server 2022 tests for immutability, precision, duplicate/concurrent posting and rollback/recovery. `scripts/test_interest.ps1` creates and removes disposable databases; test containers were removed. Subsequent PostgreSQL GL integration validation: transaction-service 68/68 (including 12 native database tests) and audit-service 10/10 passed. Both migrations applied; transaction/audit containers rebuilt and healthy. The retirement migration refuses to drop GL_ENTRY if historical rows exist.
 - **Documentation:** [interest EOD setup and operation](../docs/interest-eod.md); README and ERD updated.
 
 ## Required workflow and verified local deployment (2026-10-06)
+
+The missed-day fix below is implemented and tested; the previously verified runtime settings in this section have not been changed by this fix.
 
 - Read this file and memory-bank/AGENTS.md before writing code. After every change, update this file and add a newest-first CHANGELOG.md entry. Root AGENTS.md makes this rule visible to future workspace sessions.
 - Local containers use hosted Azure SQL paypink-sql.database.windows.net, database paypink; PostgreSQL ledger_audit_db remains in Docker. Azure VM deployment/status was not reverified in this session.
@@ -297,3 +302,12 @@ All planned phases complete through Phase 6 with CI/CD passing on Java 17 Temuri
 - EOD settings were passed in memory without editing Compose/.env; preserve them during future rebuilds or recreate will restore disabled defaults.
 - PostgreSQL GL delivery is asynchronous through remittance.events/ledger.transaction.events and audit-service. Duplicate ledger legs are ignored; database errors propagate to Kafka retries.
 - No live accrual or monthly posting was manually triggered for verification. Mobile remained excluded from rebuilding.
+
+## Interest missed-day recovery and independent approval (2026-10-06) - aly
+
+- Worker now retains the intended scheduled date before execution; queue delays across midnight cannot select the next day. Live captures crossing midnight fail safely and require historical recovery.
+- Admin missing-day listing includes only elapsed dates. `/resolve` accepts only BACKFILL and stores an immutable PENDING_APPROVAL proposal with historical manifest, reason, source reference, original preparer and hash. Preparation does not complete a day. A second admin reviews `/backfills/{id}` and approves with a reason and confirmation at `/backfills/{id}/approve`. Self-approval (including case variants) is rejected by both service and PostgreSQL.
+- Approval, historical accruals and batch completion commit together in PostgreSQL. Original maker/checker identities, timestamps, reasons and source remain immutable. Account existence/opening dates and current account types are checked. Matching retries reuse the original proposal/snapshot; posted periods and sealed dates cannot be replaced. Savings rates are derived from supplied historical balances; loan rates come from supplied contract history. Both admins verify completeness against historical evidence because current account data cannot prove past activity.
+- WAIVER requests and new waiver records are rejected. Missing data never becomes zero interest. Legacy waived/unapproved sealed records remain archived but do not count as complete; correcting them needs a separate adjustment process. Missing periods remain unresolved and block their monthly posting. Hourly recovery reports them while processing complete later periods. Compensation for delayed capitalization and recalculation of already sealed later interest are not implemented by this API.
+- Midmonth customer openings remain valid: September 20-30 earns 11 days, with no pre-opening account accrual required. Bank-wide daily completion checks stay in place.
+- Validation: 94/94 transaction-service tests passed, including 23 native PostgreSQL 15/SQL Server 2022 tests. Coverage includes self-approval/waiver rejection, immutable proposals/approvals, concurrent approval, atomic rollback, Azure failure after PostgreSQL commit, pinned dates/midnight guards and September 20-30 accrual. Disposable test containers were removed. See `docs/interest-eod.md` for requests and migrations. Local runtime and Azure VM have not been updated with this fix.
