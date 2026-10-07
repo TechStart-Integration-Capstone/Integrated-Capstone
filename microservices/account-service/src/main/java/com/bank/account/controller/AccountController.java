@@ -18,6 +18,19 @@ public class AccountController {
 
     public AccountController(AccountService accountService) { this.accountService = accountService; }
 
+    @GetMapping("/me")
+    public ResponseEntity<com.bank.account.dto.UserProfileDto> getMe(
+            @RequestHeader(value = "X-Auth-Customer-Id", required = false) Long customerIdHeader,
+            @RequestParam(value = "customerId", required = false) Long customerIdParam) {
+
+        Long customerId = customerIdHeader != null ? customerIdHeader : customerIdParam;
+        if (customerId == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Please log in again.");
+        }
+        return ResponseEntity.ok(accountService.getUserProfile(customerId));
+    }
+
     @GetMapping
     public ResponseEntity<List<AccountDto>> getAllAccounts() {
         return ResponseEntity.ok(accountService.getAllAccounts());

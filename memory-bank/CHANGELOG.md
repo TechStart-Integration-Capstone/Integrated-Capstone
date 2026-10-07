@@ -1,6 +1,13 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Phase 5: Account Service Consolidation:
+  - Added authoritative Core Account balance inquiry endpoint in `t24-adapter`: `GET /api/v1/t24/accounts/{accountIdOrNumber}/balance` with `T24AccountInquiryControllerTest` (2/2 passing, 30/30 total in `t24-adapter`).
+  - Built `T24AccountClient` in `account-service` to query live core account balances from T24 Core.
+  - Added `getUserProfile` and `GET /api/v1/accounts/me` to `account-service` serving customer profile and accounts with live core balances.
+  - Ported recipient lookup, directory, and favorites management into `account-service` via `BeneficiaryService` and `BeneficiaryController` (`/api/v1/accounts/recipients/**` and `/favorites/**`).
+  - Added test suite `AccountConsolidationControllerTest` (5/5 passing). All 17/17 unit tests in `account-service` passing cleanly. — [dom]
+
 - 2026-10-07 — Phase 4: Transaction History & CQRS Read-Model Consolidation:
   - Added Apache PDFBox 3.0.8 dependency to `transaction-service`.
   - Built CQRS query layer in `transaction-service`: `TransactionActivityService` (customer transaction activity with counterparty details), `TransactionStatementReportService` (PDF statement export), and `AdminTransactionMonitorService` (Operations Desk real-time feed).
