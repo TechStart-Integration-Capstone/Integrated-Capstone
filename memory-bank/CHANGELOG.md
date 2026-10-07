@@ -1,6 +1,13 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Phase 9: Frontend Polish, Synonym Cleanup Script & Final Global Test Verification:
+  - Verified `mobile/` directory remains 100% frozen with zero diffs against `pre-domain-refactor` baseline tag; confirmed strict backward compatibility across all 6 core mobile API contracts.
+  - Verified Web SPA (`frontend/`) contracts, routes, and API clients seamlessly operate against refactored backend and API gateway routing.
+  - Generated idempotent synonym retirement script `scripts/retire_phase9_synonyms.sql` to drop transitional `dbo.*` synonyms once all services communicate via direct `t24.*` and `app.*` schemas.
+  - Verified 100% test pass rate across all microservices (api-gateway: 20/20, account-service: 17/17, t24-adapter: 30/30, loan-service: 41/41, transaction-service: 105/105, audit-service: 10/10, reconciliation-service: 8/8, notification-service: 16/16, outbox-publisher: 9/9, analytics-service: 17/17).
+  - All 10 phases (Phase 0 through Phase 9) of PayPink 2.0 T24 Core Banking and DDD Architecture Refactoring successfully completed. — [dom]
+
 - 2026-10-08 — Phase 8: Events, Audit & Reconciliation Re-point:
   - Audited and verified event consumption pipelines for T24 Core double-entry ledger postings across `remittance.events` and `ledger.transaction.events`.
   - Confirmed `audit-service` immutably captures `LEDGER_MUTATION_AUDIT` records in PostgreSQL for all transfer, loan, and interest debits.
