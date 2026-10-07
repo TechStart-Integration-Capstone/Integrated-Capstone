@@ -51,7 +51,7 @@ class InterestEodServiceTest {
         when(audit.completedDates(end.withDayOfMonth(1), end)).thenReturn(
                 end.withDayOfMonth(1).datesUntil(end.plusDays(1)).collect(Collectors.toSet()));
         when(audit.monthlyTotals(any(), any())).thenReturn(List.of(new InterestAccrualStore.MonthlyTotal(1, new BigDecimal("33.97"))));
-        service.runToday();
+        service.runBusinessDate(end);
         var order = inOrder(audit, ledger);
         order.verify(audit).append(eq(end), argThat(rows -> rows.get(0).amount().compareTo(new BigDecimal("1.095890")) == 0));
         order.verify(ledger).post(any(), eq(end.withDayOfMonth(1)), eq(end), eq(7L));
@@ -69,5 +69,51 @@ class InterestEodServiceTest {
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
                 .hasMessageContaining("403");
         verifyNoInteractions(ledger, audit);
+    }
+
+    @Test void delayedRunKeepsPreviousBusinessDateAndNeverCapturesToday() {
+        var delayed = new InterestEodService(ledger, audit, end.withDayOfMonth(1),
+                Clock.fixed(Instant.parse("2026-10-31T16:00:01Z"), ZoneId.of("Asia/Manila")));
+        assertThatThrownBy(() -> delayed.runBusinessDate(end)).hasMessageContaining("Historical EOD snapshot");
+        verify(audit).completed(end);
+        verify(audit, never()).completed(end.plusDays(1));
+        verify(ledger, never()).activeAccounts();
+    }
+
+    @Test void sourceReadCrossingMidnightCannotSealWrongSnapshot() {
+        Clock clock = mock(Clock.class);
+        when(clock.getZone()).thenReturn(ZoneId.of("Asia/Manila"));
+        when(clock.instant()).thenReturn(Instant.parse("2026-10-31T15:59:59Z"),
+                Instant.parse("2026-10-31T15:59:59Z"), Instant.parse("2026-10-31T16:00:00Z"));
+        var crossing = new InterestEodService(ledger, audit, end.withDayOfMonth(1), clock);
+        when(ledger.activeAccounts()).thenReturn(List.of());
+        assertThatThrownBy(() -> crossing.accrue(end)).hasMessageContaining("crossed midnight");
+        verify(audit, never()).append(any(), any());
+    }
+
+    @Test void recoveryRejectsUnconfirmedBackfillAndDuplicateAccounts() {
+        var row = new InterestRecoveryRequest.HistoricalAccount(1, "SAVINGS", BigDecimal.TEN, null);
+        var unconfirmed = new InterestRecoveryRequest(InterestRecoveryRequest.Mode.BACKFILL, "reason", "case-1", false, List.of());
+        assertThatIllegalArgumentException().isThrownBy(() -> service.prepareBackfill(end.minusDays(1), unconfirmed, "admin"));
+        var duplicates = new InterestRecoveryRequest(InterestRecoveryRequest.Mode.BACKFILL, "reason", "case-1", true, List.of(row, row));
+        assertThatThrownBy(() -> service.prepareBackfill(end.minusDays(1), duplicates, "admin")).hasMessageContaining("distinct");
+        verifyNoInteractions(ledger, audit);
+    }
+
+    @Test void recoveryEndpointsRequireAdminAndAuthenticatedActor() {
+        var controller = new InterestEodController(service);
+        var request = new InterestRecoveryRequest(InterestRecoveryRequest.Mode.BACKFILL, "reason", "case-1", true, List.of());
+        assertThatThrownBy(() -> controller.resolve("ROLE_CUSTOMER", "customer", end.minusDays(1), request)).hasMessageContaining("403");
+        assertThatThrownBy(() -> controller.missing("ROLE_CUSTOMER", end)).hasMessageContaining("403");
+        assertThatThrownBy(() -> controller.resolve("ROLE_ADMIN", null, end.minusDays(1), request)).hasMessageContaining("401");
+        verifyNoInteractions(ledger, audit);
+    }
+
+    @Test void missingDayListingExcludesFutureDatesAndDaysBeforeActivation() {
+        var first = end.minusDays(2);
+        var recent = new InterestEodService(ledger, audit, first,
+                Clock.fixed(Instant.parse("2026-10-31T04:00:00Z"), ZoneId.of("Asia/Manila")));
+        when(audit.completedDates(first, end.minusDays(1))).thenReturn(java.util.Set.of(first));
+        assertThat(recent.missingDays(end)).containsExactly(end.minusDays(1));
     }
 }

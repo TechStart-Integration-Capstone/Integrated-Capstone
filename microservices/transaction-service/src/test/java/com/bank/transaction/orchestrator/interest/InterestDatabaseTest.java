@@ -24,6 +24,7 @@ class InterestDatabaseTest {
     private InterestLedger ledger;
     private InterestAccrualStore audit;
     private String sqlMigration;
+    private String recoveryMigration;
     private static final LocalDate END = LocalDate.of(2026, 10, 31);
 
     @BeforeEach void setup() throws Exception {
@@ -45,6 +46,7 @@ class InterestDatabaseTest {
         sql.update("UPDATE dbo.ACCOUNT SET status = 'INACTIVE'");
         pg.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
         String migration = Files.readString(root.resolve("scripts/migrate_interest_postgres.sql"));
+        recoveryMigration = Files.readString(root.resolve("scripts/migrate_interest_recovery_postgres.sql"));
         pg.execute(migration);
         pg.execute(migration);
         ledger = new InterestLedger(sql, new TransactionTemplate(new DataSourceTransactionManager(primary)), new ObjectMapper());
@@ -58,8 +60,8 @@ class InterestDatabaseTest {
 
     private long account(String type, String balance, String rate) {
         return sql.queryForObject("""
-                INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, current_balance, interest_rate)
-                OUTPUT INSERTED.account_id VALUES (1, ?, ?, ?, ?)
+                INSERT INTO dbo.ACCOUNT (customer_id, account_number, account_type, current_balance, interest_rate, created_date)
+                OUTPUT INSERTED.account_id VALUES (1, ?, ?, ?, ?, '2020-01-01T00:00:00')
                 """, Long.class, java.util.UUID.randomUUID().toString().substring(0, 30),
                 type, new BigDecimal(balance), new BigDecimal(rate));
     }
@@ -177,7 +179,7 @@ class InterestDatabaseTest {
     @Test void zeroInterestCompletesJobWithoutFinancialEntry() {
         account("SAVINGS", "0", "0");
         var worker = service(END, END);
-        worker.runToday();
+        worker.runBusinessDate(END);
         assertThat(ledger.postingComplete(END)).isTrue();
         assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.LEDGER_TRANSACTION", Integer.class)).isZero();
         assertThat(worker.postMonth(END).replayed()).isTrue();
@@ -194,7 +196,7 @@ class InterestDatabaseTest {
     @Test void replayChecksExistingTransactionAgainstImmutableAccrualAmount() {
         long id = account("SAVINGS", "10000", "0");
         var worker = service(END, END);
-        worker.runToday();
+        worker.runBusinessDate(END);
         sql.update("UPDATE dbo.LEDGER_TRANSACTION SET amount = 2 WHERE reference_no = ?", "INT-" + END + "-" + id);
         assertThatThrownBy(() -> worker.postMonth(END)).hasMessageContaining("differs from immutable accruals");
         assertThat(balance(id)).isEqualByComparingTo("10001.10");
@@ -211,9 +213,204 @@ class InterestDatabaseTest {
     @Test void leapFebruaryUses365AndRealCalendarMonthEnd() {
         long id = account("SAVINGS", "10000", "0");
         LocalDate leapEnd = LocalDate.of(2028, 2, 29);
-        service(leapEnd, leapEnd).runToday();
+        service(leapEnd, leapEnd).runBusinessDate(leapEnd);
         assertThat(balance(id)).isEqualByComparingTo("10001.10");
         assertThat(pg.queryForObject("SELECT interest_amount FROM interest_accrual", BigDecimal.class))
                 .isEqualTo(new BigDecimal("1.095890"));
+    }
+    private InterestRecoveryRequest backfill(long id, String balance) {
+        return new InterestRecoveryRequest(InterestRecoveryRequest.Mode.BACKFILL,
+                "Recovered after outage; complete eligible account manifest", "EOD-export-2026-10-30", true,
+                List.of(new InterestRecoveryRequest.HistoricalAccount(id, "SAVINGS", new BigDecimal(balance), null)));
+    }
+
+    @Test void recoveryMigrationUpgradesExistingImmutableBatchWithoutChangingSnapshot() {
+        account("SAVINGS", "10000", "0");
+        service(END, END).accrue(END);
+        pg.execute("""
+                ALTER TABLE interest_accrual_batch DROP CONSTRAINT ck_interest_resolution,
+                    DROP COLUMN resolution_type, DROP COLUMN resolved_by, DROP COLUMN resolution_reason,
+                    DROP COLUMN source_reference, DROP COLUMN request_hash
+                """);
+        pg.execute(recoveryMigration);
+        pg.execute(recoveryMigration);
+        assertThat(audit.resolution(END).mode()).isEqualTo("SNAPSHOT");
+        assertThat(audit.resolution(END).actor()).isNull();
+        assertThat(pg.queryForObject("SELECT interest_amount FROM interest_accrual", BigDecimal.class))
+                .isEqualByComparingTo("1.095890");
+        assertThat(pg.update("UPDATE interest_accrual_batch SET resolution_type = 'WAIVER'")).isZero();
+    }
+
+    @Test void recoveryCannotReopenAnAlreadyPostedPeriod() {
+        long id = account("SAVINGS", "10000", "0");
+        service(END, END).runBusinessDate(END);
+        assertThatThrownBy(() -> service(END.plusDays(1), END.withDayOfMonth(1))
+                .prepareBackfill(END.minusDays(1), backfill(id, "1000"), "aly"))
+                .hasMessageContaining("already posted");
+        assertThat(audit.completed(END.minusDays(1))).isFalse();
+    }
+
+    @Test void missingDayBackfillUnblocksPostingWithoutUsingCurrentBalance() {
+        long id = account("SAVINGS", "10000", "0");
+        LocalDate missing = END.minusDays(1);
+        var worker = service(END.plusDays(1), missing);
+        service(END, missing).accrue(END);
+        assertThat(worker.missingDays(END)).containsExactly(missing);
+        assertThat(worker.recoverClosedMonths().blockedPeriods()).containsKey(END);
+        var proposal = worker.prepareBackfill(missing, backfill(id, "1000"), "aly");
+        assertThat(proposal.getStatus()).isEqualTo("PENDING_APPROVAL");
+        assertThat(audit.completed(missing)).isFalse();
+        assertThat(worker.missingDays(END)).containsExactly(missing);
+        assertThatThrownBy(() -> worker.postMonth(END)).hasMessageContaining("missing");
+        worker.approveBackfill(proposal.proposalId(), new InterestRecoveryRequest.Approval("Verified source and completeness", true), "checker");
+        assertThat(balance(id)).isEqualByComparingTo("10000");
+        assertThat(audit.resolution(missing).actor()).isEqualTo("aly");
+        assertThat(audit.resolution(missing).mode()).isEqualTo("BACKFILL");
+        assertThat(worker.prepareBackfill(missing, backfill(id, "1000.0000"), "another-admin").proposalId()).isEqualTo(proposal.proposalId());
+        assertThat(worker.approveBackfill(proposal.proposalId(), new InterestRecoveryRequest.Approval("Verified source and completeness", true), "checker").replayed()).isTrue();
+        assertThat(worker.backfillProposal(proposal.proposalId()).approvedBy()).isEqualTo("checker");
+        assertThatThrownBy(() -> worker.prepareBackfill(missing, backfill(id, "2000"), "aly")).hasMessageContaining("already sealed");
+        assertThat(worker.recoverClosedMonths().blockedPeriods()).isEmpty();
+        assertThat(balance(id)).isEqualByComparingTo("10001.16"); // .068493 + 1.095890
+        worker.recoverClosedMonths();
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM dbo.LEDGER_TRANSACTION", Integer.class)).isEqualTo(1);
+    }
+
+    @Test void waiverAndUnapprovedBackfillAreRejectedByDatabaseAndDayStaysUnresolved() {
+        long id = account("SAVINGS", "10000", "0");
+        var worker = service(END.plusDays(1), END.minusDays(1));
+        service(END, END.minusDays(1)).accrue(END);
+        for (String mode : List.of("WAIVER", "BACKFILL")) {
+            assertThatThrownBy(() -> audit.append(END.minusDays(1), List.of(),
+                    new InterestAccrualStore.Resolution(mode, "aly", "reason", "source", "a".repeat(64))))
+                    .isInstanceOf(RuntimeException.class);
+        }
+        assertThat(worker.recoverClosedMonths().blockedPeriods()).containsKey(END);
+        assertThat(balance(id)).isEqualByComparingTo("10000");
+        assertThat(worker.missingDays(END)).containsExactly(END.minusDays(1));
+    }
+
+    @Test void sameAdminMustFileThenApproveAndBothAuditRecordsCannotBeChanged() {
+        long id = account("SAVINGS", "10000", "0");
+        var worker = service(END.plusDays(1), END);
+        var proposal = worker.prepareBackfill(END, backfill(id, "1000"), " Aly ");
+        var approval = new InterestRecoveryRequest.Approval("Checked historical source", true);
+        assertThat(audit.completed(END)).isFalse();
+        assertThat(worker.overview(END).postingStatus()).isEqualTo("BLOCKED");
+        assertThat(worker.overview(END).proposals().get(0).status()).isEqualTo("PENDING_APPROVAL");
+        assertThatThrownBy(() -> worker.approveBackfill(proposal.proposalId(),
+                new InterestRecoveryRequest.Approval("Not yet checked", false), "ALY"))
+                .hasMessageContaining("Review confirmation");
+        worker.approveBackfill(proposal.proposalId(), approval, "ALY");
+        assertThat(worker.overview(END).postingStatus()).isEqualTo("READY");
+        assertThat(worker.overview(END).missingDays()).isEmpty();
+        assertThat(worker.overview(END).proposals().get(0).status()).isEqualTo("APPROVED");
+        var approved = worker.backfillProposal(proposal.proposalId());
+        assertThat(approved.approvedBy()).isEqualTo("aly");
+        assertThat(approved.preparedAt()).isNotNull();
+        assertThat(approved.approvedAt()).isNotNull();
+        assertThat(approved.approvalReason()).isEqualTo("Checked historical source");
+        assertThat(pg.update("UPDATE interest_backfill_proposal SET prepared_by = 'checker'")).isZero();
+        assertThat(pg.update("DELETE FROM interest_backfill_proposal")).isZero();
+        assertThat(pg.update("UPDATE interest_backfill_approval SET approval_reason = 'changed'")).isZero();
+        assertThat(pg.update("DELETE FROM interest_backfill_approval")).isZero();
+        assertThatThrownBy(() -> pg.execute("TRUNCATE interest_backfill_approval")).hasMessageContaining("append-only");
+        assertThatThrownBy(() -> pg.execute("TRUNCATE interest_backfill_proposal CASCADE")).hasMessageContaining("append-only");
+        assertThat(worker.backfillProposal(proposal.proposalId()).preparedBy()).isEqualTo("aly");
+        worker.postMonth(END);
+        assertThat(worker.overview(END).postingStatus()).isEqualTo("POSTED");
+    }
+
+    @Test void overviewUsesConfiguredStartAndDoesNotTreatTodayAsMissing() {
+        var worker = service(END.minusDays(3), END.minusDays(4));
+        assertThat(worker.overview(null).periodStart()).isEqualTo(END.minusDays(4));
+        assertThat(worker.overview(null).missingDays()).containsExactly(END.minusDays(4));
+        service(END.minusDays(4), END.minusDays(4)).accrue(END.minusDays(4));
+        assertThat(worker.overview(null).postingStatus()).isEqualTo("ACCRUING");
+    }
+
+    @Test void failedBackfillRollsBackApprovalAndAllAccrualsTogether() {
+        long id = account("SAVINGS", "10000", "0");
+        var worker = service(END.plusDays(1), END);
+        var proposal = worker.prepareBackfill(END, backfill(id, "1000"), "aly");
+        pg.execute("ALTER TABLE interest_accrual ADD CONSTRAINT injected_failure CHECK (account_id <> " + id + ")");
+        var approval = new InterestRecoveryRequest.Approval("Checked source", true);
+        assertThatThrownBy(() -> worker.approveBackfill(proposal.proposalId(), approval, "checker"))
+                .isInstanceOf(RuntimeException.class);
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM interest_backfill_approval", Integer.class)).isZero();
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM interest_accrual", Integer.class)).isZero();
+        assertThat(audit.completed(END)).isFalse();
+        assertThat(worker.backfillProposal(proposal.proposalId()).getStatus()).isEqualTo("PENDING_APPROVAL");
+        pg.execute("ALTER TABLE interest_accrual DROP CONSTRAINT injected_failure");
+        worker.approveBackfill(proposal.proposalId(), approval, "checker");
+        assertThat(audit.completed(END)).isTrue();
+    }
+
+    @Test void concurrentApprovalCompletesBackfillExactlyOnce() throws Exception {
+        long id = account("SAVINGS", "10000", "0");
+        var worker = service(END.plusDays(1), END);
+        var proposal = worker.prepareBackfill(END, backfill(id, "1000"), "aly");
+        var approval = new InterestRecoveryRequest.Approval("Checked source", true);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch go = new CountDownLatch(1);
+            Callable<InterestEodService.Result> task = () -> {
+                go.await();
+                return worker.approveBackfill(proposal.proposalId(), approval, "checker");
+            };
+            var first = executor.submit(task);
+            var second = executor.submit(task);
+            go.countDown();
+            assertThat(first.get(30, TimeUnit.SECONDS).accounts() + second.get(30, TimeUnit.SECONDS).accounts()).isEqualTo(1);
+        } finally { executor.shutdownNow(); }
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM interest_backfill_approval", Integer.class)).isEqualTo(1);
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM interest_accrual", Integer.class)).isEqualTo(1);
+    }
+
+    @Test void historicalRecoveryCannotIncludeAccountsOpenedAfterTheMissingDate() {
+        long id = account("SAVINGS", "10000", "0");
+        sql.update("UPDATE dbo.ACCOUNT SET created_date = '2026-10-31T00:00:00' WHERE account_id = ?", id);
+        assertThatThrownBy(() -> service(END, END.minusDays(1)).prepareBackfill(END.minusDays(1), backfill(id, "10000"), "aly"))
+                .hasMessageContaining("does not exist on that date");
+        assertThat(audit.completed(END.minusDays(1))).isFalse();
+    }
+
+    @Test void recoveryCommitSurvivesAzureFailureAndCanBeReplayed() {
+        long id = account("SAVINGS", "10000", "0");
+        var worker = service(END, END.minusDays(1));
+        var proposal = worker.prepareBackfill(END.minusDays(1), backfill(id, "1000"), "aly");
+        sql.execute("ALTER TABLE dbo.EOD_JOB_RUN ADD CONSTRAINT injected_failure CHECK (status <> 'SUCCESS')");
+        assertThatThrownBy(() -> worker.approveBackfill(proposal.proposalId(), new InterestRecoveryRequest.Approval("verified", true), "checker"))
+                .isInstanceOf(RuntimeException.class);
+        assertThat(audit.completed(END.minusDays(1))).isTrue();
+        sql.execute("ALTER TABLE dbo.EOD_JOB_RUN DROP CONSTRAINT injected_failure");
+        assertThat(worker.approveBackfill(proposal.proposalId(), new InterestRecoveryRequest.Approval("verified", true), "checker").replayed()).isTrue();
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM interest_accrual", Integer.class)).isEqualTo(1);
+    }
+
+    @Test void september20AccountEarnsOnlySeptember20Through30() {
+        LocalDate start = LocalDate.of(2026, 9, 1);
+        LocalDate end = LocalDate.of(2026, 9, 30);
+        long id = 0;
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+            if (date.getDayOfMonth() == 20) {
+                id = account("SAVINGS_ACCOUNT", "10000", "0");
+                sql.update("UPDATE dbo.ACCOUNT SET created_date = '2026-09-20T00:00:00' WHERE account_id = ?", id);
+            }
+            service(date, start).runBusinessDate(date);
+        }
+        assertThat(balance(id)).isEqualByComparingTo("10012.05");
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM interest_accrual WHERE account_id = ?", Integer.class, id)).isEqualTo(11);
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM interest_accrual_batch", Integer.class)).isEqualTo(30);
+    }
+
+    @Test void unfinishedEarlierMonthDoesNotPreventRecoveryOfCompleteLaterMonth() {
+        long id = account("SAVINGS", "10000", "0");
+        LocalDate start = END.minusMonths(1); // September 30 is missing
+        for (LocalDate date = END.withDayOfMonth(1); !date.isAfter(END); date = date.plusDays(1))
+            service(date, start).accrue(date);
+        var result = service(END.plusDays(1), start).recoverClosedMonths();
+        assertThat(result.blockedPeriods()).containsOnlyKeys(start);
+        assertThat(balance(id)).isEqualByComparingTo("10033.97");
     }
 }
