@@ -108,7 +108,7 @@ function renderShell() {
   const initials = name.split(/\s+/).slice(0,2).map(part => part[0]).join('').toUpperCase();
   app.innerHTML = `<div class="bank-layout">
     <aside class="sidebar">${brand()}<div class="eyebrow">YOUR BANKING</div>
-      <nav aria-label="Main navigation">${navLink('overview','Overview','home')}${navLink('accounts','My accounts','wallet')}${navLink('transfer','Transfers','arrow')}${navLink('activity','Transactions','activity')}${navLink('loans','Loans','coins')}</nav>
+      <nav aria-label="Main navigation">${navLink('overview','Overview','home')}${navLink('accounts','My accounts','wallet')}${navLink('transfer','Transfers','arrow')}${navLink('activity','Transactions','activity')}${navLink('loans','Loans','coins')}${navLink('savings','Savings','star')}</nav>
       <div class="sidebar-bottom"><div class="privacy-note">${icon('shield')}<strong>A little privacy goes a long way.</strong><p>Keep your account details and password just for you.</p></div><button class="logout" data-action="logout">${icon('logout')}<span>Log out</span></button></div>
     </aside>
     <div class="bank-content"><header class="topbar"><div class="breadcrumb"><span>PayPink</span><span>/</span><strong id="breadcrumb-page">Personal banking</strong></div>
@@ -124,7 +124,7 @@ function heading(title, subtitle) {
 function renderPage() {
   const main = document.querySelector('#main');
   if (!state.session || !main) return;
-  const titles = {overview:'Overview',accounts:'My accounts',activity:'Transactions',transfer:'Transfers',loans:'Loans'};
+  const titles = {overview:'Overview',accounts:'My accounts',activity:'Transactions',transfer:'Transfers',loans:'Loans',savings:'Savings'};
   document.title = `${titles[state.page]} — PayPink`;
   document.querySelector('#breadcrumb-page').textContent = titles[state.page];
   document.querySelectorAll('.nav-link').forEach(button => {
@@ -132,6 +132,10 @@ function renderPage() {
     button.classList.toggle('active',active);
     if (active) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
   });
+  if (state.page === 'savings') {
+    main.innerHTML = window.PayPinkSavings.render();
+    return;
+  }
   if (!state.profile) {
     main.innerHTML = heading('Your banking, in a moment.', 'We’re getting your accounts ready.') + (state.error
       ? `<div class="notice" role="alert">${escapeHtml(state.error)} Use Refresh to try again.</div>`
@@ -312,6 +316,8 @@ function scheduleExpiry() {
 }
 
 function logout(message = 'You’ve been logged out. See you again soon.') {
+  window.PayPinkSavings.reset();
+  document.querySelector('#savings-dialog')?.close();
   dismissTransferPopups();
   clearTimeout(expiryTimer);
   try { sessionStorage.removeItem(SESSION_KEY); } catch { /* No persisted session. */ }

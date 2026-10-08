@@ -2,12 +2,24 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (JMeter CLI Runners & PowerShell 5.1 Encoding Fix by [dom])_
-_Last Updated: 2026-10-08 (JMeter CLI Runners & PowerShell 5.1 Encoding Fix by [dom])_
+_Last Updated: 2026-10-08 (Savings and PinkCircle UI preview, offline validation by [dom])_
 
 ---
 
+### Admin UI simplification (2026-10-08)
+
+- Admin presentation now uses concise navigation and single page headings, neutral slate surfaces, restrained rose accents and compact cards. Removed promotional banners and repeated technical copy; system configuration is expandable under System performance. Operational controls, validation guidance and simulation identification remain. Report cards stack on mobile.
+- Local frontend change only; backend, API contracts and deployment unchanged. JavaScript syntax and 11 transaction-monitor tests pass; browser visual validation not performed.
+
 ## Active Initiative: T24 Core Banking & DDD Domain Refactoring
+
+### Savings UI prototype (2026-10-08)
+
+- Bank Savings and standalone preview share savings.js / savings.css: four personal goals, three PinkCircles, three-step goal creation, Smart Split, add/release, editing and session activity. Allocations adjust sample spendable funds; no APIs or real reservations are implemented.
+- Compact overview cards use reduced padding, smaller total typography and badge medals. My Savings / PinkCircles navigation sits below the overview. Personal savings shows a dynamic goal count with in-progress/completed counts, matching the circle summary. Compact layout reviewed in a desktop screenshot; existing offline browser and mobile checks pass.
+- Rose total card switches between personal savings (initial PHP 23,500) and own contributions across circles (initial PHP 10,700). Removed shared UI concept banner and spendable/reserved/account overview breakdown, plus standalone topbar Demo preview label.
+- Restored collectible First PHP 1K, Emergency Era (PHP 100K emergency cushion), Consistency Queen (four consecutive scheduled contributions) and Million Club badges, earned/locked states and detail dialogs. Streaks and milestones remain separate. Existing interest tiers unchanged; proposed 5% is illustrative and inactive.
+- Local frontend only; backend, schemas, mobile and deployment unchanged. Current offline browser checks pass for totals and their updates, badges, banner removal, creation validation, mobile layouts, keyboard dismissal, no preview API calls and real bank navigation/logout. Desktop screenshot reviewed; corrected new badge icon encoding.
 
 The PayPink system is being refactored from a shared-database monolithic ledger into a Domain-Driven Design (DDD) banking architecture. In this design, Temenos T24 (simulated by `t24-adapter`) acts as the stateful System of Record (SoR) and authoritative double-entry book of record.
 

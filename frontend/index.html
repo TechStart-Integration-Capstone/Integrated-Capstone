@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PayPink Admin | Core Retail Ledger & Balance Mutation Engine</title>
+    <title>PayPink | Administration</title>
     <meta name="description" content="High-Throughput Relational Balance Mutation, Distributed In-Memory Validation, Transactional Outbox Kafka Streaming, and PostgreSQL Immutable Audit Trail.">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="src/css/style.css?v=20260928-admin-1">
-    <link rel="stylesheet" href="admin/admin.css?v=20261006-interest">
+    <link rel="stylesheet" href="admin/admin.css?v=20261008-bank-admin">
     <link rel="stylesheet" href="admin/interest.css?v=20261006-1">
 </head>
 <body>
@@ -155,7 +155,7 @@
                                         <select id="select-source-account" class="form-control" required></select>
                                     </div>
                                     <div class="form-group">
-                                        <label for="select-target-account">Beneficiary / Target</label>
+                                        <label for="select-target-account">Beneficiary</label>
                                         <select id="select-target-account" class="form-control">
                                             <option value="4">Maria Santos (ACC-PH-2002-3311 - Makati CBD)</option>
                                             <option value="5">Joshua Reyes (ACC-PH-3003-4422 - Ortigas Center)</option>
@@ -171,10 +171,10 @@
                                             <span class="currency-prefix">₱</span>
                                             <input type="number" step="0.0001" min="0.0001" id="input-transfer-amount" class="form-control currency-input" placeholder="1,500.0000" required>
                                         </div>
-                                        <small class="field-hint">Enforces JSR-380 @Digits(integer=14, fraction=4) and @Positive</small>
+                                        <small class="field-hint">Up to 4 decimal places.</small>
                                     </div>
                                     <div class="form-group">
-                                        <label for="input-idempotency-key">Idempotency Key (Redis &le;5ms)</label>
+                                        <label for="input-idempotency-key">Transfer reference</label>
                                         <div class="input-action-group">
                                             <input type="text" id="input-idempotency-key" class="form-control code-font" readonly>
                                             <button type="button" class="btn-secondary" onclick="generateNewIdempotencyKey()" title="Generate Unique Key"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
@@ -184,8 +184,7 @@
 
                                 <div class="form-actions">
                                     <button type="submit" id="btn-submit-transfer" class="btn-primary">
-                                        <span>Execute Transfer</span>
-                                        <span class="btn-subtext">ACID Row-Lock &bull; Outbox Stream</span>
+                                        <span>Submit transfer</span>
                                     </button>
                                 </div>
                             </form>
@@ -197,8 +196,8 @@
                         <!-- Synchronous Security Audit Logs (Oracle XE) -->
                         <div class="section-card">
                             <div class="card-header">
-                                <h3 class="card-title">Security &amp; Operational Audit (Azure SQL)</h3>
-                                <span class="badge-chip pill-oracle">Synchronous Local ACID</span>
+                                <h3 class="card-title">Recent audit activity</h3>
+                                <span class="badge-chip pill-oracle">Audit</span>
                             </div>
                             <div class="log-stream-box" id="oracle-audit-logs">
                                 <!-- Dynamically populated by JS -->
@@ -223,14 +222,12 @@
             <section id="tab-reconciliation" class="tab-panel">
                 <div class="section-card">
                     <div class="card-header">
-                        <h2 class="card-title">@Scheduled Cross-Database Reconciliation Service</h2>
+                        <h2 class="card-title">Reconciliation results</h2>
                         <button class="btn-primary" onclick="triggerScheduledReconciliation()">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 6px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Run Scheduled Sweep Now (@Scheduled 15-Min)
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 6px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>Run reconciliation
                         </button>
                     </div>
-                    <p class="section-subtitle">
-                        Cross-compares <strong>Azure SQL TRANSACTION</strong> records against <strong>PostgreSQL LEDGER_MUTATION_AUDIT</strong> entries to detect and flag data drift (<code>MATCHED</code> vs <code>DRIFT_DETECTED</code>).
-                    </p>
+                    <p class="section-subtitle">Scheduled every 15 minutes.</p>
 
                     <div class="recon-table-wrap">
                         <table class="recon-table" id="table-reconciliation-logs">
@@ -256,7 +253,7 @@
             <section id="tab-telemetry" class="tab-panel">
                 <div class="telemetry-dashboard">
                     <div class="card-header">
-                        <h2 class="card-title">Telemetry, Metrics &amp; NFR Performance SLAs</h2>
+                        <h2 class="card-title">Performance metrics</h2>
                         <span class="badge-chip">Prometheus &bull; OpenTelemetry</span>
                     </div>
 
@@ -372,7 +369,6 @@
                         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                             <div>
                                 <h3 class="card-title">User Management, Roles &amp; Account Controls</h3>
-                                <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">Manage users, assign RBAC security roles, configure transaction limits, and freeze/unfreeze accounts.</p>
                             </div>
                             <div style="display: flex; gap: 0.5rem; align-items: center;">
                                 <input type="text" id="cust-search-input" class="form-control" placeholder="Search user, name, email..." oninput="filterCustomerTable()" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; max-width: 220px;">
@@ -466,7 +462,6 @@
                             </div>
                             <button class="btn-secondary" onclick="loadInitialAuditLogs()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Refresh</button>
                         </div>
-                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem;">Committed synchronously in the same transaction as balance mutations on Azure SQL.</p>
                         <div class="log-stream-box" id="audit-tab-oracle-logs" style="max-height: 480px; overflow-y: auto;">
                             <!-- Dynamically populated by JS -->
                         </div>
@@ -481,7 +476,6 @@
                             </div>
                             <button class="btn-secondary" onclick="loadPostgresAuditLogs()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Refresh</button>
                         </div>
-                        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0.5rem 0 1rem;">Consumed asynchronously from Kafka topic <code>ledger.transaction.events</code> and stored with before/after balances.</p>
                         <div class="log-stream-box" id="audit-tab-postgres-logs" style="max-height: 480px; overflow-y: auto;">
                             <!-- Dynamically populated by JS -->
                         </div>
@@ -493,12 +487,9 @@
             <section id="tab-reports" class="tab-panel">
                 <div class="section-card">
                     <div class="card-header">
-                        <h2 class="card-title">Audit, Settlement &amp; Reconciliation Report Generator</h2>
+                        <h2 class="card-title">Available reports</h2>
                         <span class="badge-chip">Banking Compliance Standards</span>
                     </div>
-                    <p class="section-subtitle">
-                        Generate and download production-grade compliance reports, cross-database drift audits, and settlement summaries.
-                    </p>
 
                     <div class="sla-metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin: 1.5rem 0;">
                         <div class="sla-card">
@@ -524,9 +515,9 @@
                     </div>
 
                     <!-- Report Actions Grid -->
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 1.5rem;">
+                    <div class="admin-report-grid">
                         <div class="section-card" style="background: var(--bg-card-highlight); border: 1px solid var(--border-rose-medium); padding: 1.25rem;">
-                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Cross-Database Reconciliation Report</h4>
+                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Reconciliation</h4>
                             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Compares master state in Azure SQL vs audit logs in PostgreSQL to certify balance integrity.</p>
                             <button class="btn-primary" onclick="exportReconciliationReportCSV()" style="width: 100%; justify-content: center; font-size: 0.85rem;">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download Reconciliation CSV
@@ -534,7 +525,7 @@
                         </div>
 
                         <div class="section-card" style="background: var(--bg-card-highlight); border: 1px solid var(--border-rose-medium); padding: 1.25rem;">
-                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Immutable Ledger Audit Trail</h4>
+                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Audit trail</h4>
                             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Complete double-entry export with before/after balance snapshots, customer IDs, and hashes.</p>
                             <button class="btn-primary" onclick="exportAuditTrailCSV()" style="width: 100%; justify-content: center; font-size: 0.85rem;">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download Audit Trail CSV
@@ -542,7 +533,7 @@
                         </div>
 
                         <div class="section-card" style="background: var(--bg-card-highlight); border: 1px solid var(--border-rose-medium); padding: 1.25rem;">
-                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Daily Rail Settlement Summary</h4>
+                            <h4 style="font-size: 1rem; color: var(--text-primary); margin-bottom: 0.5rem;">Daily settlement</h4>
                             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">Aggregated turnover, transaction count, and clearing status for InstaPay, PESONet &amp; Internal.</p>
                             <button class="btn-primary" onclick="exportSettlementSummaryCSV()" style="width: 100%; justify-content: center; font-size: 0.85rem;">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Download Settlement CSV
@@ -774,6 +765,6 @@
     <!-- Script -->
     <script src="src/js/app.js?v=20261006-interest"></script>
     <script src="admin/interest.js?v=20261006-1"></script>
-    <script src="admin/admin.js?v=20261006-interest"></script>
+    <script src="admin/admin.js?v=20261008-bank-admin"></script>
 </body>
 </html>

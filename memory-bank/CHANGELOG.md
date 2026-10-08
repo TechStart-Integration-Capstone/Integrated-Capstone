@@ -2,6 +2,27 @@
 
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 - Adjusted frontend/bank/savings.js and savings.css: moved My Savings/PinkCircles below overview, compacted rose total and hall-of-fame cards, added dynamic personal goal count and in-progress/completed summary. Shared bank/preview UI, local only. Syntax, whitespace and existing offline browser checks pass, including mobile and bank navigation; desktop screenshot reviewed and summary separator encoding corrected. - [dom]
+
+- 2026-10-08 - Updated tests/savings-preview.cjs for current overview and flows; browser checks pass including personal/group totals, badge details, allocation/release updates, mobile and bank navigation/logout. Fixed restored badge icon encoding after screenshot review. JavaScript syntax and whitespace checks pass; no deployment. - [dom]
+
+- 2026-10-08 - Updated frontend/bank/savings.js, savings.css and savings-preview.html: removed UI concept banner and overview balance breakdown, restored collectible badges and details, added rose personal/group savings switch counting own circle contributions only, removed standalone Demo preview label. Documented earlier multi-goal and reservation demo changes. Local only; validation pending. - [dom]
+
+- 2026-10-08 - Simplified frontend/index.html and frontend/admin/admin.js / admin.css: concise banking navigation and headings, removed promotional and repeated technical copy, expandable system configuration, slate surfaces and responsive report cards. Preserved operational controls and simulation labeling; removed duplicate tab dispatch. Syntax and 11 transaction-monitor tests pass; local only, no deployment or browser visual validation. - [dom]
+
+- 2026-10-08 — Completed Savings UI validation: `node tests/savings-preview.cjs` passes all offline interaction and real bank-shell navigation/logout checks, including mobile layouts and no API calls from the standalone preview. JavaScript syntax and `git diff --check` pass; desktop/mobile screenshots reviewed. No banking stack started, live integration tested, or deployment performed. Updated `memory-bank/CONTEXT.md` to reflect the completed prototype and validation. — [dom]
+
+- 2026-10-08 — Corrected `tests/savings-preview.cjs` to assert zero API calls for the standalone Savings entry point before loading the real bank shell, whose pre-existing notification polling remains active. Actual Savings navigation, demo top-up, mobile navigation, and logout-reset checks passed; final combined rerun pending. — [dom]
+
+- 2026-10-08 — Polished `frontend/bank/savings.js` with animated contribution markers and a rolling payday strip. Offline browser checks passed for demo interactions, first-finisher handling, escaped names, 390px/320px layouts, Escape dismissal, and zero API calls. Extended `tests/savings-preview.cjs` to check the actual bank navigation and logout reset; final rerun pending. — [dom]
+
+- 2026-10-08 — Added `tests/savings-preview.cjs`, a dependency-free headless Chrome/Edge check for the offline Savings preview: streak semantics, milestone badges, contribution limits, first-finisher behavior, circle isolation, safe names, reset, responsive layouts, keyboard dialogs, and no API calls. JavaScript syntax checks and `git diff --check` passed; browser results pending. — [dom]
+
+- 2026-10-08 — Savings and PinkCircle UI prototype in `frontend/bank/`:
+  - Added Savings after Loans in customer navigation; added `savings.js` / `savings.css` with demo pockets, payday streaks, cute non-monetary badges, visible interest tiers, and the proposed PHP 1M / +1 percentage point milestone.
+  - Added PinkCircle with the Boracay 2027 PHP 18,250 / PHP 40,000 example, four private-balance contribution lanes, heart/flower/ribbon/star markers, demo contributions, first-finisher celebration, and creation of additional demo circles.
+  - Added `savings-preview.html` / `savings-preview.js` for direct browser preview without login or services. All feature state is in memory; no API, database, interest-policy, or deployment changes. Responsive layout and native accessible dialogs included. Lightweight validation pending. — [dom]
+
 - 2026-10-08 — Removal of Client-Side 15s Reversal / Direct Core Banking Dispatch:
   - Removed client-side 15-second cancellation hold window from `frontend/bank/bank.js`: transfers submit directly without `cancelWindowSeconds` or countdown timer intercepts, immediately rendering receipts on core posting.
   - Removed `applyClientWindow` intercept in `microservices/transaction-service`'s `RemittanceOrchestratorService.java`: transfers hold funds and immediately dispatch to T24 core banking rather than pausing in `Reserved` status.

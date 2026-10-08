@@ -22,7 +22,11 @@ services:
       - ./../scripts/migrate_phase2_t24_core.sql:/mssql-server-setup-scripts.d/05_t24_core.sql:ro
       - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/06_interest.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -113,7 +117,11 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "kafka-topics --bootstrap-server localhost:9092 --list || exit 1",
+        ]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -378,7 +386,13 @@ services:
     depends_on:
       - otel-collector
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -433,7 +447,11 @@ services:
     volumes:
       - ./../microservices/loan-service/target/loan-service.jar:/app/app.jar
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -473,17 +491,17 @@ services:
   # ==========================================
   # Layer 1: Mobile App (Flutter Web on Nginx)
   # ==========================================
-  mobile-app:
-    build:
-      context: ../mobile
-      dockerfile: Dockerfile
-    container_name: mobile-app
-    depends_on:
-      - api-gateway
-    ports:
-      - "3002:80"
-    networks:
-      - ledger-net
+  #mobile-app:
+  #  build:
+  #    context: ../mobile
+  #    dockerfile: Dockerfile
+  #  container_name: mobile-app
+  #  depends_on:
+  #    - api-gateway
+  #  ports:
+  #    - "3002:80"
+  #  networks:
+  #    - ledger-net
 
   # ==========================================
   # Layer 6: Observability & Telemetry
@@ -497,7 +515,7 @@ services:
     ports:
       - "4317:4317"
       - "4318:4318"
-      - "8889:8889"   # Prometheus metrics exporter (OTEL -> Prometheus scrape)
+      - "8889:8889" # Prometheus metrics exporter (OTEL -> Prometheus scrape)
     depends_on:
       - loki
       - tempo
@@ -525,7 +543,7 @@ services:
       - tempo_data:/var/tempo
     ports:
       - "3200:3200"
-      - "4317"        # Internal OTLP gRPC from otel-collector (not exposed to host)
+      - "4317" # Internal OTLP gRPC from otel-collector (not exposed to host)
     networks:
       - ledger-net
 
