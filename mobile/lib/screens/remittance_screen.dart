@@ -165,16 +165,23 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }
 
   void _showConfirmationBottomSheet(double amt, String fromAcc, String toAcc) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final paperBg = isDark ? PayPinkTheme.darkPaper : PayPinkTheme.paper;
+    final sheetBg = isDark ? PayPinkTheme.darkPaper : Colors.white;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         padding: const EdgeInsets.only(top: 10, left: 22, right: 22, bottom: 28),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          boxShadow: [
+        decoration: BoxDecoration(
+          color: sheetBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: const [
             BoxShadow(
               color: Color(0x33000000),
               blurRadius: 30,
@@ -189,7 +196,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               width: 38,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: isDark ? textLine : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -199,10 +206,10 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               children: [
                 Text(
                   'Confirm Remittance',
-                  style: PayPinkTheme.display(fontSize: 17, fontWeight: FontWeight.w700),
+                  style: PayPinkTheme.display(fontSize: 17, fontWeight: FontWeight.w700, color: textInk),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, size: 20, color: PayPinkTheme.muted),
+                  icon: Icon(Icons.close, size: 20, color: textMuted),
                   onPressed: () => Navigator.pop(ctx),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -212,7 +219,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             const SizedBox(height: 14),
             Text(
               'Transfer Amount',
-              style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted),
+              style: PayPinkTheme.body(fontSize: 11, color: textMuted),
             ),
             const SizedBox(height: 4),
             Text(
@@ -220,34 +227,34 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               style: PayPinkTheme.display(
                 fontSize: 34,
                 fontWeight: FontWeight.w800,
-                color: PayPinkTheme.ink,
+                color: textInk,
               ),
             ),
             const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: PayPinkTheme.paper,
+                color: paperBg,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: PayPinkTheme.line),
+                border: Border.all(color: textLine),
               ),
               child: Column(
                 children: [
-                  _confirmRow('From Account', fromAcc),
-                  const Divider(color: PayPinkTheme.line, height: 16),
-                  _confirmRow('To Recipient', toAcc),
+                  _confirmRow('From Account', fromAcc, isDark: isDark),
+                  Divider(color: textLine, height: 16),
+                  _confirmRow('To Recipient', toAcc, isDark: isDark),
                   if (_selectedModeIndex == 2) ...[
-                    const Divider(color: PayPinkTheme.line, height: 16),
-                    _confirmRow('Clearing Rail', _transferRail == 'InstaPay' ? 'InstaPay (Realtime)' : 'PESONet (Batch EOD Cutoff)'),
+                    Divider(color: textLine, height: 16),
+                    _confirmRow('Clearing Rail', _transferRail == 'InstaPay' ? 'InstaPay (Realtime)' : 'PESONet (Batch EOD Cutoff)', isDark: isDark),
                   ],
                   if (_isStandingInstruction) ...[
-                    const Divider(color: PayPinkTheme.line, height: 16),
-                    _confirmRow('Standing Schedule', 'Recurring ($_standingFrequency) · Next: Oct 15', valColor: PayPinkTheme.wine),
+                    Divider(color: textLine, height: 16),
+                    _confirmRow('Standing Schedule', 'Recurring ($_standingFrequency) · Next: Oct 15', valColor: PayPinkTheme.wine, isDark: isDark),
                   ],
-                  const Divider(color: PayPinkTheme.line, height: 16),
-                  _confirmRow('Fee', '₱0.00 (Free)', valColor: PayPinkTheme.green),
-                  const Divider(color: PayPinkTheme.line, height: 16),
-                  _confirmRow('Risk Screening', 'Cleared (${_riskScore.toStringAsFixed(2)})', valColor: PayPinkTheme.green),
+                  Divider(color: textLine, height: 16),
+                  _confirmRow('Fee', '₱0.00 (Free)', valColor: PayPinkTheme.green, isDark: isDark),
+                  Divider(color: textLine, height: 16),
+                  _confirmRow('Risk Screening', 'Cleared (${_riskScore.toStringAsFixed(2)})', valColor: PayPinkTheme.green, isDark: isDark),
                 ],
               ),
             ),
@@ -304,16 +311,23 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }
 
   void _showReceiptBottomSheet(double amt, String refId, String fromAcc, String toAcc) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final paperBg = isDark ? PayPinkTheme.darkPaper : PayPinkTheme.paper;
+    final sheetBg = isDark ? PayPinkTheme.darkPaper : Colors.white;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         padding: const EdgeInsets.only(top: 10, left: 22, right: 22, bottom: 28),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          boxShadow: [
+        decoration: BoxDecoration(
+          color: sheetBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: const [
             BoxShadow(
               color: Color(0x33000000),
               blurRadius: 30,
@@ -328,7 +342,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               width: 38,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: isDark ? textLine : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -336,8 +350,8 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             Container(
               width: 60,
               height: 60,
-              decoration: const BoxDecoration(
-                color: PayPinkTheme.greenBg,
+              decoration: BoxDecoration(
+                color: isDark ? PayPinkTheme.green.withValues(alpha: 0.15) : PayPinkTheme.greenBg,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -349,7 +363,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             const SizedBox(height: 12),
             Text(
               'Transfer Completed',
-              style: PayPinkTheme.display(fontSize: 16, fontWeight: FontWeight.w800),
+              style: PayPinkTheme.display(fontSize: 16, fontWeight: FontWeight.w800, color: textInk),
             ),
             const SizedBox(height: 4),
             Text(
@@ -357,41 +371,41 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               style: PayPinkTheme.display(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
-                color: PayPinkTheme.ink,
+                color: textInk,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               'Committed to Dual-Store Ledger & Temenos T24 Core',
-              style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted),
+              style: PayPinkTheme.body(fontSize: 11, color: textMuted),
             ),
             const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: PayPinkTheme.paper,
+                color: paperBg,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: PayPinkTheme.line),
+                border: Border.all(color: textLine),
               ),
               child: Column(
                 children: [
-                  _confirmRow('Reference ID', refId, isMono: true),
-                  const Divider(color: PayPinkTheme.line, height: 16),
-                  _confirmRow('Date & Time', 'Oct 2, 2026 15:00'),
-                  const Divider(color: PayPinkTheme.line, height: 16),
-                  _confirmRow('Source', fromAcc),
-                  const Divider(color: PayPinkTheme.line, height: 16),
-                  _confirmRow('Recipient', toAcc),
+                  _confirmRow('Reference ID', refId, isMono: true, isDark: isDark),
+                  Divider(color: textLine, height: 16),
+                  _confirmRow('Date & Time', 'Oct 2, 2026 15:00', isDark: isDark),
+                  Divider(color: textLine, height: 16),
+                  _confirmRow('Source', fromAcc, isDark: isDark),
+                  Divider(color: textLine, height: 16),
+                  _confirmRow('Recipient', toAcc, isDark: isDark),
                   if (_isStandingInstruction) ...[
-                    const Divider(color: PayPinkTheme.line, height: 16),
-                    _confirmRow('Standing Instruction', 'Active ($_standingFrequency) · Next: Oct 15', valColor: PayPinkTheme.wine),
+                    Divider(color: textLine, height: 16),
+                    _confirmRow('Standing Instruction', 'Active ($_standingFrequency) · Next: Oct 15', valColor: PayPinkTheme.wine, isDark: isDark),
                   ],
                   if (_selectedModeIndex == 2) ...[
-                    const Divider(color: PayPinkTheme.line, height: 16),
-                    _confirmRow('Clearing Rail', _transferRail == 'InstaPay' ? 'InstaPay Real-Time' : 'PESONet Batch Cutoff'),
+                    Divider(color: textLine, height: 16),
+                    _confirmRow('Clearing Rail', _transferRail == 'InstaPay' ? 'InstaPay Real-Time' : 'PESONet Batch Cutoff', isDark: isDark),
                   ],
-                  const Divider(color: PayPinkTheme.line, height: 16),
-                  _confirmRow('Temenos OFSCore Record', _ofscorePreview, isMono: true, isSmall: true),
+                  Divider(color: textLine, height: 16),
+                  _confirmRow('Temenos OFSCore Record', _ofscorePreview, isMono: true, isSmall: true, isDark: isDark),
                 ],
               ),
             ),
@@ -409,8 +423,8 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       );
                     },
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: PayPinkTheme.pink),
-                      backgroundColor: PayPinkTheme.pinkSubtle,
+                      side: BorderSide(color: isDark ? PayPinkTheme.wine : PayPinkTheme.pink),
+                      backgroundColor: isDark ? PayPinkTheme.wine.withValues(alpha: 0.2) : PayPinkTheme.pinkSubtle,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -419,7 +433,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       style: PayPinkTheme.body(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.wine,
+                        color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                       ),
                     ),
                   ),
@@ -452,12 +466,15 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     );
   }
 
-  Widget _confirmRow(String label, String value, {Color? valColor, bool isMono = false, bool isSmall = false}) {
+  Widget _confirmRow(String label, String value, {Color? valColor, bool isMono = false, bool isSmall = false, bool isDark = false}) {
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted)),
+        Text(label, style: PayPinkTheme.body(fontSize: 11.5, color: textMuted)),
         const SizedBox(width: 12),
         Flexible(
           child: Text(
@@ -467,12 +484,12 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 ? PayPinkTheme.mono(
                     fontSize: isSmall ? 9 : 11.5,
                     fontWeight: FontWeight.w600,
-                    color: valColor ?? PayPinkTheme.ink,
+                    color: valColor ?? textInk,
                   )
                 : PayPinkTheme.body(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
-                    color: valColor ?? PayPinkTheme.ink,
+                    color: valColor ?? textInk,
                   ),
           ),
         ),
@@ -482,6 +499,11 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final cardBg = isDark ? PayPinkTheme.darkCard : Colors.white;
     final isHighRisk = _riskScore > 0.85;
 
     return SingleChildScrollView(
@@ -495,14 +517,14 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             style: PayPinkTheme.display(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: PayPinkTheme.ink,
+              color: textInk,
               letterSpacing: -0.8,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Transfer between your accounts or send to another PayPink account.',
-            style: PayPinkTheme.body(fontSize: 12.5, color: PayPinkTheme.muted),
+            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
           ),
           const SizedBox(height: 18),
 
@@ -518,12 +540,13 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       style: PayPinkTheme.display(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
+                        color: textInk,
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: PayPinkTheme.greenBg,
+                        color: isDark ? PayPinkTheme.green.withValues(alpha: 0.15) : PayPinkTheme.greenBg,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -540,34 +563,39 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 const SizedBox(height: 16),
 
                 // Source Account Dropdown
-                Text('Transfer from', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                Text('Transfer from', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: PayPinkTheme.line),
+                    border: Border.all(color: textLine),
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: _sourceAccount.isNotEmpty ? _sourceAccount : null,
                       isExpanded: true,
+                      dropdownColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
+                      style: PayPinkTheme.body(fontSize: 13, color: textInk),
                       items: widget.accounts != null && widget.accounts!.isNotEmpty
                           ? widget.accounts!.map((a) {
                               return DropdownMenuItem<String>(
                                 value: a.accountNumber,
-                                child: Text('${a.displayName} · ${a.maskedNumber} · ₱${a.currentBalance.toStringAsFixed(2)}'),
+                                child: Text(
+                                  '${a.displayName} · ${a.maskedNumber} · ₱${a.currentBalance.toStringAsFixed(2)}',
+                                  style: PayPinkTheme.body(fontSize: 13, color: textInk),
+                                ),
                               );
                             }).toList()
-                          : const [
+                          : [
                               DropdownMenuItem(
                                 value: 'everyday-5046',
-                                child: Text('Everyday account · •••• 5046 · ₱50.00'),
+                                child: Text('Everyday account · •••• 5046 · ₱50.00', style: PayPinkTheme.body(fontSize: 13, color: textInk)),
                               ),
                               DropdownMenuItem(
                                 value: 'savings-8504',
-                                child: Text('Savings account · 001 1 5968504 7 · ₱0.00'),
+                                child: Text('Savings account · 001 1 5968504 7 · ₱0.00', style: PayPinkTheme.body(fontSize: 13, color: textInk)),
                               ),
                             ],
                       onChanged: (val) {
@@ -587,14 +615,14 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: PayPinkTheme.wine.withValues(alpha: 0.08),
+                    color: isDark ? Colors.white.withValues(alpha: 0.06) : PayPinkTheme.wine.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      _buildTabBtn('My own account', 0),
-                      _buildTabBtn('Another PayPink', 1),
-                      _buildTabBtn('Outside PayPink', 2),
+                      _buildTabBtn('My own account', 0, isDark: isDark),
+                      _buildTabBtn('Another PayPink', 1, isDark: isDark),
+                      _buildTabBtn('Outside PayPink', 2, isDark: isDark),
                     ],
                   ),
                 ),
@@ -602,34 +630,39 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
 
                 // Recipient Fields
                 if (_selectedModeIndex == 0) ...[
-                  Text('Transfer to', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                  Text('Transfer to', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardBg,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: PayPinkTheme.line),
+                      border: Border.all(color: textLine),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _ownTargetAccount.isNotEmpty ? _ownTargetAccount : null,
                         isExpanded: true,
+                        dropdownColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
+                        style: PayPinkTheme.body(fontSize: 13, color: textInk),
                         items: widget.accounts != null && widget.accounts!.isNotEmpty
                             ? widget.accounts!.map((a) {
                                 return DropdownMenuItem<String>(
                                   value: a.accountNumber,
-                                  child: Text('${a.displayName} · ${a.maskedNumber} · ₱${a.currentBalance.toStringAsFixed(2)}'),
+                                  child: Text(
+                                    '${a.displayName} · ${a.maskedNumber} · ₱${a.currentBalance.toStringAsFixed(2)}',
+                                    style: PayPinkTheme.body(fontSize: 13, color: textInk),
+                                  ),
                                 );
                               }).toList()
-                            : const [
+                            : [
                                 DropdownMenuItem(
                                   value: 'savings-8504',
-                                  child: Text('Savings account · 001 1 5968504 7 · ₱0.00'),
+                                  child: Text('Savings account · 001 1 5968504 7 · ₱0.00', style: PayPinkTheme.body(fontSize: 13, color: textInk)),
                                 ),
                                 DropdownMenuItem(
                                   value: 'everyday-5046',
-                                  child: Text('Everyday account · •••• 5046 · ₱50.00'),
+                                  child: Text('Everyday account · •••• 5046 · ₱50.00', style: PayPinkTheme.body(fontSize: 13, color: textInk)),
                                 ),
                               ],
                         onChanged: (val) {
@@ -647,7 +680,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Frequent Beneficiaries', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                      Text('Frequent Beneficiaries', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: textInk)),
                       GestureDetector(
                         onTap: () => PayPinkBottomSheets.showBeneficiaryManager(
                           context,
@@ -661,7 +694,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         ),
                         child: Text(
                           'Manage Directory →',
-                          style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                          style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
                         ),
                       ),
                     ],
@@ -681,9 +714,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                               width: 44,
                               height: 44,
                               decoration: BoxDecoration(
-                                color: PayPinkTheme.pinkSubtle,
+                                color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: PayPinkTheme.pink),
+                                border: Border.all(color: isDark ? PayPinkTheme.wine : PayPinkTheme.pink),
                               ),
                               child: Center(
                                 child: Text(
@@ -691,7 +724,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                   style: PayPinkTheme.display(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w800,
-                                    color: PayPinkTheme.wine,
+                                    color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                   ),
                                 ),
                               ),
@@ -699,7 +732,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                             const SizedBox(height: 4),
                             Text(
                               fav['name']!.split(' ')[0],
-                              style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w600),
+                              style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w600, color: textInk),
                             ),
                           ],
                         ),
@@ -708,25 +741,27 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   ),
                   const SizedBox(height: 12),
                   if (_selectedModeIndex == 2) ...[
-                    Text('Destination Institution', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    Text('Destination Institution', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cardBg,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: PayPinkTheme.line),
+                        border: Border.all(color: textLine),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: _destinationBank,
                           isExpanded: true,
-                          items: const [
-                            DropdownMenuItem(value: 'BDO', child: Text('BDO Unibank')),
-                            DropdownMenuItem(value: 'BPI', child: Text('Bank of the Philippine Islands (BPI)')),
-                            DropdownMenuItem(value: 'UnionBank', child: Text('UnionBank of the Philippines')),
-                            DropdownMenuItem(value: 'GCash', child: Text('GCash / G-Xchange Inc.')),
-                            DropdownMenuItem(value: 'Maya', child: Text('Maya Philippines')),
+                          dropdownColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
+                          style: PayPinkTheme.body(fontSize: 13, color: textInk),
+                          items: [
+                            DropdownMenuItem(value: 'BDO', child: Text('BDO Unibank', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
+                            DropdownMenuItem(value: 'BPI', child: Text('Bank of the Philippine Islands (BPI)', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
+                            DropdownMenuItem(value: 'UnionBank', child: Text('UnionBank of the Philippines', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
+                            DropdownMenuItem(value: 'GCash', child: Text('GCash / G-Xchange Inc.', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
+                            DropdownMenuItem(value: 'Maya', child: Text('Maya Philippines', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
                           ],
                           onChanged: (val) {
                             if (val != null) setState(() => _destinationBank = val);
@@ -735,7 +770,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Text('Clearing Rail & Settlement', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                    Text('Clearing Rail & Settlement', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -745,16 +780,18 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: _transferRail == 'InstaPay' ? PayPinkTheme.pinkSubtle : Colors.white,
+                                color: _transferRail == 'InstaPay'
+                                    ? (isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle)
+                                    : cardBg,
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: _transferRail == 'InstaPay' ? PayPinkTheme.wine : PayPinkTheme.line),
+                                border: Border.all(color: _transferRail == 'InstaPay' ? PayPinkTheme.wine : textLine),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('InstaPay', style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700)),
+                                  Text('InstaPay', style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk)),
                                   const SizedBox(height: 2),
-                                  Text('Real-time · Up to ₱50k', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                                  Text('Real-time · Up to ₱50k', style: PayPinkTheme.body(fontSize: 9.5, color: textMuted)),
                                 ],
                               ),
                             ),
@@ -767,16 +804,18 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: _transferRail == 'PESONet' ? PayPinkTheme.pinkSubtle : Colors.white,
+                                color: _transferRail == 'PESONet'
+                                    ? (isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle)
+                                    : cardBg,
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: _transferRail == 'PESONet' ? PayPinkTheme.wine : PayPinkTheme.line),
+                                border: Border.all(color: _transferRail == 'PESONet' ? PayPinkTheme.wine : textLine),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('PESONet', style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700)),
+                                  Text('PESONet', style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk)),
                                   const SizedBox(height: 2),
-                                  Text('Batch EOD cutoff · Unlimited', style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted)),
+                                  Text('Batch EOD cutoff · Unlimited', style: PayPinkTheme.body(fontSize: 9.5, color: textMuted)),
                                 ],
                               ),
                             ),
@@ -786,18 +825,28 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  Text('Recipient Account Number', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                  Text('Recipient Account Number', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _recipientController,
                     onChanged: (_) => _updateCalculations(),
+                    style: PayPinkTheme.body(fontSize: 13, color: textInk),
                     decoration: InputDecoration(
                       hintText: 'e.g. 001 1 2234567 8 (Carlos Mendoza)',
+                      hintStyle: PayPinkTheme.body(fontSize: 13, color: textMuted),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: cardBg,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: PayPinkTheme.line),
+                        borderSide: BorderSide(color: textLine),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: textLine),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: PayPinkTheme.wine),
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
@@ -807,7 +856,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: PayPinkTheme.greenBg,
+                        color: isDark ? PayPinkTheme.green.withValues(alpha: 0.15) : PayPinkTheme.greenBg,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: PayPinkTheme.green.withValues(alpha: 0.3)),
                       ),
@@ -833,14 +882,14 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 const SizedBox(height: 16),
 
                 // Amount Field
-                Text('Amount', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600)),
+                Text('Amount', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardBg,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: PayPinkTheme.line),
+                    border: Border.all(color: textLine),
                   ),
                   child: Row(
                     children: [
@@ -849,7 +898,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         style: PayPinkTheme.display(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
-                          color: PayPinkTheme.wine,
+                          color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -861,9 +910,15 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                           style: PayPinkTheme.display(
                             fontSize: 26,
                             fontWeight: FontWeight.w700,
+                            color: textInk,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: '0.00',
+                            hintStyle: PayPinkTheme.display(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700,
+                              color: textMuted,
+                            ),
                             border: InputBorder.none,
                           ),
                         ),
@@ -876,11 +931,11 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 // Quick Amount Chips
                 Row(
                   children: [
-                    _buildAmtChip('+₱10', 10),
+                    _buildAmtChip('+₱10', 10, isDark: isDark),
                     const SizedBox(width: 8),
-                    _buildAmtChip('+₱20', 20),
+                    _buildAmtChip('+₱20', 20, isDark: isDark),
                     const SizedBox(width: 8),
-                    _buildAmtChip('+₱50', 50),
+                    _buildAmtChip('+₱50', 50, isDark: isDark),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -889,10 +944,12 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: _isStandingInstruction ? PayPinkTheme.pinkSubtle : Colors.white,
+                    color: _isStandingInstruction
+                        ? (isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle)
+                        : cardBg,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _isStandingInstruction ? PayPinkTheme.wine.withValues(alpha: 0.3) : PayPinkTheme.line,
+                      color: _isStandingInstruction ? PayPinkTheme.wine.withValues(alpha: 0.5) : textLine,
                     ),
                   ),
                   child: Column(
@@ -906,7 +963,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                               Icon(
                                 Icons.event_repeat_rounded,
                                 size: 18,
-                                color: _isStandingInstruction ? PayPinkTheme.wine : PayPinkTheme.muted,
+                                color: _isStandingInstruction ? (isDark ? PayPinkTheme.pink : PayPinkTheme.wine) : textMuted,
                               ),
                               const SizedBox(width: 8),
                               Column(
@@ -914,7 +971,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                 children: [
                                   Text(
                                     'Standing Instruction',
-                                    style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700),
+                                    style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk),
                                   ),
                                   Text(
                                     'Automate recurring schedule',
@@ -933,12 +990,12 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       ),
                       if (_isStandingInstruction) ...[
                         const SizedBox(height: 8),
-                        const Divider(color: PayPinkTheme.line, height: 1),
+                        Divider(color: textLine, height: 1),
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Frequency', style: PayPinkTheme.body(fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Text('Frequency', style: PayPinkTheme.body(fontSize: 10.5, fontWeight: FontWeight.w600, color: textInk)),
                             Row(
                               children: ['Weekly', '15th & 30th', 'Monthly'].map((freq) {
                                 final isSelected = _standingFrequency == freq;
@@ -948,16 +1005,16 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                     margin: const EdgeInsets.only(left: 6),
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
-                                      color: isSelected ? PayPinkTheme.wine : Colors.white,
+                                      color: isSelected ? PayPinkTheme.wine : cardBg,
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: isSelected ? PayPinkTheme.wine : PayPinkTheme.line),
+                                      border: Border.all(color: isSelected ? PayPinkTheme.wine : textLine),
                                     ),
                                     child: Text(
                                       freq,
                                       style: PayPinkTheme.body(
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w700,
-                                        color: isSelected ? Colors.white : PayPinkTheme.ink,
+                                        color: isSelected ? Colors.white : textInk,
                                       ),
                                     ),
                                   ),
@@ -970,8 +1027,8 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Next Execution Date', style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.muted)),
-                            Text('Oct 15, 2026 (Auto EOD cutoff)', style: PayPinkTheme.mono(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine)),
+                            Text('Next Execution Date', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
+                            Text('Oct 15, 2026 (Auto EOD cutoff)', style: PayPinkTheme.mono(fontSize: 9.5, fontWeight: FontWeight.w700, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine)),
                           ],
                         ),
                       ],
@@ -984,10 +1041,10 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.85),
+                    color: isDark ? PayPinkTheme.darkPaper.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isHighRisk ? PayPinkTheme.red.withValues(alpha: 0.4) : PayPinkTheme.line,
+                      color: isHighRisk ? PayPinkTheme.red.withValues(alpha: 0.4) : textLine,
                     ),
                   ),
                   child: Column(
@@ -1009,7 +1066,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                 style: PayPinkTheme.body(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w700,
-                                  color: PayPinkTheme.muted,
+                                  color: textMuted,
                                 ),
                               ),
                             ],
@@ -1030,7 +1087,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         child: LinearProgressIndicator(
                           value: _riskScore.clamp(0.0, 1.0),
                           minHeight: 6,
-                          backgroundColor: Colors.grey.shade200,
+                          backgroundColor: isDark ? PayPinkTheme.darkLine : Colors.grey.shade200,
                           valueColor: AlwaysStoppedAnimation<Color>(
                             isHighRisk ? PayPinkTheme.red : PayPinkTheme.green,
                           ),
@@ -1041,7 +1098,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         isHighRisk
                             ? 'Transfer will be automatically dropped by Asynchronous Risk Engine (Score > 0.85 threshold).'
                             : 'Asynchronous Python asyncio screening score is healthy (< 0.85). Normal remittance clearing.',
-                        style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
+                        style: PayPinkTheme.body(fontSize: 9.5, color: textMuted),
                       ),
                     ],
                   ),
@@ -1053,9 +1110,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: PayPinkTheme.wine.withValues(alpha: 0.04),
+                    color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.15) : PayPinkTheme.wine.withValues(alpha: 0.04),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: PayPinkTheme.wine.withValues(alpha: 0.15)),
+                    border: Border.all(color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.4) : PayPinkTheme.wine.withValues(alpha: 0.15)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1065,7 +1122,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         style: PayPinkTheme.display(
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
-                          color: PayPinkTheme.wine,
+                          color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1073,7 +1130,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         _ofscorePreview,
                         style: PayPinkTheme.mono(
                           fontSize: 9.5,
-                          color: PayPinkTheme.ink,
+                          color: textInk,
                         ),
                       ),
                     ],
@@ -1084,8 +1141,8 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Transfer fee', style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted)),
-                    Text('₱0.00', style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    Text('Transfer fee', style: PayPinkTheme.body(fontSize: 11.5, color: textMuted)),
+                    Text('₱0.00', style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -1113,30 +1170,32 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     );
   }
 
-  Widget _buildAmtChip(String label, double amount) {
+  Widget _buildAmtChip(String label, double amount, {bool isDark = false}) {
     return GestureDetector(
       onTap: () => _addQuickAmount(amount),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: PayPinkTheme.pinkSubtle,
+          color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.2) : PayPinkTheme.pinkSubtle,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: PayPinkTheme.pink),
+          border: Border.all(color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.5) : PayPinkTheme.pink),
         ),
         child: Text(
           label,
           style: PayPinkTheme.body(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: PayPinkTheme.wine,
+            color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTabBtn(String label, int index) {
+  Widget _buildTabBtn(String label, int index, {bool isDark = false}) {
     final isSelected = _selectedModeIndex == index;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return Expanded(
       child: GestureDetector(
         onTap: () {
@@ -1157,7 +1216,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             style: PayPinkTheme.body(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
-              color: isSelected ? Colors.white : PayPinkTheme.muted,
+              color: isSelected ? Colors.white : textMuted,
             ),
           ),
         ),

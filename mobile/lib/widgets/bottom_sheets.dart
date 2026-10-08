@@ -1090,15 +1090,19 @@ class _SheetContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       padding: const EdgeInsets.only(top: 10, left: 20, right: 20, bottom: 28),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: isDark ? PayPinkTheme.darkPaper : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: const [
           BoxShadow(
             color: Color(0x33000000),
             blurRadius: 30,
@@ -1113,7 +1117,7 @@ class _SheetContainer extends StatelessWidget {
             width: 38,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.shade300,
+              color: isDark ? PayPinkTheme.darkLine : Colors.grey.shade300,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1123,13 +1127,13 @@ class _SheetContainer extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: PayPinkTheme.display(fontSize: 17, fontWeight: FontWeight.w700),
+                style: PayPinkTheme.display(fontSize: 17, fontWeight: FontWeight.w700, color: textInk),
               ),
               if (trailing != null)
                 trailing!
               else
                 IconButton(
-                  icon: const Icon(Icons.close, size: 20, color: PayPinkTheme.muted),
+                  icon: Icon(Icons.close, size: 20, color: textMuted),
                   onPressed: () => Navigator.pop(context),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -1163,6 +1167,10 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1171,7 +1179,7 @@ class _DetailRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.muted),
+            style: PayPinkTheme.body(fontSize: 12, color: textMuted),
           ),
           const SizedBox(width: 14),
           Flexible(
@@ -1182,12 +1190,12 @@ class _DetailRow extends StatelessWidget {
                   ? PayPinkTheme.mono(
                       fontSize: isSmall ? 9.5 : 12,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-                      color: valueColor ?? PayPinkTheme.ink,
+                      color: valueColor ?? textInk,
                     )
                   : PayPinkTheme.body(
                       fontSize: isSmall ? 10.5 : 12.5,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-                      color: valueColor ?? PayPinkTheme.ink,
+                      color: valueColor ?? textInk,
                     ),
             ),
           ),

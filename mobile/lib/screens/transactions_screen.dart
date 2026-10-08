@@ -40,6 +40,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+
     var filtered = widget.transactions.where((tx) {
       if (_filter == 'credit' && !tx.isCredit) return false;
       if (_filter == 'debit' && tx.isCredit) return false;
@@ -65,14 +71,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             style: PayPinkTheme.display(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: PayPinkTheme.ink,
+              color: textInk,
               letterSpacing: -0.8,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Your latest 200 transactions, with a clearer view of where your money goes.',
-            style: PayPinkTheme.body(fontSize: 12.5, color: PayPinkTheme.muted),
+            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
           ),
           const SizedBox(height: 18),
 
@@ -83,34 +89,42 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               children: [
                 TextField(
                   onChanged: (v) => setState(() => _searchQuery = v),
+                  style: PayPinkTheme.body(fontSize: 13, color: textInk),
                   decoration: InputDecoration(
                     hintText: 'Search transactions or reference...',
-                    hintStyle: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.muted),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20, color: PayPinkTheme.muted),
+                    hintStyle: PayPinkTheme.body(fontSize: 12, color: textMuted),
+                    prefixIcon: Icon(Icons.search_rounded, size: 20, color: textMuted),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: isDark ? PayPinkTheme.darkCard : Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: PayPinkTheme.line),
+                      borderSide: BorderSide(color: textLine),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: PayPinkTheme.line),
+                      borderSide: BorderSide(color: textLine),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: brandWine),
                     ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildFilterChip('All', 'all'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Money in', 'credit'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Money out', 'debit'),
-                    const SizedBox(width: 8),
-                    _buildFilterChip('Reversals', 'reversal'),
-                  ],
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip('All', 'all', isDark),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Money in', 'credit', isDark),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Money out', 'debit', isDark),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Reversals', 'reversal', isDark),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -124,7 +138,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               alignment: Alignment.center,
               child: Text(
                 'No transactions match your search.',
-                style: PayPinkTheme.body(fontSize: 13, color: PayPinkTheme.muted),
+                style: PayPinkTheme.body(fontSize: 13, color: textMuted),
               ),
             )
           else
@@ -134,7 +148,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const Divider(color: PayPinkTheme.line, height: 1),
+                separatorBuilder: (_, __) => Divider(color: textLine, height: 1),
                 itemBuilder: (context, index) {
                   final tx = filtered[index];
                   final isReversed = tx.status == 'REVERSED';
@@ -149,8 +163,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         height: 38,
                         decoration: BoxDecoration(
                           color: isReversed
-                              ? PayPinkTheme.amberBg
-                              : (isDlq ? PayPinkTheme.redBg : (tx.isCredit ? PayPinkTheme.greenBg : PayPinkTheme.pinkSubtle)),
+                              ? (isDark ? const Color(0xFF382D16) : PayPinkTheme.amberBg)
+                              : (isDlq
+                                  ? (isDark ? const Color(0xFF3B1818) : PayPinkTheme.redBg)
+                                  : (tx.isCredit
+                                      ? (isDark ? const Color(0xFF143823) : PayPinkTheme.greenBg)
+                                      : (isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle))),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -161,7 +179,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                   : (tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded)),
                           color: isReversed
                               ? PayPinkTheme.amber
-                              : (isDlq ? PayPinkTheme.red : (tx.isCredit ? PayPinkTheme.green : PayPinkTheme.wine)),
+                              : (isDlq
+                                  ? PayPinkTheme.red
+                                  : (tx.isCredit
+                                      ? (isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green)
+                                      : (isDark ? const Color(0xFFF6A4C0) : PayPinkTheme.wine))),
                           size: 16,
                         ),
                       ),
@@ -170,11 +192,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         style: PayPinkTheme.display(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
+                          color: textInk,
                         ).copyWith(decoration: isReversed ? TextDecoration.lineThrough : null),
                       ),
                       subtitle: Text(
                         '${tx.account} · ${tx.date}',
-                        style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                        style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
                       ),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -186,8 +209,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                               color: isReversed
-                                  ? PayPinkTheme.muted
-                                  : (tx.isCredit ? PayPinkTheme.green : PayPinkTheme.ink),
+                                  ? textMuted
+                                  : (tx.isCredit
+                                      ? (isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green)
+                                      : textInk),
                             ),
                           ),
                           Text(
@@ -198,7 +223,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               fontSize: 9.5,
                               color: isReversed
                                   ? PayPinkTheme.amber
-                                  : (isDlq ? PayPinkTheme.red : PayPinkTheme.muted),
+                                  : (isDlq ? PayPinkTheme.red : textMuted),
                               fontWeight: (isReversed || isDlq) ? FontWeight.w700 : FontWeight.normal,
                             ),
                           ),
@@ -225,17 +250,24 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     );
   }
 
-  Widget _buildFilterChip(String label, String value) {
+  Widget _buildFilterChip(String label, String value, bool isDark) {
     final isSelected = _filter == value;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return GestureDetector(
       onTap: () => setState(() => _filter = value),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? PayPinkTheme.wine : Colors.white,
+          color: isSelected
+              ? (isDark ? PayPinkTheme.wineLight : PayPinkTheme.wine)
+              : (isDark ? PayPinkTheme.darkCard : Colors.white),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? PayPinkTheme.wine : PayPinkTheme.line,
+            color: isSelected
+                ? (isDark ? PayPinkTheme.pink : PayPinkTheme.wine)
+                : textLine,
           ),
         ),
         child: Text(
@@ -243,7 +275,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           style: PayPinkTheme.body(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: isSelected ? Colors.white : PayPinkTheme.muted,
+            color: isSelected ? Colors.white : textMuted,
           ),
         ),
       ),
