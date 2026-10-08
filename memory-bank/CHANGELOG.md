@@ -1,6 +1,12 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — T24 Core Schema Migration & Docker Compose Full Volume Parity:
+  - Executed `scripts/migrate_phase2_t24_core.sql` on live Azure SQL container (`azure-sql-master`), creating `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables along with backward-compatible `dbo.*` synonyms.
+  - Verified `t24-adapter` hold placement and release endpoints (`/api/v1/t24/holds/lock` and `/holds/release`) succeed without SQL error `Invalid object name 't24.locked_amount'`.
+  - Updated `docker/docker-compose.yml` to mount `scripts/migrate_phase2_t24_core.sql` as `/mssql-server-setup-scripts.d/05_t24_core.sql:ro` and adjusted interest migration to `06_interest.sql:ro`.
+  - Mounted `scripts/migrate_interest_recovery_postgres.sql` and `scripts/migrate_interest_approval_postgres.sql` into PostgreSQL's `/docker-entrypoint-initdb.d/` (`04` and `05`) for complete fresh container provisioning parity on `docker compose down -v`. — [dom]
+
 - 2026-10-08 — Automated Azure SQL Fresh Volume Initialization in Docker Compose:
   - Mounted `scripts/migrate_phase1_schema_split.sql` as `/mssql-server-setup-scripts.d/04_schema_split.sql:ro` and `scripts/migrate_interest_azuresql.sql` as `/mssql-server-setup-scripts.d/05_interest.sql:ro` in `docker/docker-compose.yml`.
   - Ensures that when running `docker compose down -v` followed by `docker compose up`, SQL Server's automated setup executes all scripts in order (`01_schema` -> `02_loans` -> `03_seed` -> `04_schema_split` -> `05_interest`) with zero manual steps required. — [dom]

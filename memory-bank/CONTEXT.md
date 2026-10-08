@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: refactor/domain-t24-core_  
-_Last Updated: 2026-10-08 (Interest EOD Schema Provisioning across PostgreSQL & Azure SQL by [dom])_  
+_Last Updated: 2026-10-08 (T24 Core Schema Migration & Docker Compose Full Volume Parity by [dom])_  
 
 ---
 

@@ -19,7 +19,8 @@ services:
       - ./../microservices/loan-service/src/main/resources/db/phase6_loans.sql:/mssql-server-setup-scripts.d/02_loans.sql:ro
       - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/03_seed.sql:ro
       - ./../scripts/migrate_phase1_schema_split.sql:/mssql-server-setup-scripts.d/04_schema_split.sql:ro
-      - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/05_interest.sql:ro
+      - ./../scripts/migrate_phase2_t24_core.sql:/mssql-server-setup-scripts.d/05_t24_core.sql:ro
+      - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/06_interest.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1"]
       interval: 10s
@@ -42,6 +43,8 @@ services:
       - ./../microservices/audit-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./../microservices/notification-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/02_notification.sql
       - ./../scripts/migrate_interest_postgres.sql:/docker-entrypoint-initdb.d/03_interest.sql
+      - ./../scripts/migrate_interest_recovery_postgres.sql:/docker-entrypoint-initdb.d/04_interest_recovery.sql
+      - ./../scripts/migrate_interest_approval_postgres.sql:/docker-entrypoint-initdb.d/05_interest_approval.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
       interval: 10s
