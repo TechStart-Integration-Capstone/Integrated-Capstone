@@ -75,10 +75,17 @@ BEGIN
         monthly_installment DECIMAL(18,4) NULL,
         decline_reason      NVARCHAR(50)  NULL,
         status              NVARCHAR(15)  NOT NULL,          -- DECIDED | DISBURSING | ACCEPTED | FAILED | EXPIRED
+        retry_count         INT           NOT NULL CONSTRAINT DF_LOAN_APP_RETRY DEFAULT 0,
         expires_at          DATETIME2     NOT NULL,          -- created + 7 days
         created_date        DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
     );
     CREATE INDEX idx_loan_app_customer ON dbo.LOAN_APPLICATION(customer_id);
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.LOAN_APPLICATION') AND name = 'retry_count')
+BEGIN
+    ALTER TABLE dbo.LOAN_APPLICATION ADD retry_count INT NOT NULL CONSTRAINT DF_LOAN_APP_RETRY DEFAULT 0;
 END
 GO
 

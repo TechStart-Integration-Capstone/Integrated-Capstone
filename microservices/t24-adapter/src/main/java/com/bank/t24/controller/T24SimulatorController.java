@@ -1,5 +1,10 @@
 package com.bank.t24.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * Endpoint: POST /ofs/process
  */
+@Tag(name = "T24 OFS Simulator", description = "Simulated Temenos T24 OFS engine for double-entry posting and account status testing")
 @RestController
 @RequestMapping("/ofs")
 public class T24SimulatorController {
@@ -47,6 +53,10 @@ public class T24SimulatorController {
             String currency
     ) {}
 
+    @Operation(summary = "Process T24 OFS message", description = "Simulates processing of FUNDS.TRANSFER OFS message, performs double-entry posting journal recording, and returns OFS status response.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "OFS message processed (POSTED or REJECTED)")
+    })
     @PostMapping("/process")
     public ResponseEntity<Map<String, Object>> processOfs(@RequestBody Map<String, Object> payload) {
         String referenceNo = (String) payload.get("referenceNo");
@@ -229,6 +239,7 @@ public class T24SimulatorController {
         return "ACTIVE";
     }
 
+    @Operation(summary = "Set account lifecycle status", description = "Sets simulated account status (ACTIVE, FROZEN, or CLOSED) for testing error branches.")
     @PostMapping("/account-status")
     public ResponseEntity<Map<String, String>> setAccountStatus(@RequestBody Map<String, String> payload) {
         String accountNo = payload.get("accountNo");
@@ -240,11 +251,15 @@ public class T24SimulatorController {
         return ResponseEntity.ok(Map.of("accountNo", accountNo, "status", status.toUpperCase()));
     }
 
+    @Operation(summary = "Get account lifecycle status", description = "Retrieves simulated account status.")
     @GetMapping("/account-status/{accountNo}")
-    public ResponseEntity<Map<String, String>> getAccountStatusEndpoint(@PathVariable String accountNo) {
+    public ResponseEntity<Map<String, String>> getAccountStatusEndpoint(
+            @Parameter(description = "Account number", example = "ACC-1001")
+            @PathVariable String accountNo) {
         return ResponseEntity.ok(Map.of("accountNo", accountNo, "status", getAccountStatus(accountNo)));
     }
 
+    @Operation(summary = "Reset simulator state", description = "Clears simulator in-memory state and mock account statuses.")
     @DeleteMapping("/reset")
     public ResponseEntity<Map<String, String>> resetSimulator() {
         processedMap.clear();

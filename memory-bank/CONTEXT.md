@@ -2,8 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (Flat 7% Loan Interest Rate by [dom])_  
-_Last Updated: 2026-10-08 (JMeter CLI Runners & PowerShell 5.1 Encoding Fix by [dom])_  
+_Last Updated: 2026-10-08 (Comprehensive endpoint-level OpenAPI Swagger documentation across all microservices, centralized Gateway Swagger UI, automated 3-attempt bank loan retry & admin retry removal, RFC-7807 problem details platform standardisation, database-driven RBAC migration, gateway CORS allow-list, list pagination, and API reference alignment by [dom])_  
 
 ---
 
@@ -11,7 +10,7 @@ _Last Updated: 2026-10-08 (JMeter CLI Runners & PowerShell 5.1 Encoding Fix by [
 
 The PayPink system is being refactored from a shared-database monolithic ledger into a Domain-Driven Design (DDD) banking architecture. In this design, Temenos T24 (simulated by `t24-adapter`) acts as the stateful System of Record (SoR) and authoritative double-entry book of record.
 
-### Refactoring Roadmap (Phases 0 through 9)
+### Refactoring Roadmap (Phases 0 through 10)
 
 | Phase | Title | Scope and Deliverables | Status |
 |:---:|---|---|:---:|
@@ -25,6 +24,7 @@ The PayPink system is being refactored from a shared-database monolithic ledger 
 | **Phase 7** | EOD Service Alignment | Align Interest EOD and Loan EOD to use qualified `t24.*` and `app.*` schemas with T24 Core EOD job logs (`t24.EOD_JOB_RUN`) and posting events. | Done (Commit `2f9e31e`) |
 | **Phase 8** | Events, Audit & Reconciliation Re-point | Verify and relate outbox events with T24 Core double-entry posting journals across `audit-service`, `reconciliation-service`, `notification-service`, and `analytics-service`. | Done (Commit `9590d5f`) |
 | **Phase 9** | Frontend Polish, Synonym Cleanup & Final Verification | Final end-to-end verification across Web SPA and frozen Mobile contracts; created synonym retirement script `scripts/retire_phase9_synonyms.sql`; verified 100% test pass rate across all microservices. | Done |
+| **Phase 10** | Database RBAC, RFC-7807 & Security Hardening | Database-driven roles in `app.CUSTOMER`, BCrypt admin user seeding (`migrate_phase10_rbac_roles.sql` in Docker Compose), gateway CORS trusted origin allow-list, account list pagination, and platform-wide RFC-7807 Problem Details (`application/problem+json`) standardisation. | Done |
 
 ---
 

@@ -20,18 +20,21 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, Object>> handleResponseStatusException(
+    public ResponseEntity<ProblemDetails> handleResponseStatusException(
             ResponseStatusException ex, HttpServletRequest request) {
 
-        Map<String, Object> body = Map.of(
-                "timestamp", LocalDateTime.now().toString(),
-                "status", ex.getStatusCode().value(),
-                "error", ex.getReason() != null ? ex.getReason() : ex.getMessage(),
-                "path", request.getRequestURI()
+        int statusCode = ex.getStatusCode().value();
+        String reason = ex.getReason() != null ? ex.getReason() : ex.getMessage();
+        ProblemDetails problem = new ProblemDetails(
+                "https://api.paypink.ph/errors/" + statusCode,
+                HttpStatus.valueOf(statusCode).getReasonPhrase(),
+                statusCode,
+                reason,
+                request.getRequestURI()
         );
         return ResponseEntity.status(ex.getStatusCode())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body);
+                .contentType(MediaType.parseMediaType("application/problem+json"))
+                .body(problem);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

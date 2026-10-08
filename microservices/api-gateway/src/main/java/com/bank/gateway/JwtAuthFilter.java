@@ -32,7 +32,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/api/v1/risk/openapi",
             "/api/v1/t24/health",
             "/api/v1/remittance/health",
-            "/actuator"
+            "/actuator",
+            "/swagger-ui",
+            "/v3/api-docs",
+            "/webjars"
     );
 
     // Paths that additionally require ROLE_ADMIN in the JWT
@@ -44,7 +47,11 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/api/v1/stress",
             "/api/v1/ledger",
             "/api/v1/t24",
-            "/api/v1/risk"
+            "/api/v1/risk",
+            "/api/v1/reconciliation",
+            "/api/v1/audit",
+            "/api/v1/analytics",
+            "/api/v1/telemetry"
     );
 
     static boolean isAdminPath(String path) {
@@ -53,6 +60,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         }
         if (path.startsWith("/api/v1/accounts/") &&
                 (path.endsWith("/reset-balance") || path.endsWith("/status") || path.contains("/status/"))) {
+            return true;
+        }
+        if (path.startsWith("/api/v1/loans/applications/") &&
+                (path.endsWith("/retry") || path.endsWith("/reset"))) {
             return true;
         }
         return false;
@@ -99,8 +110,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
         String authHeader = sanitizedExchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ") || authHeader.length() <= 7) {
-            sanitizedExchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return sanitizedExchange.getResponse().setComplete();
+            return writeProblem(sanitizedExchange, HttpStatus.UNAUTHORIZED, "Unauthorized",
+                    "Full authentication is required to access this resource.");
         }
 
         String token = authHeader.substring(7);
@@ -112,16 +123,37 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                     .getBody();
 
             if (isAdminPath(path) && !roles(claims).contains("ROLE_ADMIN")) {
-                sanitizedExchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-                return sanitizedExchange.getResponse().setComplete();
+                return writeProblem(sanitizedExchange, HttpStatus.FORBIDDEN, "Forbidden",
+                        "Administrative privileges (ROLE_ADMIN) are required to access this resource.");
             }
 
             // Forward user info as headers to downstream services
             return chain.filter(withIdentity(sanitizedExchange, claims));
         } catch (JwtException | IllegalArgumentException e) {
-            sanitizedExchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return sanitizedExchange.getResponse().setComplete();
+            return writeProblem(sanitizedExchange, HttpStatus.UNAUTHORIZED, "Unauthorized",
+                    "The provided authentication token is invalid or expired.");
         }
+    }
+
+    private static final org.springframework.http.MediaType PROBLEM_JSON =
+            org.springframework.http.MediaType.parseMediaType("application/problem+json");
+
+    private static Mono<Void> writeProblem(ServerWebExchange exchange, HttpStatus status, String title, String detail) {
+        var response = exchange.getResponse();
+        response.setStatusCode(status);
+        response.getHeaders().setContentType(PROBLEM_JSON);
+        String path = exchange.getRequest().getURI().getPath();
+        String json = String.format(
+                "{\"type\":\"https://paypink.ph/errors/%d\",\"title\":\"%s\",\"status\":%d,\"detail\":\"%s\",\"instance\":\"%s\"}",
+                status.value(),
+                title,
+                status.value(),
+                detail,
+                path
+        );
+        org.springframework.core.io.buffer.DataBuffer buffer =
+                response.bufferFactory().wrap(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return response.writeWith(Mono.just(buffer));
     }
 
     private static ServerWebExchange withIdentity(ServerWebExchange exchange, Claims claims) {

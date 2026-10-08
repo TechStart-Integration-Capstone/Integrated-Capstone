@@ -23,7 +23,11 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns: "*"
+            allowedOriginPatterns:
+              - "http://localhost:[*]"
+              - "http://127.0.0.1:[*]"
+              - "https://*.paypink.ph"
+              - "https://*.cloudapp.azure.com"
             allowedMethods: ["GET","POST","PUT","DELETE","OPTIONS","PATCH"]
             allowedHeaders: "*"
             allowCredentials: true
@@ -181,6 +185,70 @@ spring:
             - Path=/api/v1/audit/**
           filters:
             - StripPrefix=3
+
+        # ── OpenAPI 3 / Swagger Aggregated Specs ─────────────────────────────
+        - id: openapi-auth
+          uri: http://${AUTH_SERVICE_HOST:auth-service}:8081
+          predicates:
+            - Path=/v3/api-docs/auth
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: openapi-account
+          uri: http://${ACCOUNT_SERVICE_HOST:account-service}:8082
+          predicates:
+            - Path=/v3/api-docs/account
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: openapi-transaction
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/v3/api-docs/transaction
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: openapi-loan
+          uri: http://${LOAN_SERVICE_HOST:loan-service}:8091
+          predicates:
+            - Path=/v3/api-docs/loan
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: openapi-t24
+          uri: http://${T24_ADAPTER_HOST:t24-adapter}:8090
+          predicates:
+            - Path=/v3/api-docs/t24
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: openapi-risk
+          uri: http://${RISK_ENGINE_HOST:risk-engine}:8000
+          predicates:
+            - Path=/v3/api-docs/risk
+          filters:
+            - SetPath=/openapi.json
+
+# ── SpringDoc Swagger UI Configuration ───────────────────────────────────────
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    urls:
+      - name: "1. Authentication (auth-service)"
+        url: /v3/api-docs/auth
+      - name: "2. Accounts & Customers (account-service)"
+        url: /v3/api-docs/account
+      - name: "3. Remittance Saga & CQRS (transaction-service)"
+        url: /v3/api-docs/transaction
+      - name: "4. Loan Lifecycle & Credit (loan-service)"
+        url: /v3/api-docs/loan
+      - name: "5. T24 Core Banking SoR (t24-adapter)"
+        url: /v3/api-docs/t24
+      - name: "6. Fraud Risk Engine (risk-engine)"
+        url: /v3/api-docs/risk
 
 # ── JWT secret shared with auth-service ─────────────────────────────────────
 app:

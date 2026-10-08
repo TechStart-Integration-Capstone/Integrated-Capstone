@@ -97,6 +97,8 @@ public class LoanDisbursementService {
         applicationRepository.save(app);
     }
 
+    public static final int MAX_DISBURSEMENT_ATTEMPTS = 3;
+
     /** customerId is null when called by the recovery job. */
     private LoanSummary disburse(Long customerId, String referenceNo, String correlationId) {
         Disbursed result = tx.execute(status -> {
@@ -112,28 +114,52 @@ public class LoanDisbursementService {
             }
             if (LoanApplication.STATUS_FAILED.equals(app.getStatus())) throw LoanException.disbursementFailed();
 
+            int attempts = app.getRetryCount() + 1;
+            app.setRetryCount(attempts);
+
             OrchestratorClient.TransferResult transfer = orchestrator.transfer(
                     props.getBankAccountNo(), account.accountNumber(), AmortizationCalculator.money(app.getOfferedAmount()),
                     "LOAN_DISBURSEMENT", "LOAN-DISB-" + app.getReferenceNo(), "Loan " + app.getReferenceNo(), correlationId);
 
             if (transfer.isPosted()) {
                 Loan loan = createLoan(app, transfer);
-                log.info("[loan-service] Loan {} disbursed from application {} txId={} ft={}", loan.getReferenceNo(),
-                        referenceNo, transfer.transactionId(), transfer.ftReference());
+                log.info("[loan-service] Loan {} disbursed from application {} txId={} ft={} (attempt {}/{})", loan.getReferenceNo(),
+                        referenceNo, transfer.transactionId(), transfer.ftReference(), attempts, MAX_DISBURSEMENT_ATTEMPTS);
                 return new Disbursed(queries.summary(loan, account.accountNumber()), false);
             }
             if ("REJECTED".equals(transfer.status())) {
-                log.warn("[loan-service] Disbursement for {} rejected: {}", referenceNo, transfer.reason());
+                log.warn("[loan-service] Disbursement for {} rejected (attempt {}/{}): {}",
+                        referenceNo, attempts, MAX_DISBURSEMENT_ATTEMPTS, transfer.reason());
+                if (attempts >= MAX_DISBURSEMENT_ATTEMPTS) {
+                    log.error("[loan-service] Disbursement for {} reached max attempts ({}), marking FAILED",
+                            referenceNo, MAX_DISBURSEMENT_ATTEMPTS);
+                    app.setStatus(LoanApplication.STATUS_FAILED);
+                    applicationRepository.save(app);
+                    return new Disbursed(null, true);
+                } else {
+                    applicationRepository.save(app);
+                    return new Disbursed(null, false);
+                }
+            }
+            // PENDING_CORE: outcome unknown. The application stays DISBURSING; recovery finishes it.
+            log.warn("[loan-service] Disbursement for {} not posted yet (attempt {}/{}): {} {}",
+                    referenceNo, attempts, MAX_DISBURSEMENT_ATTEMPTS, transfer.status(), transfer.reason());
+            if (attempts >= MAX_DISBURSEMENT_ATTEMPTS) {
+                log.error("[loan-service] Disbursement for {} reached max attempts ({}) on pending/timeout, marking FAILED",
+                        referenceNo, MAX_DISBURSEMENT_ATTEMPTS);
                 app.setStatus(LoanApplication.STATUS_FAILED);
                 applicationRepository.save(app);
                 return new Disbursed(null, true);
             }
-            // PENDING_CORE: outcome unknown. The application stays DISBURSING; recovery finishes it.
-            log.warn("[loan-service] Disbursement for {} not posted yet: {} {}", referenceNo, transfer.status(), transfer.reason());
+            applicationRepository.save(app);
             throw LoanException.coreUnavailable(
                     "Your loan is still being processed. It will appear under My loans shortly — there is no need to accept again.");
         });
         if (result.rejected()) throw LoanException.disbursementFailed();
+        if (result.loan() == null) {
+            throw LoanException.coreUnavailable(
+                    "Your loan is still being processed. It will appear under My loans shortly — there is no need to accept again.");
+        }
         return result.loan();
     }
 
@@ -153,6 +179,23 @@ public class LoanDisbursementService {
                 log.warn("[loan-service] Recovery of {} failed: {}", app.getReferenceNo(), e.getMessage());
             }
         }
+    }
+
+    /**
+     * Admin recovery: resets a failed or stuck application back to DECIDED status,
+     * allowing the customer to review and accept the offer again.
+     */
+    public void adminResetApplication(String referenceNo) {
+        tx.executeWithoutResult(status -> {
+            LoanApplication app = applicationRepository.lockByReferenceNo(referenceNo)
+                    .orElseThrow(LoanException::loanNotFound);
+            if (LoanApplication.STATUS_ACCEPTED.equals(app.getStatus())) {
+                throw LoanException.alreadyAccepted();
+            }
+            app.setStatus(LoanApplication.STATUS_DECIDED);
+            app.setRetryCount(0);
+            applicationRepository.save(app);
+        });
     }
 
     private Loan createLoan(LoanApplication app, OrchestratorClient.TransferResult transfer) {

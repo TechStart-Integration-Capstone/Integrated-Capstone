@@ -14,15 +14,16 @@ BEGIN TRY
     DECLARE @password_hash NVARCHAR(255) = N'$2a$10$rUxZUS7mrNY.MaP7WtGdfuHM2aaNt37ntfZbVAmUuq/MgtVrhO0Jm';
 
     INSERT INTO dbo.CUSTOMER
-        (username, password_hash, first_name, last_name, email, contact_no, status)
+        (username, password_hash, first_name, last_name, email, contact_no, status, roles)
     OUTPUT inserted.customer_id, inserted.username INTO @new_customers
-    SELECT seed.username, @password_hash, seed.first_name, seed.last_name,
-           seed.email, seed.contact_no, N'ACTIVE'
+    SELECT seed.username, seed.password_hash, seed.first_name, seed.last_name,
+           seed.email, seed.contact_no, N'ACTIVE', seed.roles
     FROM (VALUES
-        (N'lviernes', N'Levi', N'Viernes', N'lviernes@example.test', N'+630000000001'),
-        (N'arosales', N'Aly', N'Rosales', N'arosales@example.test', N'+630000000002'),
-        (N'glim', N'Gill', N'Lim', N'glim@example.test', N'+630000000003')
-    ) AS seed(username, first_name, last_name, email, contact_no)
+        (N'lviernes', @password_hash, N'Levi', N'Viernes', N'lviernes@example.test', N'+630000000001', N'ROLE_CUSTOMER,ROLE_RETAIL_USER'),
+        (N'arosales', @password_hash, N'Aly', N'Rosales', N'arosales@example.test', N'+630000000002', N'ROLE_CUSTOMER,ROLE_RETAIL_USER'),
+        (N'glim',     @password_hash, N'Gill', N'Lim',     N'glim@example.test',     N'+630000000003', N'ROLE_CUSTOMER,ROLE_RETAIL_USER'),
+        (N'admin',    N'$2a$10$5X2WM6Ws7z.jjQCWeeLTheqLAFNyVboU0nSrYvQ9MTBeBfmkARsqq', N'PayPink', N'Administrator', N'admin@paypink.internal', N'+630000000000', N'ROLE_ADMIN,ROLE_CORE_ENGINEER')
+    ) AS seed(username, password_hash, first_name, last_name, email, contact_no, roles)
     WHERE NOT EXISTS (
         SELECT 1 FROM dbo.CUSTOMER WITH (UPDLOCK, HOLDLOCK)
         WHERE username = seed.username

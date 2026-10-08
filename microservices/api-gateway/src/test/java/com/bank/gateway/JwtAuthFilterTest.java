@@ -369,6 +369,38 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    @DisplayName("/api/v1/reconciliation/run and /api/v1/audit with customer token: 403 Forbidden")
+    void opsEndpoints_customerToken_returns403() {
+        MockServerWebExchange reconExchange = MockServerWebExchange.from(MockServerHttpRequest
+                .post("/api/v1/reconciliation/run")
+                .header("Authorization", "Bearer " + validToken("jdelacruz", 1L))
+                .build());
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        StepVerifier.create(filter.filter(reconExchange, chain)).verifyComplete();
+        assertThat(reconExchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verify(chain, never()).filter(any());
+
+        MockServerWebExchange auditExchange = MockServerWebExchange.from(MockServerHttpRequest
+                .get("/api/v1/audit/risk-decisions")
+                .header("Authorization", "Bearer " + validToken("jdelacruz", 1L))
+                .build());
+        StepVerifier.create(filter.filter(auditExchange, chain)).verifyComplete();
+        assertThat(auditExchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("/api/v1/reconciliation/run and /api/v1/audit with admin token: passes through")
+    void opsEndpoints_adminToken_passesThrough() {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .post("/api/v1/reconciliation/run")
+                .header("Authorization", "Bearer " + tokenWithRoles("admin", 0L, List.of("ROLE_ADMIN")))
+                .build());
+        StepVerifier.create(filter.filter(exchange, recordingChain(chainCalled))).verifyComplete();
+        assertThat(chainCalled.get()).isTrue();
+    }
+
+    @Test
     @DisplayName("Filter ordering: JwtAuthFilter must run before other filters (order = -100)")
     void filterOrder_isNegativeHundred() {
         assertThat(filter.getOrder()).isEqualTo(-100);

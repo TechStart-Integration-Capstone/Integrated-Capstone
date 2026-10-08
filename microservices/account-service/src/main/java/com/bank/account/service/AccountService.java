@@ -58,6 +58,11 @@ public class AccountService {
         return accountRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<AccountDto> getAccountsByCustomerId(Long customerId) {
+        return accountRepository.findByCustomerId(customerId).stream().map(this::mapToDto).collect(Collectors.toList());
+    }
+
     /**
      * Gets a single account by ID.
      * On success: writes the result to Redis (30s TTL) for circuit breaker fallback.
@@ -69,7 +74,8 @@ public class AccountService {
     @Transactional(readOnly = true)
     public AccountDto getAccountById(Long accountId) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("Account ID " + accountId + " not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Account ID " + accountId + " not found."));
         AccountDto dto = mapToDto(account);
         cacheAccount(dto);
         return dto;
@@ -80,6 +86,9 @@ public class AccountService {
      * Response includes mayBeStale=true so the caller knows this is not a live value.
      */
     public AccountDto getAccountByIdFallback(Long accountId, Throwable ex) {
+        if (ex instanceof org.springframework.web.server.ResponseStatusException rse) {
+            throw rse;
+        }
         log.warn("[account-service] Circuit breaker fallback for accountId={} reason={}",
                 accountId, ex.getMessage());
         String cached = redisTemplate.opsForValue().get(CACHE_PREFIX + accountId);
@@ -103,7 +112,8 @@ public class AccountService {
     @Transactional(readOnly = true)
     public CustomerDto getCustomerProfile(Long customerId) {
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Customer not found"));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Customer not found"));
         CustomerDto dto = new CustomerDto(customer.getCustomerId(), customer.getUsername(),
                 customer.getFirstName(), customer.getLastName(), customer.getEmail(),
                 customer.getContactNo(), customer.getStatus(), customer.getCreatedDate());
@@ -116,6 +126,9 @@ public class AccountService {
     }
 
     public CustomerDto getCustomerProfileFallback(Long customerId, Throwable ex) {
+        if (ex instanceof org.springframework.web.server.ResponseStatusException rse) {
+            throw rse;
+        }
         log.warn("[account-service] Circuit breaker fallback for customerId={} reason={}",
                 customerId, ex.getMessage());
         throw new RuntimeException("Customer profile is currently unavailable. Please try again shortly.");
@@ -137,7 +150,8 @@ public class AccountService {
     @Transactional
     public AccountDto updateAccountStatus(Long accountId, String status) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("Account ID " + accountId + " not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Account ID " + accountId + " not found."));
         account.setStatus(status.toUpperCase());
         return mapToDto(accountRepository.save(account));
     }
@@ -145,7 +159,8 @@ public class AccountService {
     @Transactional
     public CustomerDto updateCustomerStatus(Long customerId, String status) {
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Customer ID " + customerId + " not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Customer ID " + customerId + " not found."));
         customer.setStatus(status.toUpperCase());
         customerRepository.save(customer);
         return getCustomerProfile(customerId);
@@ -154,7 +169,8 @@ public class AccountService {
     @Transactional
     public AccountDto resetAccountBalance(Long accountId, BigDecimal targetBalance) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("Account not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Account not found."));
         account.setCurrentBalance(targetBalance);
         AccountDto dto = mapToDto(accountRepository.save(account));
         cacheAccount(dto);
