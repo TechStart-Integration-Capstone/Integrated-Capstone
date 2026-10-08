@@ -72,7 +72,7 @@ PayPink 2.0 operates as an event-driven, domain-partitioned microservices bankin
 
 ## Infrastructure and Deployment Notes
 
-- **Azure SQL Server 2022:** Local container `azure-sql-master` or hosted Azure SQL `paypink`. 13 tables partitioned across `t24` and `app` schemas with `dbo.*` synonyms.
+- **Azure SQL Server 2022:** Local container `azure-sql-master` or hosted Azure SQL `paypink`. 13 tables partitioned across `t24` and `app` schemas with `dbo.*` synonyms. Fresh container setup automated via `mssql-server-setup-scripts.d` (01_schema -> 02_loans -> 03_seed -> 04_schema_split -> 05_interest).
 - **PostgreSQL 15:** Local container `postgres-immutable-audit` hosting `ledger_audit_db` for immutable risk audit records and Interest EOD snapshots.
 - **Redis 7:** Container `redis-idempotency-matrix` for idempotency locks and rate limits.
 - **Kafka:** Container `kafka` for asynchronous transaction events.

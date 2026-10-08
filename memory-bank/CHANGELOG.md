@@ -1,6 +1,15 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Automated Azure SQL Fresh Volume Initialization in Docker Compose:
+  - Mounted `scripts/migrate_phase1_schema_split.sql` as `/mssql-server-setup-scripts.d/04_schema_split.sql:ro` and `scripts/migrate_interest_azuresql.sql` as `/mssql-server-setup-scripts.d/05_interest.sql:ro` in `docker/docker-compose.yml`.
+  - Ensures that when running `docker compose down -v` followed by `docker compose up`, SQL Server's automated setup executes all scripts in order (`01_schema` -> `02_loans` -> `03_seed` -> `04_schema_split` -> `05_interest`) with zero manual steps required. — [dom]
+
+- 2026-10-08 — Azure SQL Phase 1 Schema Split Migration & Auth Service Resolution:
+  - Executed `scripts/migrate_phase1_schema_split.sql` on local Azure SQL container (`azure-sql-master`), creating schemas `t24` and `app`, transferring tables (`CUSTOMER`, `BANKING_FAVORITE`, `AUDIT_LOG`, `OUTBOX_EVENT`, `REMITTANCE`, `LOAN_APPLICATION` to `app`; `ACCOUNT`, `LEDGER_TRANSACTION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT`, `EOD_JOB_RUN` to `t24`), and establishing `dbo.*` synonyms for full backward compatibility.
+  - Resolved `auth-service` startup crash loop caused by `Invalid object name 'app.customer'` during `DataInitializer` run.
+  - Verified live login endpoints through `api-gateway`: Admin login (`/api/v1/auth/login`) returns HTTP 200 with `ROLE_ADMIN`, and Bank customer login (`/api/v1/auth/banking/login`) returns HTTP 200 with customer JWT and profile. — [dom]
+
 - 2026-10-08 — Interest EOD Schema Provisioning (PostgreSQL & Azure SQL):
   - Applied `scripts/migrate_interest_postgres.sql` to live PostgreSQL `ledger_audit_db`, provisioning immutable tables `interest_accrual`, `interest_accrual_batch`, `interest_backfill_proposal`, and `interest_backfill_approval` with audit truncate/update guard triggers and rules.
   - Applied `scripts/migrate_interest_azuresql.sql` to live Azure SQL Server, adding `interest_rate` column to `t24.ACCOUNT` and creating `t24.EOD_JOB_RUN` with backward-compatible `dbo.EOD_JOB_RUN` synonym.
