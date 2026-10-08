@@ -1,5 +1,8 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
+- 2026-10-06 — Dynamic Mobile Transfer & Activity History Binding: passed live user accounts (`_userProfile?.accounts`) to `RemittanceScreen` in `mobile/lib/main.dart`; updated `RemittanceService` and `RemittanceScreen` to submit and transfer using dynamic account numbers instead of hardcoded 5046/8504 mocks; updated `AccountService.fetchTransactions()` to query live database transactions from Azure SQL via `/auth/admin/transactions/today` & `/auth/banking/transactions`. — [Antigravity]
+- 2026-10-06 — Dynamic Mobile Dashboard & Accounts Binding: updated `mobile/lib/screens/dashboard_screen.dart` to dynamically render live database accounts (`widget.accounts`) fetched from Azure SQL instead of static hardcoded cards. — [Antigravity]
+- 2026-10-06 — Enforced project memory workflow in root `AGENTS.md`: read `memory-bank/CONTEXT.md` before code and update CONTEXT/CHANGELOG after every change, including migrations and deployments. Updated context to reflect actual local runtime rather than pending activation. — [Codex; uncommitted]
 
 - 2026-10-06 — CI/CD Port 80 Exposing & Automated Database Migration Step:
   - **Port 80/3001 Dual Binding (`docker/docker-compose.yml`):** Exposed `80:80` alongside `3001:80` for `frontend-spa` container, resolving `curl: (7) Failed to connect to localhost port 80` in the CI/CD deployment health check and aligning host ingress with Azure NSG Rule 110.
@@ -52,6 +55,9 @@ Newest first. One line per change: date, what changed, who.
 - 2026-10-06 — Updated memory-bank context with interest EOD behavior, schemas, admin endpoints, configuration, retry safeguards, 82 passing tests and pending live activation; attributed the latest interest changes to aly. — [aly]
 
 - 2026-10-06 — Added orchestrator interest EOD: immutable PostgreSQL daily accruals and batch completion, tiered savings/fixed loan rates, atomic Azure SQL monthly savings credits with GL/ledger/outbox, admin endpoints, retry/coverage guards, additive migrations and deployment guide. Validation: transaction-service 66/66 (including 10 native PostgreSQL 15/SQL Server 2022 tests), api-gateway 16/16; live deployment not performed. — [aly]
+- 2026-10-06 - Updated memory-bank context with interest EOD behavior, schemas, admin endpoints, configuration, retry safeguards, 82 passing tests and pending live activation; attributed the latest interest changes to aly. - aly
+
+- 2026-10-06 - Added orchestrator interest EOD: immutable PostgreSQL daily accruals and batch completion, tiered savings/fixed loan rates, atomic Azure SQL monthly savings credits with GL/ledger/outbox, admin endpoints, retry/coverage guards, additive migrations and deployment guide. Validation: transaction-service 66/66 (including 10 native PostgreSQL 15/SQL Server 2022 tests), api-gateway 16/16; live deployment not performed. - aly
 
 - 2026-10-06 — Reconciliation service bug fix + Oracle → Azure SQL rename throughout.
   - **Root cause fixed:** `RECONCILIATION_LOG` had `account_id NOT NULL` in PostgreSQL but `ReconciliationLog.java` had no `account_id` field and the service never populated it. Every Kafka-triggered and scheduled reconciliation insert crashed with `null value in column "account_id" violates not-null constraint` (SQLState 23502). Fix: made `account_id` nullable in the schema, added the field to the entity, and populated it from `LedgerMutationAudit.getAccountId()` in `saveReconLog()` when an audit row exists.
