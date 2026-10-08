@@ -3,6 +3,11 @@ package com.bank.auth.banking;
 import com.bank.auth.dto.AuthRequest;
 import com.bank.auth.dto.AuthResponse;
 import com.bank.auth.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -12,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.*;
 
+@Tag(name = "Banking Customer & Onboarding", description = "Customer onboarding, authentication, profile lookup, and directory endpoints")
 @RestController
 @RequestMapping("/api/v1/auth/banking")
 public class BankingController {
@@ -24,39 +30,80 @@ public class BankingController {
         this.recipients = recipients;
     }
 
+    /**
+     * @deprecated Deprecated in PayPink 2.0 (Phase 5). API Gateway rewrites /api/v1/auth/banking/recipients
+     * to account-service (/api/v1/accounts/recipients). Kept for backward compatibility.
+     */
+    @Deprecated
+    @Operation(summary = "Lookup recipient by account number (Deprecated)", description = "Deprecated: Gateway routes to account-service. Resolves recipient name by account number.")
     @GetMapping("/recipients/lookup")
-    public BankingRecipientService.Recipient lookup(@RequestHeader(value="Authorization",required=false) String token, @RequestParam String accountNumber) {
+    public BankingRecipientService.Recipient lookup(@Parameter(hidden = true) @RequestHeader(value="Authorization",required=false) String token, @Parameter(description = "Account number to lookup", example = "ACC-1002") @RequestParam String accountNumber) {
         return recipients.lookup(token,accountNumber);
     }
+
+    /**
+     * @deprecated Deprecated in PayPink 2.0 (Phase 5). API Gateway rewrites /api/v1/auth/banking/recipients
+     * to account-service (/api/v1/accounts/recipients). Kept for backward compatibility.
+     */
+    @Deprecated
+    @Operation(summary = "Get recipient directory (Deprecated)", description = "Deprecated: Gateway routes to account-service. Returns directory of available transfer recipients.")
     @GetMapping("/recipients")
-    public BankingRecipientService.Directory recipients(@RequestHeader(value="Authorization",required=false) String token) {
+    public BankingRecipientService.Directory recipients(@Parameter(hidden = true) @RequestHeader(value="Authorization",required=false) String token) {
         return recipients.directory(token);
     }
+
     public record FavoriteRequest(@jakarta.validation.constraints.NotBlank String accountNumber) {}
+
+    /**
+     * @deprecated Deprecated in PayPink 2.0 (Phase 5). API Gateway rewrites /api/v1/auth/banking/favorites
+     * to account-service (/api/v1/accounts/favorites). Kept for backward compatibility.
+     */
+    @Deprecated
+    @Operation(summary = "Save recipient to favorites (Deprecated)", description = "Deprecated: Gateway routes to account-service. Saves an account to customer favorites.")
     @PostMapping("/favorites")
-    public BankingRecipientService.Recipient favorite(@RequestHeader(value="Authorization",required=false) String token, @Valid @RequestBody FavoriteRequest request) {
+    public BankingRecipientService.Recipient favorite(@Parameter(hidden = true) @RequestHeader(value="Authorization",required=false) String token, @Valid @RequestBody FavoriteRequest request) {
         return recipients.save(token,request.accountNumber());
     }
+
+    /**
+     * @deprecated Deprecated in PayPink 2.0 (Phase 5). API Gateway rewrites /api/v1/auth/banking/favorites
+     * to account-service (/api/v1/accounts/favorites). Kept for backward compatibility.
+     */
+    @Deprecated
+    @Operation(summary = "Remove recipient from favorites (Deprecated)", description = "Deprecated: Gateway routes to account-service. Removes an account from favorites.")
     @DeleteMapping("/favorites/{number}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void removeFavorite(@RequestHeader(value="Authorization",required=false) String token, @PathVariable String number) {
+    public void removeFavorite(@Parameter(hidden = true) @RequestHeader(value="Authorization",required=false) String token, @Parameter(description = "Account number to remove") @PathVariable String number) {
         recipients.remove(token,number);
     }
 
     @Deprecated
+    @Operation(summary = "Direct transfer (Gone/Deprecated)", description = "Deprecated (410 Gone). All transfers must be routed via /api/v1/remittance/transfer.")
     @PostMapping("/transfers")
-    public BankingTransferService.Receipt transfer(@RequestHeader(value = "Authorization", required = false) String token,
+    public BankingTransferService.Receipt transfer(@Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String token,
                                                    @Valid @RequestBody BankingTransferService.Request request) {
         throw new ResponseStatusException(HttpStatus.GONE,
                 "Direct database transfer is deprecated. All transfers must be routed via /api/v1/remittance/transfer.");
     }
 
+    @Operation(summary = "Register new banking customer", description = "Registers a new customer account, creating credentials and initial deposit account.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Registration successful"),
+            @ApiResponse(responseCode = "400", description = "Validation error"),
+            @ApiResponse(responseCode = "409", description = "Username or email already registered")
+    })
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public AuthResponse register(@Valid @RequestBody BankingService.Registration request) {
         return banking.register(request);
     }
 
+    @Operation(summary = "Banking login", description = "Authenticates banking user credentials and verifies customer profile.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Login successful"),
+            @ApiResponse(responseCode = "401", description = "Invalid credentials"),
+            @ApiResponse(responseCode = "503", description = "Service unavailable")
+    })
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody AuthRequest request) {
         try {
@@ -70,13 +117,15 @@ public class BankingController {
         }
     }
 
+    @Operation(summary = "Get banking profile", description = "Retrieves the authenticated customer's profile, linked accounts, and status.")
     @GetMapping("/me")
-    public BankingService.Profile profile(@RequestHeader(value = "Authorization", required = false) String token) {
+    public BankingService.Profile profile(@Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String token) {
         return banking.profile(token);
     }
 
+    @Operation(summary = "Get banking activity", description = "Retrieves recent banking transactions for the authenticated customer.")
     @GetMapping("/transactions")
-    public List<BankingService.Activity> transactions(@RequestHeader(value = "Authorization", required = false) String token) {
+    public List<BankingService.Activity> transactions(@Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String token) {
         return banking.activity(token);
     }
 

@@ -1,6 +1,8 @@
 package com.bank.transaction.controller;
 
 import com.bank.transaction.service.TelemetryService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +15,7 @@ import java.util.Map;
  * Route: GET /api/v1/telemetry/stats
  * Proxied through the API Gateway → transaction-service.
  */
+@Tag(name = "Telemetry & Observability", description = "Live service health and connection pool telemetry for the Observability dashboard")
 @RestController
 @RequestMapping("/api/v1/telemetry")
 @CrossOrigin(origins = "*")
@@ -27,6 +30,7 @@ public class TelemetryController {
         this.redisTemplate    = redisTemplate;
     }
 
+    @Operation(summary = "Get live telemetry stats", description = "Returns system performance metrics including HikariCP connection pool usage and real-time Redis latency probes.")
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats() {
         Map<String, Object> stats = new HashMap<>(telemetryService.getTelemetrySnapshot());

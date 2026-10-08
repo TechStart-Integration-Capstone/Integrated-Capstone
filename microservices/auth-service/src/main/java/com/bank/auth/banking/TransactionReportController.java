@@ -1,5 +1,8 @@
 package com.bank.auth.banking;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.*;
@@ -8,16 +11,19 @@ import java.time.LocalDate;
 import java.util.Map;
 import java.io.IOException;
 
+@Tag(name = "Transaction Reports (Legacy)", description = "PDF statement generation (Deprecated: routed to transaction-service)")
 @RestController
 @RequestMapping("/api/v1/auth/banking/reports")
 public class TransactionReportController {
     private final TransactionReportService reports;
     public TransactionReportController(TransactionReportService reports) {this.reports=reports;}
+
+    @Operation(summary = "Download statement PDF (Deprecated)", description = "Deprecated in Phase 4: routed to transaction-service /api/v1/transactions/reports/transactions.pdf.")
     @GetMapping(value="/transactions.pdf",produces=MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> download(@RequestHeader(value="Authorization",required=false) String token,
-        @RequestParam long accountId,
-        @RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,
-        @RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate to) throws IOException {
+    public ResponseEntity<byte[]> download(@Parameter(hidden = true) @RequestHeader(value="Authorization",required=false) String token,
+        @Parameter(description = "Account ID", example = "1") @RequestParam long accountId,
+        @Parameter(description = "Start date (YYYY-MM-DD)", example = "2026-01-01") @RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate from,
+        @Parameter(description = "End date (YYYY-MM-DD)", example = "2026-12-31") @RequestParam @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate to) throws IOException {
         byte[] pdf=reports.generate(token,accountId,from,to);
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).cacheControl(CacheControl.noStore())
             .header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\"PayPink-Transactions-"+from+"-to-"+to+".pdf\"")

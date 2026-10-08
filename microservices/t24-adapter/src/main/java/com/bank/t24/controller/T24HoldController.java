@@ -4,6 +4,11 @@ import com.bank.t24.dto.T24HoldRequest;
 import com.bank.t24.dto.T24HoldResponse;
 import com.bank.t24.dto.T24ReleaseRequest;
 import com.bank.t24.service.T24HoldService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+@Tag(name = "T24 Balance Holds", description = "Atomic balance lock and release operations (t24.LOCKED_AMOUNT)")
 @RestController
 @RequestMapping("/api/v1/t24/holds")
 public class T24HoldController {
@@ -26,6 +32,12 @@ public class T24HoldController {
         this.holdService = holdService;
     }
 
+    @Operation(summary = "Place balance hold (lock)", description = "Atomically locks funds in t24.LOCKED_AMOUNT against an account, decreasing available balance.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hold placed successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid hold parameters"),
+            @ApiResponse(responseCode = "422", description = "Insufficient funds or account inactive")
+    })
     @PostMapping(value = "/lock", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> placeHold(@Valid @RequestBody T24HoldRequest request) {
         try {
@@ -43,6 +55,12 @@ public class T24HoldController {
         }
     }
 
+    @Operation(summary = "Release balance hold", description = "Releases an active hold in t24.LOCKED_AMOUNT, restoring funds to available balance.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hold released successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid release parameters"),
+            @ApiResponse(responseCode = "422", description = "Hold not found or already released")
+    })
     @PostMapping(value = "/release", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> releaseHold(@Valid @RequestBody T24ReleaseRequest request) {
         try {
@@ -57,8 +75,15 @@ public class T24HoldController {
         }
     }
 
+    @Operation(summary = "Get hold by reference", description = "Retrieves current status and details of an active or released hold.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hold found"),
+            @ApiResponse(responseCode = "404", description = "Hold reference not found")
+    })
     @GetMapping(value = "/{referenceNo}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> getHold(@PathVariable String referenceNo) {
+    public ResponseEntity<?> getHold(
+            @Parameter(description = "Remittance or transaction reference number", example = "REM-202610-001")
+            @PathVariable String referenceNo) {
         return holdService.getHold(referenceNo)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
