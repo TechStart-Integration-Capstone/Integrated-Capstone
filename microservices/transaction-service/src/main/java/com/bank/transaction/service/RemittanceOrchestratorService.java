@@ -327,44 +327,7 @@ public class RemittanceOrchestratorService {
                         "A transfer request with this Idempotency-Key is currently in progress. Please retry shortly.");
             }
 
-            // Check if 30-second client cancellation window applies
-            boolean applyClientWindow = request.getCancelWindowSeconds() != null
-                    && request.getCancelWindowSeconds() > 0
-                    && !Boolean.TRUE.equals(request.getSkipClientWindow())
-                    && !RemittanceRequest.TYPE_LOAN_DISBURSEMENT.equals(request.getTransactionType());
-
-            if (applyClientWindow) {
-                int windowSeconds = request.getCancelWindowSeconds();
-                remittance.setStatus(Remittance.STATUS_RESERVED);
-                remittance.setInternalStatus(Remittance.INTERNAL_CLIENT_CANCEL_WINDOW);
-                remittance.setCurrentService("transaction-service");
-                remittance.setCancelUntil(LocalDateTime.now().plusSeconds(windowSeconds));
-                remittance.setRetryCount(0);
-                remittance.setMaxRetries(3);
-                remittance.setReason("Cancellation window active. You can cancel within " + windowSeconds + " seconds.");
-                remittance = remittanceRepository.save(remittance);
-
-                RemittanceResponse windowResponse = new RemittanceResponse(
-                        Remittance.STATUS_RESERVED,
-                        referenceNo,
-                        null,
-                        sourceAcc.id(),
-                        targetAcc.id(),
-                        request.getAmount(),
-                        sourceAcc.balance(),
-                        sourceAcc.balance(),
-                        risk != null ? risk.score() : null,
-                        risk != null ? risk.decision() : null,
-                        remittance.getReason(),
-                        false
-                );
-                windowResponse.setCancelUntil(remittance.getCancelUntil());
-                windowResponse.setCancelWindowSeconds(windowSeconds);
-                windowResponse.setCanCancel(true);
-                return windowResponse;
-            }
-
-            // ── Step 8 & 9: T24 Core Adapter & Ledger Commit ──────────────────────────
+            // ── Step 8 & 9: T24 Core Adapter & Ledger Commit (Direct Dispatch) ───────
             return executeCoreBankingSagaInternal(remittance, request, sourceAcc, targetAcc, risk, correlationId, redisKey);
 
         } finally {

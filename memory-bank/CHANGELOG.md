@@ -1,6 +1,13 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Removal of Client-Side 15s Reversal / Direct Core Banking Dispatch:
+  - Removed client-side 15-second cancellation hold window from `frontend/bank/bank.js`: transfers submit directly without `cancelWindowSeconds` or countdown timer intercepts, immediately rendering receipts on core posting.
+  - Removed `applyClientWindow` intercept in `microservices/transaction-service`'s `RemittanceOrchestratorService.java`: transfers hold funds and immediately dispatch to T24 core banking rather than pausing in `Reserved` status.
+  - Preserved bank-side bounded retries (up to 3 retries with exponential backoff) and automated bank reversal in `RemittanceSagaWorker.java`: when core banking/service failures persist beyond max retries, the background worker automatically releases held funds with `INTERNAL_AUTO_REVERSED`.
+  - Updated `RemittanceSagaTest.java` test suite to verify direct core banking dispatch; all 24 unit tests pass cleanly.
+  - Rebuilt and deployed `transaction-service` and updated `frontend-spa`. — [dom]
+
 - 2026-10-08 — Branch Alignment & Docker Compose Parity on Main:
   - Reconciled changes onto `main` following remote rename/merge of `refactor/domain-t24-core` into `main`.
   - Ensured all automated setup script mounts in `docker/docker-compose.yml` (`05_t24_core.sql`, `06_interest.sql`, `04_interest_recovery.sql`, `05_interest_approval.sql`) are aligned and active on `main`.
