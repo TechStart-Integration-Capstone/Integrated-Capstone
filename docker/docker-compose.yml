@@ -84,7 +84,7 @@ services:
   # Layer 5: Event Streaming (Apache Kafka)
   # ==========================================
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
+    image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -96,7 +96,7 @@ services:
       - ledger-net
 
   kafka:
-    image: confluentinc/cp-kafka:7.6.1
+    image: confluentinc/cp-kafka:7.5.0
     container_name: kafka-event-bus
     depends_on:
       - zookeeper
