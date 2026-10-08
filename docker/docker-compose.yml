@@ -206,6 +206,7 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
+      - APP_SAVINGS_ENABLED=${SAVINGS_ENABLED:-false}
       - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
       - SPRING_DATASOURCE_USERNAME=sa
       - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!

@@ -101,7 +101,7 @@ public class OutboxPollerService {
         for (OutboxEvent event : events) {
             try {
                 CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(
-                        TOPIC,
+                        event.getEventType() != null && event.getEventType().startsWith("savings.") ? "savings.events" : TOPIC,
                         event.kafkaKey(),
                         event.getPayload()
                 );

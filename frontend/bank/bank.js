@@ -132,8 +132,8 @@ function renderPage() {
     button.classList.toggle('active',active);
     if (active) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
   });
-  if (state.page === 'savings') {
-    main.innerHTML = window.PayPinkSavings.render();
+  if (state.page === 'savings' && state.profile) {
+    window.PayPinkSavingsLive.mount({api, owner: state.profile.username, profile: () => state.profile});
     return;
   }
   if (!state.profile) {
@@ -316,7 +316,7 @@ function scheduleExpiry() {
 }
 
 function logout(message = 'You’ve been logged out. See you again soon.') {
-  window.PayPinkSavings.reset();
+  window.PayPinkSavingsLive.reset();
   document.querySelector('#savings-dialog')?.close();
   dismissTransferPopups();
   clearTimeout(expiryTimer);

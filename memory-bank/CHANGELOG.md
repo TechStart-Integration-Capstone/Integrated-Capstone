@@ -2,6 +2,40 @@
 
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 - Completed Savings frontend integration validation: authenticated bank flows and standalone preview browser checks pass, including pending/retry, partial success, membership/privacy, schedules, mobile layout and logout; JavaScript syntax and whitespace checks pass. Reviewed live mobile screenshot. Account suite passes 25 tests; prior core/outbox/notification checks remain valid (91 backend tests across runs). Updated CONTEXT.md and manual handoff docs. No migration applied, full stack started or deployment performed. - [dom]
+
+- 2026-10-08 - All 25 account-service tests pass; mocked bank and offline preview browser checks pass. Fixed delayed dialog-close handling, preserve plan inputs on Back, and use cryptographic retry IDs compatible with HTTP contexts. Updated docs/savings-backend.md with the manual migration/enable/build/test handoff and actual live-UI behavior. Final browser rerun pending for dialog fix; no live database or deployment changes. - [dom]
+
+- 2026-10-08 - Browser checks reached all live mutation flows; corrected empty-state test to return to My Savings. Retain creation forms on validation errors, clear closed customer dialog content on logout, and suspend polling during an explicit retry. Account tests running; no stack started. - [dom]
+
+- 2026-10-08 - Added mocked-HTTP browser integration coverage for the real bank Savings entry point (retry persistence, partial creation, privacy, invitations, schedules, empty/disabled states and logout), retaining offline preview checks. Added backend streak/response regression test. Checks pending; no deployment. - [dom]
+
+- 2026-10-08 - Connected bank entry point to savings-live.js: authenticated goals, circles, privacy, invitations, target approval, schedules, activity, Smart Split and retained retry keys. Kept offline savings.js for standalone preview. Added own customer ID/streaks and retry keys to savings query responses. Validation in progress; migration remains unapplied and no services started. - [dom]
+
+- 2026-10-08 - Completed savings backend validation: 90 tests pass across account-service (24), t24-adapter (38), outbox-publisher (10), notification-service (18), including 18 new savings tests. Migration scripts/migrate_savings.sql is unapplied; API/rollout guide in docs/savings-backend.md, Compose feature defaults off. No Docker stack, live DB changes or deployment. Existing Savings UI remains in-memory until frontend API wiring. Updated CONTEXT.md with final state and limits. - [dom]
+
+- 2026-10-08 - Added docs/savings-backend.md covering schema, APIs, eligibility, consent, retry protocol, schedules and unapplied rollout. Added default-off SAVINGS_ENABLED Compose setting for account-service. Notification suite passes after variable correction. Frontend remains demo; no migration/deployment performed. - [dom]
+
+- 2026-10-08 - Corrected savings notification local variable shadowing found by the notification suite; rerun pending. Core/account/outbox suites pass. - [dom]
+
+- 2026-10-08 - Added savings-topic routing and notification message regression tests. Replaced notification test reflection on final ObjectMapper with constructor injection per Java 17 rules. Account savings seven-test suite passes; remaining affected suites pending. - [dom]
+
+- 2026-10-08 - Hardened schedule execution against concurrent disable/edits with a locked settings recheck and conditional next-due update; added stale-schedule test. No services started or deployment. - [dom]
+
+- 2026-10-08 - Core savings: eight H2 tests pass including concurrent retries/overspend and outbox rollback. Added risk amount-history enrichment, reserved schedule key prefix and once-only completion test; fixed account timeout test restubbing. Further service checks in progress. - [dom]
+
+- 2026-10-08 - Added once-only PinkCircle completion notification flag and transactional outbox delivery for each member after confirmed core progress reaches target. Updated unapplied SQL/test schema and worker; validation in progress. - [dom]
+
+- 2026-10-08 - Added account-service H2 test dependency, test schema and isolated savings tests for eligibility, ownership, invitations/acceptance, visibility, target approval, pending retry handling and schedule dates. Validation pending, no live database or stack started. - [dom]
+
+- 2026-10-08 - Added core savings database tests for retries, concurrency, ownership, insufficient funds, risk failures and outbox rollback. Routed savings outbox to savings.events and added notification handling; core journal provides reservation audit history. Validation pending; no live services started. - [dom]
+
+- 2026-10-08 - Added savings controller, durable operation orchestrator and opt-in recovery/schedule worker in account-service. Goal creation starts at zero; allocations use idempotent T24 operations, pending responses survive timeouts, schedules avoid catch-up debits. No migration applied or services started; tests pending. - [dom]
+
+- 2026-10-08 - Added account-service savings metadata, validation DTOs and core client. Personal/circle goals require own active PHP savings account; circle invites target existing active PayPink users, require acceptance and support optional amount visibility and member-approved target changes. Migration unapplied; validation pending. - [dom]
+
+- 2026-10-08 - Added scripts/migrate_savings.sql and t24-adapter savings APIs for durable reservations, risk checks, idempotency journal and atomic outbox. Backend implementation/testing in progress; migration unapplied, no services started. - [dom]
+
 - 2026-10-08 - Adjusted frontend/bank/savings.js and savings.css: moved My Savings/PinkCircles below overview, compacted rose total and hall-of-fame cards, added dynamic personal goal count and in-progress/completed summary. Shared bank/preview UI, local only. Syntax, whitespace and existing offline browser checks pass, including mobile and bank navigation; desktop screenshot reviewed and summary separator encoding corrected. - [dom]
 
 - 2026-10-08 - Updated tests/savings-preview.cjs for current overview and flows; browser checks pass including personal/group totals, badge details, allocation/release updates, mobile and bank navigation/logout. Fixed restored badge icon encoding after screenshot review. JavaScript syntax and whitespace checks pass; no deployment. - [dom]

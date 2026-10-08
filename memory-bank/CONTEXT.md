@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (Savings and PinkCircle UI preview, offline validation by [dom])_
+_Last Updated: 2026-10-08 (Savings bank UI connected to backend; migration unapplied, [dom])_
 
 ---
 
@@ -13,9 +13,23 @@ _Last Updated: 2026-10-08 (Savings and PinkCircle UI preview, offline validation
 
 ## Active Initiative: T24 Core Banking & DDD Domain Refactoring
 
+### Savings backend implementation (2026-10-08)
+
+- Final validation passes: 25 account-service tests (including streak/response regression), real bank shell browser checks with mocked authenticated HTTP, offline preview interactions/no-network checks, mobile layout and JavaScript syntax checks. Prior unchanged-module checks passed 38 core, 10 outbox and 18 notification tests (91 backend tests total across these runs). Live mobile screenshot reviewed. Whitespace checks pass.
+- Logout clears customer page/dialog state; uncertain contributions retain an exact username-scoped retry record for safe recovery. Definitive creation validation errors retain the form, while uncertain creation refreshes the list before any manual new attempt. The guide gives manual SQL migration, Compose enable/build and two-customer acceptance steps. No full stack started, migration applied, real database changed or deployment performed.
+
+- Bank Savings connects through authenticated savings-live.js, with goal creation, circle invitations/acceptance, own contributions/releases, schedules, Smart Split, privacy, target approval and activity. API overview supplies own customer ID and consecutive successful scheduled-attempt counts; badges reflect current progress rather than a permanent award ledger. Offline preview remains on savings.js. No fake balances or members are used in the bank entry point.
+
+- Added unapplied scripts/migrate_savings.sql: five application tables for goals, schedules, circles, memberships and durable operation activity; two T24 tables for non-expiring reservations and their journal. Creating a goal starts at zero; actual reservations remain a separate operation.
+- account-service exposes /api/v1/accounts/savings through the existing gateway route. Own active PHP SAVINGS/SAVINGS_ACCOUNT accounts are required for goals, circle creation and invitation acceptance. Invitations target active registered PayPink usernames; member consent controls individual amount visibility. Admin target proposals require the affected member's approval.
+- t24-adapter internal savings APIs serialize on the same account lock as transfers, enforce core available funds and goal/release limits, run risk checks, and atomically persist held-balance changes, reservation journal and outbox. Smart Split supports multiple goals on one account. Request intents and exact core-command retries recover timeouts without duplicate reservations.
+- Optional schedules use Asia/Manila business dates, skip repeated catch-up contributions, and recheck schedule settings under the customer lock. Circle completion emits once-only notifications to accepted members. outbox-publisher routes savings events to savings.events; notification-service uses reservation/completion copy. Core reservation journal supplies monetary audit history.
+- Default OFF: Compose SAVINGS_ENABLED maps to account-service APP_SAVINGS_ENABLED. No migration applied, real database changed, Docker stack started or deployment performed. Public customer identity still relies on the existing gateway/private-network boundary. Rollout and API examples are in docs/savings-backend.md.
+- Backend tests use H2/mocks and bounded-memory JVMs. SQL Server migration, real gateway/core/risk calls, schedule execution and Kafka delivery still require the documented manual acceptance test on the other machine. Frontend API wiring is complete.
+
 ### Savings UI prototype (2026-10-08)
 
-- Bank Savings and standalone preview share savings.js / savings.css: four personal goals, three PinkCircles, three-step goal creation, Smart Split, add/release, editing and session activity. Allocations adjust sample spendable funds; no APIs or real reservations are implemented.
+- Standalone preview uses savings.js with four sample personal goals, three PinkCircles, three-step creation, Smart Split, add/release, editing and session activity. Preview allocations only adjust sample funds. Bank Savings uses savings-live.js with backend data; both entry points share savings.css.
 - Compact overview cards use reduced padding, smaller total typography and badge medals. My Savings / PinkCircles navigation sits below the overview. Personal savings shows a dynamic goal count with in-progress/completed counts, matching the circle summary. Compact layout reviewed in a desktop screenshot; existing offline browser and mobile checks pass.
 - Rose total card switches between personal savings (initial PHP 23,500) and own contributions across circles (initial PHP 10,700). Removed shared UI concept banner and spendable/reserved/account overview breakdown, plus standalone topbar Demo preview label.
 - Restored collectible First PHP 1K, Emergency Era (PHP 100K emergency cushion), Consistency Queen (four consecutive scheduled contributions) and Million Club badges, earned/locked states and detail dialogs. Streaks and milestones remain separate. Existing interest tiers unchanged; proposed 5% is illustrative and inactive.

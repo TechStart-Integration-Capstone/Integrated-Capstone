@@ -125,26 +125,21 @@ function send(method, params = {}, sessionId) {
     await command('Page.setDocumentContent', { frameId: bankFrame.frameTree.frame.id, html: bankHtml });
     await evaluate(`new Promise((resolve, reject) => {
       const deadline = Date.now() + 10000;
-      const check = () => typeof renderShell === 'function' && typeof state !== 'undefined' && window.PayPinkSavings ? resolve(true) : Date.now() > deadline ? reject(new Error('Bank shell did not load')) : setTimeout(check, 50);
+      const check = () => typeof renderShell === 'function' && typeof state !== 'undefined' && window.PayPinkSavingsLive ? resolve(true) : Date.now() > deadline ? reject(new Error('Bank shell did not load')) : setTimeout(check, 50);
       check();
     })`);
-    await evaluate(`(() => {
-      state.session = { fullName: 'Demo Customer', expiresAt: Date.now() + 60000 };
-      state.profile = { fullName: 'Demo Customer', accounts: [] };
-      state.page = 'overview'; renderShell();
-      document.querySelector('[data-page="savings"]').click();
-    })()`);
+    const liveResults = await evaluate(fs.readFileSync(path.join(__dirname, 'savings-live-checks.js'), 'utf8'));
+    for (const result of liveResults) console.log(`PASS ${result}`);
     assert.equal(await evaluate(`document.querySelector('#breadcrumb-page').textContent`), 'Savings', 'Savings navigation updates breadcrumb');
     assert.equal(await evaluate(`document.querySelector('.nav-link.active').dataset.page`), 'savings', 'Savings navigation is active');
     assert.equal(await evaluate(`document.querySelector('[data-page="loans"]').nextElementSibling.dataset.page`), 'savings', 'Savings follows Loans');
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth`), true, 'Bank shell fits narrow viewport');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('.sidebar .nav-link, .sidebar .logout')).every(node => { const rect = node.getBoundingClientRect(); return rect.left >= 0 && rect.right <= innerWidth && rect.width > 0; })`), true, 'All navigation destinations remain on screen');
-    await evaluate(`document.querySelector('[data-savings="add"]').click(); document.querySelector('#sv-amount').value = '500'; document.querySelector('[data-savings-form="add"]').requestSubmit();`);
-    assert.equal(await evaluate(`document.querySelector('.sv-total-amount').textContent.includes('24,000')`), true, 'Savings actions work inside real bank shell');
-    await evaluate(`logout();`);
-    assert.equal(await evaluate(`document.querySelector('#savings-dialog').open`), false, 'Logout closes savings dialog');
-    assert.equal(await evaluate(`window.PayPinkSavings.render().includes('23,500')`), true, 'Logout resets demo state');
-    console.log('PASS Bank navigation, narrow shell, demo actions, and logout reset');
+    await screenshot('bank-live-mobile.png');
+    await evaluate(`document.querySelector('[data-sv="badge"]').click(); logout();`);
+    assert.equal(await evaluate(`document.querySelector('#savings-live-dialog').open`), false, 'Logout closes savings dialog');
+    assert.equal(await evaluate(`document.querySelector('#savings-live') === null`), true, 'Logout removes customer savings');
+    console.log('PASS Bank navigation, narrow shell, API actions, and logout cleanup');
     // The real shell retains its existing notification polling. The no-API
     // assertion above covers the isolated Savings entry point specifically.
     assert.deepEqual(errors, [], 'No browser script errors');
