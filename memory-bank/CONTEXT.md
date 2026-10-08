@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (Removal of Client 15s Reversal & Direct Core Banking Dispatch by [dom])_  
+_Last Updated: 2026-10-08 (T24 Core Schema Migration & Docker Compose Full Volume Parity by [dom])_
 
 ---
 
@@ -12,18 +12,18 @@ The PayPink system is being refactored from a shared-database monolithic ledger 
 
 ### Refactoring Roadmap (Phases 0 through 9)
 
-| Phase | Title | Scope and Deliverables | Status |
-|:---:|---|---|:---:|
-| **Phase 0** | Perimeter Lockdown & Bypass Elimination | Enforced ROLE_ADMIN on admin/stress routes in API Gateway; added defense-in-depth in account-service; deprecated direct transfer bypass in auth-service (410 GONE). | Done (Commit `43f3025`) |
-| **Phase 1** | Azure SQL Schema Split | Separated database into `t24` (core) and `app` (application) schemas with backward-compatible `dbo.*` synonyms. Qualified JPA `@Table(schema = "...")` across all microservices. | Done (Commit `a8d6213`) |
-| **Phase 2** | Stateful T24 Core Banking Engine | Added `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables. Implemented `T24HoldService` (atomic lock/release) and `T24PostingService` (double-entry posting journal). | Done (Commit `3cd7129`) |
-| **Phase 3** | Remittance Saga Hold Integration & Cutover | Integrated `T24HoldClient` with circuit breaker into `RemittanceLedgerService`. Replaced local SQL balance lock updates with T24 Core hold API calls. | Done (Commit `3b3f9e2`) |
-| **Phase 4** | Transaction History & CQRS Read-Model | Built CQRS read-store in `transaction-service`: `TransactionActivityService`, PDF statement generation (`TransactionStatementReportService`), and Operations Desk admin monitor. Added gateway routes. | Done (Commit `801b044`) |
-| **Phase 5** | Account Service Consolidation | Move `/me`, recipient lookup, recipients directory, and banking favorites/beneficiaries into `account-service`. Route live balance inquiries to T24 Core. | Done (Commit `9982ba3`) |
-| **Phase 6** | Auth Slimming & Loan Service Alignment | Slim `auth-service` perimeter via gateway route cutover for recipients, favorites, and admin monitor; loan disbursements & repayments routed via T24 Core posting saga. | Done (Commit `9d29e3e`) |
-| **Phase 7** | EOD Service Alignment | Align Interest EOD and Loan EOD to use qualified `t24.*` and `app.*` schemas with T24 Core EOD job logs (`t24.EOD_JOB_RUN`) and posting events. | Done (Commit `2f9e31e`) |
-| **Phase 8** | Events, Audit & Reconciliation Re-point | Verify and relate outbox events with T24 Core double-entry posting journals across `audit-service`, `reconciliation-service`, `notification-service`, and `analytics-service`. | Done (Commit `9590d5f`) |
-| **Phase 9** | Frontend Polish, Synonym Cleanup & Final Verification | Final end-to-end verification across Web SPA and frozen Mobile contracts; created synonym retirement script `scripts/retire_phase9_synonyms.sql`; verified 100% test pass rate across all microservices. | Done |
+|    Phase    | Title                                                 | Scope and Deliverables                                                                                                                                                                                   |         Status          |
+| :---------: | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------: |
+| **Phase 0** | Perimeter Lockdown & Bypass Elimination               | Enforced ROLE_ADMIN on admin/stress routes in API Gateway; added defense-in-depth in account-service; deprecated direct transfer bypass in auth-service (410 GONE).                                      | Done (Commit `43f3025`) |
+| **Phase 1** | Azure SQL Schema Split                                | Separated database into `t24` (core) and `app` (application) schemas with backward-compatible `dbo.*` synonyms. Qualified JPA `@Table(schema = "...")` across all microservices.                         | Done (Commit `a8d6213`) |
+| **Phase 2** | Stateful T24 Core Banking Engine                      | Added `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables. Implemented `T24HoldService` (atomic lock/release) and `T24PostingService` (double-entry posting journal).                                   | Done (Commit `3cd7129`) |
+| **Phase 3** | Remittance Saga Hold Integration & Cutover            | Integrated `T24HoldClient` with circuit breaker into `RemittanceLedgerService`. Replaced local SQL balance lock updates with T24 Core hold API calls.                                                    | Done (Commit `3b3f9e2`) |
+| **Phase 4** | Transaction History & CQRS Read-Model                 | Built CQRS read-store in `transaction-service`: `TransactionActivityService`, PDF statement generation (`TransactionStatementReportService`), and Operations Desk admin monitor. Added gateway routes.   | Done (Commit `801b044`) |
+| **Phase 5** | Account Service Consolidation                         | Move `/me`, recipient lookup, recipients directory, and banking favorites/beneficiaries into `account-service`. Route live balance inquiries to T24 Core.                                                | Done (Commit `9982ba3`) |
+| **Phase 6** | Auth Slimming & Loan Service Alignment                | Slim `auth-service` perimeter via gateway route cutover for recipients, favorites, and admin monitor; loan disbursements & repayments routed via T24 Core posting saga.                                  | Done (Commit `9d29e3e`) |
+| **Phase 7** | EOD Service Alignment                                 | Align Interest EOD and Loan EOD to use qualified `t24.*` and `app.*` schemas with T24 Core EOD job logs (`t24.EOD_JOB_RUN`) and posting events.                                                          | Done (Commit `2f9e31e`) |
+| **Phase 8** | Events, Audit & Reconciliation Re-point               | Verify and relate outbox events with T24 Core double-entry posting journals across `audit-service`, `reconciliation-service`, `notification-service`, and `analytics-service`.                           | Done (Commit `9590d5f`) |
+| **Phase 9** | Frontend Polish, Synonym Cleanup & Final Verification | Final end-to-end verification across Web SPA and frozen Mobile contracts; created synonym retirement script `scripts/retire_phase9_synonyms.sql`; verified 100% test pass rate across all microservices. |          Done           |
 
 ---
 
@@ -42,20 +42,20 @@ PayPink 2.0 operates as an event-driven, domain-partitioned microservices bankin
 
 ## Active Microservices Directory
 
-| Service | Host Port | Responsibility & Primary Domain | Database Schema |
-|---|:---:|---|---|
-| `api-gateway` | 8080 | Sole external entry point. JWT validation, role checking, rate limiting, and reverse proxy. | Redis (token bucket) |
-| `auth-service` | 8081 | Authentication, user registration, JWT generation, password hashing. | `app.CUSTOMER` |
-| `account-service` | 8082 | Customer accounts, balance inquiry, account lifecycle status. | `t24.ACCOUNT`, `app.CUSTOMER` |
-| `transaction-service` | 8083 | Remittance Orchestrator (4-step saga), CQRS Activity & PDF statements, Admin Monitor, and Interest EOD. | `app.REMITTANCE`, `t24.LEDGER_TRANSACTION`, `app.OUTBOX_EVENT` |
-| `t24-adapter` | 8090 | Core Banking Engine (T24). Authoritative account balances, locked amounts (holds), double-entry posting journal. | `t24.ACCOUNT`, `t24.LOCKED_AMOUNT`, `t24.POSTING_JOURNAL` |
-| `risk-engine` | 8000 | Python 3.11 FastAPI. Two-layer fraud scoring: Rules engine + Isolation Forest ML. | Stateless |
-| `loan-service` | 8091 | Loan product applications, credit evaluation, and repayments. | `t24.LOAN`, `t24.LOAN_SCHEDULE`, `t24.LOAN_REPAYMENT` |
-| `audit-service` | 8085 | Kafka consumer logging immutable risk decision audit records. | PostgreSQL (`RISK_DECISION`) |
-| `notification-service` | 8084 | Kafka consumer for SMS/Email/Push transaction notification dispatch. | PostgreSQL |
-| `reconciliation-service` | 8086 | Discrepancy detector between application outbox and ledger transactions. | Azure SQL + PostgreSQL |
-| `outbox-publisher` | 8087 | Poller worker that pushes `OUTBOX_EVENT` rows onto Kafka topics. | Azure SQL + Kafka |
-| `analytics-service` | 8088 | Real-time transaction volume and velocity metrics streamer. | Kafka (in-memory) |
+| Service                  | Host Port | Responsibility & Primary Domain                                                                                  | Database Schema                                                |
+| ------------------------ | :-------: | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `api-gateway`            |   8080    | Sole external entry point. JWT validation, role checking, rate limiting, and reverse proxy.                      | Redis (token bucket)                                           |
+| `auth-service`           |   8081    | Authentication, user registration, JWT generation, password hashing.                                             | `app.CUSTOMER`                                                 |
+| `account-service`        |   8082    | Customer accounts, balance inquiry, account lifecycle status.                                                    | `t24.ACCOUNT`, `app.CUSTOMER`                                  |
+| `transaction-service`    |   8083    | Remittance Orchestrator (4-step saga), CQRS Activity & PDF statements, Admin Monitor, and Interest EOD.          | `app.REMITTANCE`, `t24.LEDGER_TRANSACTION`, `app.OUTBOX_EVENT` |
+| `t24-adapter`            |   8090    | Core Banking Engine (T24). Authoritative account balances, locked amounts (holds), double-entry posting journal. | `t24.ACCOUNT`, `t24.LOCKED_AMOUNT`, `t24.POSTING_JOURNAL`      |
+| `risk-engine`            |   8000    | Python 3.11 FastAPI. Two-layer fraud scoring: Rules engine + Isolation Forest ML.                                | Stateless                                                      |
+| `loan-service`           |   8091    | Loan product applications, credit evaluation, and repayments.                                                    | `t24.LOAN`, `t24.LOAN_SCHEDULE`, `t24.LOAN_REPAYMENT`          |
+| `audit-service`          |   8085    | Kafka consumer logging immutable risk decision audit records.                                                    | PostgreSQL (`RISK_DECISION`)                                   |
+| `notification-service`   |   8084    | Kafka consumer for SMS/Email/Push transaction notification dispatch.                                             | PostgreSQL                                                     |
+| `reconciliation-service` |   8086    | Discrepancy detector between application outbox and ledger transactions.                                         | Azure SQL + PostgreSQL                                         |
+| `outbox-publisher`       |   8087    | Poller worker that pushes `OUTBOX_EVENT` rows onto Kafka topics.                                                 | Azure SQL + Kafka                                              |
+| `analytics-service`      |   8088    | Real-time transaction volume and velocity metrics streamer.                                                      | Kafka (in-memory)                                              |
 
 ---
 
