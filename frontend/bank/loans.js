@@ -89,7 +89,28 @@ function offerCard(offer) {
     <dl class="detail-list">${detail('Application',escapeHtml(offer.referenceNo))}${detail('Credit score',`${escapeHtml(offer.creditScore)} · ${escapeHtml(offer.band || '—')}`)}
     ${o ? detail('Amount',escapeHtml(money(o.amount))) + detail('Term',`${escapeHtml(o.termMonths)} months`) + detail('Interest rate',`${escapeHtml(o.annualRate)}% a year`) + detail('Monthly installment',`<strong>${escapeHtml(money(o.monthlyInstallment))}</strong>`) + detail('Offer valid until',escapeHtml(new Date(offer.expiresAt).toLocaleString('en-PH'))) : ''}</dl>
     ${declined ? `<p role="status">${escapeHtml(declineText(offer.declineReason))}</p>` : offer.decision === 'COUNTER_OFFER' ? '<p role="status">We can’t lend the full amount or term you asked for, but we can offer this instead.</p>' : ''}
-    ${!declined && !accepted ? `<div class="dialog-actions"><button class="btn btn-secondary" type="button" data-loan-action="dismiss-offer">Not now</button><button class="btn btn-primary" type="button" data-loan-action="accept" data-ref="${escapeHtml(offer.referenceNo)}" ${loanState.busy ? 'disabled' : ''}>${loanState.busy ? 'Disbursing…' : `Accept and receive ${escapeHtml(money(o.amount))}`}</button></div>` : ''}</section>`;
+    ${!declined && !accepted ? `<div class="dialog-actions"><button class="btn btn-secondary" type="button" data-loan-action="dismiss-offer">Not now</button><button class="btn btn-primary" type="button" data-loan-action="review-terms" ${loanState.busy ? 'disabled' : ''}>${loanState.busy ? 'Disbursing…' : `Review and accept ${icon('arrow')}`}</button></div>` : ''}</section>`;
+}
+
+// Accepting disburses money, so the customer reviews the key facts and agrees to the terms first (like a transfer review).
+function showLoanTerms() {
+  const offer = loanState.offer, o = offer?.offer;
+  if (!o) return;
+  const totalRepay = Number(o.monthlyInstallment) * Number(o.termMonths);
+  const account = maskedNumber(loanState.form.accountNo || '');
+  showDialog('Review your loan agreement', `<p class="muted">Please check the key facts and read the terms before you accept.</p>
+    <dl class="detail-list">${detail('You’ll receive',`<strong>${escapeHtml(money(o.amount))}</strong> in ${escapeHtml(account)}`)}${detail('Term',`${escapeHtml(o.termMonths)} monthly installments`)}${detail('Interest rate',`${escapeHtml(o.annualRate)}% a year`)}${detail('Monthly installment',escapeHtml(money(o.monthlyInstallment)))}${detail('Total to repay',`About ${escapeHtml(money(totalRepay))} (${escapeHtml(money(totalRepay - Number(o.amount)))} interest)`)}</dl>
+    <div class="loan-terms" tabindex="0" role="region" aria-label="Loan terms and conditions"><h3>Terms and conditions</h3><ol>
+      <li><strong>Disbursement.</strong> Once you accept, ${escapeHtml(money(o.amount))} is credited to account ${escapeHtml(account)}. Acceptance is final and can’t be undone.</li>
+      <li><strong>Repayment.</strong> You agree to pay ${escapeHtml(o.termMonths)} monthly installments of ${escapeHtml(money(o.monthlyInstallment))}, covering principal and interest at ${escapeHtml(o.annualRate)}% a year on the reducing balance. The final installment may differ slightly due to rounding.</li>
+      <li><strong>Auto-debit.</strong> You authorize PayPink to collect each installment from ${escapeHtml(account)} on its due date. If the balance is short, nothing is taken and we retry nightly until it’s paid.</li>
+      <li><strong>Late payment.</strong> An installment not paid by its due date becomes overdue and incurs a one-time late fee of 2% of that installment. Overdue loans may limit your eligibility for new loans.</li>
+      <li><strong>Early payment.</strong> You may pay part or all of your loan early at any time with no prepayment fee. Payments settle any late fee first, then your oldest installment.</li>
+      <li><strong>Disclosure.</strong> The figures above are your disclosure statement under the Truth in Lending Act (RA 3765). The offer is valid until ${escapeHtml(new Date(offer.expiresAt).toLocaleString('en-PH'))}.</li>
+      <li><strong>Privacy.</strong> Your information is processed under the Data Privacy Act of 2012 (RA 10173) to evaluate, service and collect this loan.</li>
+    </ol></div>
+    <label class="loan-terms-agree"><input id="loan-terms-agree" type="checkbox"> I have read and agree to the loan terms and conditions, and authorize the auto-debit above.</label>`,
+    `<button class="btn btn-secondary" data-action="close-dialog">Go back</button><button class="btn btn-primary" type="button" data-loan-action="accept" data-ref="${escapeHtml(offer.referenceNo)}" disabled>Agree and receive ${escapeHtml(money(o.amount))}</button>`);
 }
 
 // Installments are collected automatically by the nightly EOD job on their due date.
@@ -222,11 +243,20 @@ document.addEventListener('submit', event => {
   else if (event.target.id === 'loan-pay-form') { event.preventDefault(); payLoan(event.target); }
 });
 
+document.addEventListener('change', event => {
+  if (event.target.id !== 'loan-terms-agree') return;
+  const accept = dialog.querySelector('[data-loan-action="accept"]');
+  if (accept) accept.disabled = !event.target.checked;
+});
+
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-loan-action]');
   if (!button || !state.session) return;
   switch (button.dataset.loanAction) {
-    case 'accept': acceptOffer(button.dataset.ref); break;
+    case 'review-terms': showLoanTerms(); break;
+    case 'accept':
+      if (!document.querySelector('#loan-terms-agree')?.checked) return;
+      dialog.close(); acceptOffer(button.dataset.ref); break;
     case 'dismiss-offer': loanState.offer = null; renderPage(); break;
     case 'schedule': showSchedule(Number(button.dataset.id)); break;
     case 'pay': showPayForm(Number(button.dataset.id)); break;
