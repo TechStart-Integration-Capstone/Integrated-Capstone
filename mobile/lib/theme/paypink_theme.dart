@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class PayPinkTheme {
   // Brand colors matching Webapp and Capstone 2 design tokens
@@ -40,20 +41,50 @@ class PayPinkTheme {
   static const Color darkGlassBorder = Color(0x383F4C68); // Translucent Dark Slate Hairline Border
   static const Color darkGlassCardBg = Color(0xF0121623); // Frosted Obsidian Glass Card Background
 
+  // Ambient Background Gradients
+  static const LinearGradient lightBgGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFFFF0F5), // Lavender blush / soft rose petal hint
+      Color(0xFFFFF7F9), // Subtle warm creamy rose
+      Color(0xFFFBF2F6), // Delicate touch of luxury pink
+    ],
+    stops: [0.0, 0.45, 1.0],
+  );
+
+  static const LinearGradient darkBgGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFF0F1422), // Luminous obsidian slate
+      Color(0xFF0B0E17), // Deep midnight obsidian navy
+    ],
+  );
+
+  static const LinearGradient cardPinkGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [pink, wine],
+  );
+
+  static String get fontFamily =>
+      GoogleFonts.plusJakartaSans().fontFamily ?? 'Plus Jakarta Sans';
+
   static ThemeData get lightTheme => ThemeData(
-        fontFamily: 'DM Sans',
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(),
         brightness: Brightness.light,
-        scaffoldBackgroundColor: paper,
+        scaffoldBackgroundColor: const Color(0xFFFFF5F8),
         colorScheme: ColorScheme.fromSeed(
           seedColor: wine,
           brightness: Brightness.light,
-          surface: paper,
+          surface: const Color(0xFFFFF5F8),
         ),
         useMaterial3: true,
       );
 
   static ThemeData get darkTheme => ThemeData(
-        fontFamily: 'DM Sans',
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(ThemeData.dark().textTheme),
         brightness: Brightness.dark,
         scaffoldBackgroundColor: darkBg,
         colorScheme: ColorScheme.fromSeed(
@@ -64,22 +95,22 @@ class PayPinkTheme {
         useMaterial3: true,
       );
 
-  // Typography with system fallback fonts
+  // Typography with Google Fonts Plus Jakarta Sans
   static TextStyle display({
     double fontSize = 16,
     FontWeight fontWeight = FontWeight.w700,
     Color color = ink,
     double letterSpacing = -0.5,
     double? height,
+    FontStyle? fontStyle,
   }) {
-    return TextStyle(
-      fontFamily: 'Manrope',
-      fontFamilyFallback: const ['Roboto', 'sans-serif'],
+    return GoogleFonts.plusJakartaSans(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
       letterSpacing: letterSpacing,
       height: height,
+      fontStyle: fontStyle,
     );
   }
 
@@ -90,9 +121,7 @@ class PayPinkTheme {
     double? height,
     TextDecoration? decoration,
   }) {
-    return TextStyle(
-      fontFamily: 'DM Sans',
-      fontFamilyFallback: const ['Roboto', 'sans-serif'],
+    return GoogleFonts.plusJakartaSans(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
@@ -105,13 +134,13 @@ class PayPinkTheme {
     double fontSize = 11,
     FontWeight fontWeight = FontWeight.w500,
     Color color = ink,
+    double? letterSpacing,
   }) {
-    return TextStyle(
-      fontFamily: 'JetBrains Mono',
-      fontFamilyFallback: const ['monospace'],
+    return GoogleFonts.jetBrainsMono(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
+      letterSpacing: letterSpacing,
     );
   }
 

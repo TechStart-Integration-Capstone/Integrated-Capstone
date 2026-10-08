@@ -1,8 +1,8 @@
-services:
+﻿services:
   # ==========================================
   # Layer 4: Datastores & In-Memory Matrix
   # ==========================================
-  # ── Azure SQL (SQL Server 2022 local — replaces Oracle XE in Capstone 2) ──
+  # â”€â”€ Azure SQL (SQL Server 2022 local â€” replaces Oracle XE in Capstone 2) â”€â”€
   azure-sql:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: azure-sql-master
@@ -10,7 +10,7 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=PayPink2.0_StrongPass!
       - MSSQL_PID=Developer
-    # No host port — internal only, connect via docker exec or azure-data-studio through docker network
+    # No host port â€” internal only, connect via docker exec or azure-data-studio through docker network
     volumes:
       - azuresql_data:/var/opt/mssql
       # Setup scripts run ONLY when the data volume is empty (first start). Existing volumes skip them;
@@ -34,7 +34,7 @@ services:
       - POSTGRES_DB=ledger_audit_db
       - POSTGRES_USER=audit_user
       - POSTGRES_PASSWORD=AuditSecretPassword123
-    # No host port — internal only
+    # No host port â€” internal only
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./../microservices/audit-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -52,7 +52,7 @@ services:
     image: redis:7-alpine
     container_name: redis-idempotency-matrix
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
-    # No host port — internal only
+    # No host port â€” internal only
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
@@ -116,7 +116,7 @@ services:
       - ledger-net
 
   # ==========================================
-  # Layer 1: Edge — API Gateway
+  # Layer 1: Edge â€” API Gateway
   # ==========================================
   api-gateway:
     build:
@@ -168,12 +168,14 @@ services:
     depends_on:
       azure-sql:
         condition: service_healthy
-    # No host port — internal only, accessed via api-gateway:8080
+    # No host port â€” internal only, accessed via api-gateway:8080
     environment:
       - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.microsoft.sqlserver.jdbc.SQLServerDriver
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.SQLServerDialect
     volumes:
       - ./../microservices/auth-service/target/auth-service.jar:/app/app.jar
     networks:
@@ -190,7 +192,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # No host port — internal only, accessed via api-gateway:8080
+    # No host port â€” internal only, accessed via api-gateway:8080
     environment:
       - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
@@ -215,7 +217,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    # No host port — internal only, accessed via api-gateway:8080
+    # No host port â€” internal only, accessed via api-gateway:8080
     environment:
       - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
@@ -247,7 +249,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    # No host port — internal only
+    # No host port â€” internal only
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - SPRING_DATASOURCE_USERNAME=audit_user
@@ -277,7 +279,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    # No host port — internal only
+    # No host port â€” internal only
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - SPRING_DATASOURCE_USERNAME=audit_user
@@ -325,7 +327,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
-    # No host port — internal only
+    # No host port â€” internal only
     environment:
       - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
@@ -348,7 +350,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    # No host port — internal only
+    # No host port â€” internal only
     environment:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - ANALYTICS_SERVICE_HOST=analytics-service
@@ -358,14 +360,14 @@ services:
       - ledger-net
 
   # ==========================================
-  # Risk Engine (Python FastAPI — Phase 3)
+  # Risk Engine (Python FastAPI â€” Phase 3)
   # ==========================================
   risk-engine:
     build:
       context: ../microservices/risk-engine
       dockerfile: Dockerfile
     container_name: risk-engine
-    # No host port — internal only, called by Remittance Orchestrator via http://risk-engine:8000
+    # No host port â€” internal only, called by Remittance Orchestrator via http://risk-engine:8000
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_SERVICE_NAME=risk-engine
@@ -388,7 +390,7 @@ services:
       context: ../microservices/t24-adapter
       dockerfile: Dockerfile
     container_name: t24-adapter
-    # No host port — internal only, called by Remittance Orchestrator via http://t24-adapter:8090
+    # No host port â€” internal only, called by Remittance Orchestrator via http://t24-adapter:8090
     environment:
       - T24_SIMULATOR_URL=http://localhost:8090/ofs/process
       - OTEL_SERVICE_NAME=t24-adapter
@@ -399,7 +401,7 @@ services:
       - ledger-net
 
   # ==========================================
-  # Loan Service (Phase 6) — apply / accept / repay / EOD
+  # Loan Service (Phase 6) â€” apply / accept / repay / EOD
   # ==========================================
   loan-service:
     build:
@@ -411,7 +413,7 @@ services:
         condition: service_healthy
       transaction-service:
         condition: service_started
-    # No host port — internal only, accessed via api-gateway:8080 (/api/v1/loans/**)
+    # No host port â€” internal only, accessed via api-gateway:8080 (/api/v1/loans/**)
     # Money moves only through transaction-service's /internal/remittance/transfer (not routed by the gateway).
     environment:
       - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
@@ -430,7 +432,7 @@ services:
       - ledger-net
 
   # ==========================================
-  # Legacy monolith (kept for reference — disabled)
+  # Legacy monolith (kept for reference â€” disabled)
   # ==========================================
   # core-retail-ledger-engine:
   #   build:
@@ -583,3 +585,4 @@ volumes:
   zookeeper_log:
   loki_data:
   tempo_data:
+

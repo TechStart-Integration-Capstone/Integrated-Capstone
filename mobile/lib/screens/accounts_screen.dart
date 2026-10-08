@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
+import '../widgets/dynamic_card_deck.dart';
 import '../services/account_service.dart';
 
 class AccountsScreen extends StatefulWidget {
@@ -10,6 +11,7 @@ class AccountsScreen extends StatefulWidget {
   final VoidCallback onToggleHideBalances;
   final Function(int)? onNavigateTab;
   final List<BankAccount>? accounts;
+  final String? userName;
 
   const AccountsScreen({
     super.key,
@@ -17,6 +19,7 @@ class AccountsScreen extends StatefulWidget {
     required this.onToggleHideBalances,
     this.onNavigateTab,
     this.accounts,
+    this.userName,
   });
 
   @override
@@ -57,7 +60,32 @@ class _AccountsScreenState extends State<AccountsScreen> {
             'Your accounts, together. Select an account to see its details.',
             style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // 3D Physical Cards Deck with Specular Sheen & Depth Tilt
+          DynamicCardDeck(
+            accounts: widget.accounts ?? [],
+            cardHolder: widget.userName?.isNotEmpty == true ? widget.userName! : 'PayPink Client',
+            hideBalances: widget.hideBalances,
+            onToggleHideBalances: widget.onToggleHideBalances,
+            onOpenTransfer: () => widget.onNavigateTab?.call(2),
+            onOpenDetails: () {
+              if (widget.accounts != null && widget.accounts!.isNotEmpty) {
+                final acct = widget.accounts!.first;
+                final holder = widget.userName?.isNotEmpty == true ? widget.userName! : acct.displayName;
+                PayPinkBottomSheets.showAccountDetails(
+                  context,
+                  name: holder,
+                  fullNumber: acct.formattedNumber,
+                  balance: acct.currentBalance,
+                  type: acct.accountType,
+                  status: acct.status,
+                );
+              }
+            },
+            isDark: isDark,
+          ),
+          const SizedBox(height: 24),
 
           // Header with Hide balances toggle
           Row(
@@ -292,15 +320,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
 
     return GlassCard(
-      onTap: () => PayPinkBottomSheets.showAccountDetails(
-        context,
-        name: name,
-        fullNumber: fullNumber,
-        balance: balance,
-        type: type,
-        status: status,
-        ledgerId: ledgerId,
-      ),
+      onTap: () {
+        final holder = widget.userName?.isNotEmpty == true ? widget.userName! : name;
+        PayPinkBottomSheets.showAccountDetails(
+          context,
+          name: holder,
+          fullNumber: fullNumber,
+          balance: balance,
+          type: type,
+          status: status,
+        );
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

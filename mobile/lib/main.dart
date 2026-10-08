@@ -7,12 +7,14 @@ import 'screens/dashboard_screen.dart';
 import 'screens/accounts_screen.dart';
 import 'screens/remittance_screen.dart';
 import 'screens/transactions_screen.dart';
-import 'screens/circuit_breaker_screen.dart';
 import 'screens/login_register_screen.dart';
-import 'services/circuit_breaker_client.dart';
+import 'screens/pin_auth_screen.dart';
 import 'services/auth_service.dart';
 import 'services/account_service.dart';
+import 'services/secure_token_storage.dart';
 import 'widgets/bottom_sheets.dart';
+import 'widgets/profile_sheet.dart';
+import 'widgets/paypink_logo.dart';
 
 class DevHttpOverrides extends HttpOverrides {
   @override
@@ -45,21 +47,73 @@ class PayPinkMobileApp extends StatefulWidget {
 class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   late bool _isAuthenticated;
   bool _isDarkMode = false;
-  String _currentUser = 'Trixie';
+  String _currentUser = '';
+  String _currentFullName = '';
+
+  bool _isLoadingAuth = true;
+  bool _showPinLogin = false;
+  bool _requirePinSetup = false;
 
   @override
   void initState() {
     super.initState();
     _isAuthenticated = widget.initialAuthenticated;
+    _checkInitialAuth();
+  }
+
+  Future<void> _checkInitialAuth() async {
+    if (_isAuthenticated) {
+      if (mounted) setState(() => _isLoadingAuth = false);
+      return;
+    }
+
+    try {
+      final hasToken = await AuthService.hasActiveSession();
+      final user = await SecureTokenStorage.getUsername() ?? '';
+      final fullName = await SecureTokenStorage.getFullName() ?? user;
+
+      if (!mounted) return;
+
+      if (hasToken && user.isNotEmpty) {
+        _currentUser = user;
+        _currentFullName = fullName.isNotEmpty ? fullName : user;
+        // User already has an active session token: bypass PIN login prompt directly to authenticated dashboard
+        _isAuthenticated = true;
+        _showPinLogin = false;
+      }
+    } catch (e) {
+      debugPrint('[PayPink] Storage check non-critical failure: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingAuth = false;
+        });
+      }
+    }
   }
 
   void _toggleTheme() {
     setState(() => _isDarkMode = !_isDarkMode);
   }
 
-  void _handleLoginSuccess(String user) {
+  void _handleLoginSuccess(String user, String fullName) async {
+    final hasPin = await SecureTokenStorage.hasPin();
     setState(() {
       _currentUser = user;
+      _currentFullName = fullName.isNotEmpty ? fullName : user;
+      if (!hasPin) {
+        _requirePinSetup = true;
+      } else {
+        _isAuthenticated = true;
+        _showPinLogin = false;
+        _requirePinSetup = false;
+      }
+    });
+  }
+
+  void _handlePinSetupComplete() {
+    setState(() {
+      _requirePinSetup = false;
       _isAuthenticated = true;
     });
   }
@@ -69,6 +123,10 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
     if (!mounted) return;
     setState(() {
       _isAuthenticated = false;
+      _showPinLogin = false;
+      _requirePinSetup = false;
+      _currentUser = '';
+      _currentFullName = '';
     });
   }
 
@@ -80,18 +138,55 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
       theme: PayPinkTheme.lightTheme,
       darkTheme: PayPinkTheme.darkTheme,
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: _isAuthenticated
-          ? MainNavigationShell(
-              isDarkMode: _isDarkMode,
-              onToggleTheme: _toggleTheme,
-              onLogout: _handleLogout,
-              currentUser: _currentUser,
+      home: _isLoadingAuth
+          ? Container(
+              decoration: BoxDecoration(
+                gradient: _isDarkMode ? PayPinkTheme.darkBgGradient : PayPinkTheme.lightBgGradient,
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(color: PayPinkTheme.wine),
+              ),
             )
-          : LoginRegisterScreen(
-              onLoginSuccess: _handleLoginSuccess,
-              isDarkMode: _isDarkMode,
-              onToggleTheme: _toggleTheme,
-            ),
+          : _isAuthenticated
+              ? MainNavigationShell(
+                  isDarkMode: _isDarkMode,
+                  onToggleTheme: _toggleTheme,
+                  onLogout: _handleLogout,
+                  currentUser: _currentUser.isNotEmpty ? _currentUser : 'Customer',
+                  currentFullName: _currentFullName.isNotEmpty ? _currentFullName : null,
+                )
+              : _requirePinSetup
+                  ? PinAuthScreen(
+                      mode: PinScreenMode.setup,
+                      username: _currentUser,
+                      fullName: _currentFullName,
+                      isDarkMode: _isDarkMode,
+                      onAuthSuccess: _handlePinSetupComplete,
+                    )
+                  : _showPinLogin
+                      ? PinAuthScreen(
+                          mode: PinScreenMode.login,
+                          username: _currentUser,
+                          fullName: _currentFullName,
+                          isDarkMode: _isDarkMode,
+                          onAuthSuccess: () {
+                            setState(() {
+                              _showPinLogin = false;
+                              _isAuthenticated = true;
+                            });
+                          },
+                          onFallbackToPassword: () {
+                            setState(() {
+                              _showPinLogin = false;
+                              _isAuthenticated = false;
+                            });
+                          },
+                        )
+                      : LoginRegisterScreen(
+                          onLoginSuccess: _handleLoginSuccess,
+                          isDarkMode: _isDarkMode,
+                          onToggleTheme: _toggleTheme,
+                        ),
     );
   }
 }
@@ -101,13 +196,15 @@ class MainNavigationShell extends StatefulWidget {
   final VoidCallback onToggleTheme;
   final VoidCallback onLogout;
   final String currentUser;
+  final String? currentFullName;
 
   const MainNavigationShell({
     super.key,
     this.isDarkMode = false,
     required this.onToggleTheme,
     required this.onLogout,
-    this.currentUser = 'Trixie',
+    this.currentUser = 'Customer',
+    this.currentFullName,
   });
 
   @override
@@ -117,8 +214,17 @@ class MainNavigationShell extends StatefulWidget {
 class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
   bool _hideBalances = false;
-  final CircuitBreakerClient _circuitBreaker = CircuitBreakerClient();
 
+  String get _avatarInitials {
+    final name = _userProfile?.fullName ?? widget.currentFullName ?? widget.currentUser;
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    } else if (name.isNotEmpty) {
+      return name[0].toUpperCase();
+    }
+    return 'P';
+  }
   // In-App Notifications state
   final List<Map<String, dynamic>> _notifications = [
     {
@@ -130,84 +236,76 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     },
     {
       'id': 2,
-      'title': 'Security Perimeter Active',
-      'message': 'Hardware KeyStore encryption initialized.',
+      'title': 'Account Protected',
+      'message': 'Biometric & 6-Digit MPIN security active.',
       'time': '10 mins ago',
       'unread': false,
     },
   ];
 
-  final List<TransactionItem> _transactions = [
-    TransactionItem(
-      id: 'TRX-20261002-001',
-      title: 'Welcome gift',
-      date: 'Oct 2, 2026',
-      account: 'Account •••• 5046',
-      amount: 50.00,
-      isCredit: true,
-      ofscore: 'FUNDS.TRANSFER,AUTH/I/PROCESS,//PH100201,DEBIT.ACCT.NO=CORE.POOL,CREDIT.ACCT.NO=5046,AMOUNT=50.00,CCY=PHP',
-    ),
-    TransactionItem(
-      id: 'TRX-20260925-882',
-      title: 'Personal Loan Disbursement',
-      date: 'Sep 25, 2026',
-      account: 'Loan •••• 9921',
-      amount: 50000.00,
-      isCredit: true,
-      ofscore: 'LD.LOANS.AND.DEPOSITS,AUTH/I/PROCESS,//PH092501,DEBIT.ACCT.NO=TREASURY.POOL,CREDIT.ACCT.NO=9921,AMOUNT=50000.00,CCY=PHP',
-    ),
-    TransactionItem(
-      id: 'TRX-20260928-104',
-      title: 'Coffee Bean Manila (Reversed)',
-      date: 'Sep 28, 2026',
-      account: 'Account •••• 5046',
-      amount: 185.00,
-      isCredit: false,
-      ofscore: 'FUNDS.TRANSFER,REVERSE/I/PROCESS,//REV20260928,DEBIT.ACCT.NO=MERCH.COFFEE,CREDIT.ACCT.NO=5046,AMOUNT=185.00,CCY=PHP',
-      status: 'REVERSED',
-    ),
-    TransactionItem(
-      id: 'TRX-20261001-331',
-      title: 'External Transfer (DLQ Retrying)',
-      date: 'Oct 1, 2026',
-      account: 'Account •••• 5046',
-      amount: 500.00,
-      isCredit: false,
-      ofscore: 'FUNDS.TRANSFER,AUTH/I/PROCESS,//PH100133,DEBIT.ACCT.NO=5046,CREDIT.ACCT.NO=EXT.9912,AMOUNT=500.00,CCY=PHP',
-      status: 'FAILED_DLQ',
-    ),
-  ];
+  final List<TransactionItem> _transactions = [];
 
   UserProfile? _userProfile;
 
   @override
   void initState() {
     super.initState();
-    _circuitBreaker.addListener(_onCircuitBreakerChange);
     _loadLiveDatabaseData();
   }
 
-  void _loadLiveDatabaseData() async {
-    final profile = await AccountService.fetchProfile(fallbackUsername: widget.currentUser);
+  void _loadLiveDatabaseData({bool preserveLocalTransactions = true, bool bypassCache = false}) async {
+    final profile = await AccountService.fetchProfile(
+      fallbackUsername: widget.currentUser,
+      bypassCache: bypassCache,
+    );
     final txs = await AccountService.fetchTransactions();
     if (!mounted) return;
     setState(() {
-      _userProfile = profile;
+      if (profile.accounts.isNotEmpty) {
+        if (_userProfile == null || !preserveLocalTransactions) {
+          _userProfile = profile;
+        } else {
+          // Merge accounts preserving optimistic real-time debits and credits
+          final currentAcctsMap = {for (final a in _userProfile!.accounts) a.accountNumber: a};
+          final mergedAccounts = profile.accounts.map((fresh) {
+            final local = currentAcctsMap[fresh.accountNumber];
+            if (local != null) {
+              if (local.isLoan) {
+                return fresh.copyWith(
+                  currentBalance: local.currentBalance < fresh.currentBalance
+                      ? local.currentBalance
+                      : fresh.currentBalance,
+                  outstandingDebt: local.outstandingDebt,
+                );
+              }
+              // If local account was debited, keep the lower balance until backend reflects it
+              if (local.currentBalance < fresh.currentBalance) {
+                return fresh.copyWith(currentBalance: local.currentBalance);
+              }
+              // If local account was credited, keep the higher balance
+              if (local.currentBalance > fresh.currentBalance) {
+                return fresh.copyWith(currentBalance: local.currentBalance);
+              }
+            }
+            return fresh;
+          }).toList();
+          _userProfile = profile.copyWith(accounts: mergedAccounts);
+        }
+      }
+
       if (txs.isNotEmpty) {
-        _transactions.clear();
-        _transactions.addAll(txs);
+        if (!preserveLocalTransactions || _transactions.isEmpty) {
+          _transactions.clear();
+          _transactions.addAll(txs);
+        } else {
+          // Merge live transactions preserving newly posted local items at the top
+          final fetchedIds = txs.map((t) => t.id).toSet();
+          final localUnsynced = _transactions.where((t) => !fetchedIds.contains(t.id)).toList();
+          _transactions.clear();
+          _transactions.addAll([...localUnsynced, ...txs]);
+        }
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _circuitBreaker.removeListener(_onCircuitBreakerChange);
-    super.dispose();
-  }
-
-  void _onCircuitBreakerChange() {
-    setState(() {});
   }
 
   void _triggerStatusToast(String message, String icon) {
@@ -237,36 +335,288 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   }
 
   void _handleTransferSuccess(double amount, String refId, String source, String recipient) {
-    _loadLiveDatabaseData();
-    setState(() {
-      _transactions.insert(
-        0,
-        TransactionItem(
-          id: refId,
-          title: recipient.contains('Savings') ? 'Transfer to Savings' : 'Remittance Sent',
-          date: 'Oct 2, 2026',
-          account: 'Account •••• 5046',
-          amount: amount,
-          isCredit: false,
-          ofscore: 'FUNDS.TRANSFER,AUTH/I/PROCESS,//$refId,DEBIT.ACCT.NO=5046,AMOUNT=${amount.toStringAsFixed(2)},CCY=PHP',
-        ),
+    final cleanSource = source.replaceAll(RegExp(r'\D'), '');
+    final last4 = cleanSource.length >= 4 ? cleanSource.substring(cleanSource.length - 4) : cleanSource;
+    final destClean = recipient.replaceAll(RegExp(r'\D'), '');
+    final now = DateTime.now();
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
+    final ampm = now.hour >= 12 ? 'PM' : 'AM';
+    final timeStr = '${hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $ampm';
+    final dateStr = '${months[now.month - 1]} ${now.day}, ${now.year} · $timeStr';
+
+    String sourceCategory = 'Everyday Checking';
+    if (source.toLowerCase().contains('sav') || cleanSource.startsWith('0011')) {
+      sourceCategory = 'Savings Account';
+    } else if (source.toLowerCase().contains('check') || cleanSource.startsWith('0013') || source.toLowerCase().contains('everyday')) {
+      sourceCategory = 'Everyday Checking';
+    } else if (source.toLowerCase().contains('paypink')) {
+      sourceCategory = 'PayPink Account';
+    }
+
+    // 1. Immediate in-memory optimistic balance mutation (sender debited, receiver credited if owned)
+    if (_userProfile != null && _userProfile!.accounts.isNotEmpty) {
+      final srcClean = source.replaceAll(RegExp(r'\D'), '');
+
+      final updatedAccounts = _userProfile!.accounts.map((acct) {
+        final acctClean = acct.accountNumber.replaceAll(RegExp(r'\D'), '');
+
+        // Debit sender account
+        if (acctClean == srcClean || acct.accountNumber == source || acct.accountId.toString() == source || (srcClean.length >= 4 && acctClean.endsWith(srcClean))) {
+          final newBal = (acct.currentBalance - amount).clamp(0.0, double.infinity);
+          return acct.copyWith(
+            currentBalance: newBal,
+          );
+        }
+
+        // Credit receiver account if it belongs to user's own accounts
+        if (acctClean == destClean || acct.accountNumber == recipient || acct.accountId.toString() == recipient || (destClean.length >= 4 && acctClean.endsWith(destClean))) {
+          final newBal = acct.currentBalance + amount;
+          return acct.copyWith(
+            currentBalance: newBal,
+          );
+        }
+
+        return acct;
+      }).toList();
+
+      _userProfile = _userProfile!.copyWith(
+        accounts: updatedAccounts,
       );
+    }
+
+    final cleanRefId = refId.startsWith('TXN-')
+        ? refId
+        : 'TXN-2026-${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}';
+
+    final isToSavings = recipient.toLowerCase().contains('saving') || destClean.startsWith('0011');
+    final isToChecking = recipient.toLowerCase().contains('checking') || destClean.startsWith('0013');
+
+    String txTitle;
+    if (isToSavings) {
+      txTitle = 'Transfer to Savings';
+    } else if (isToChecking) {
+      txTitle = 'Transfer to Checking';
+    } else if (recipient.toLowerCase().contains('paypink')) {
+      final cleanRecipientName = recipient.split('·').first.split('(').first.trim();
+      txTitle = 'Transfer to $cleanRecipientName';
+    } else {
+      final cleanRecipientName = recipient.split('·').first.split('(').first.trim();
+      txTitle = 'Transfer to ${cleanRecipientName.isNotEmpty ? cleanRecipientName : recipient}';
+    }
+
+    final newTx = TransactionItem(
+      id: cleanRefId,
+      title: txTitle,
+      date: dateStr,
+      account: last4.isNotEmpty ? '$sourceCategory •••• $last4' : sourceCategory,
+      amount: amount,
+      isCredit: false,
+      transactionType: 'TRANSFER_OUT',
+      counterparty: recipient,
+      status: 'Completed',
+      timestamp: now,
+      sourceAccount: source,
+      recipientAccount: recipient,
+    );
+
+    TransactionItem? creditTx;
+    if (isToSavings) {
+      creditTx = TransactionItem(
+        id: '$cleanRefId-CR',
+        title: 'Transfer from Checking',
+        date: dateStr,
+        account: 'Savings Account •••• ${destClean.length >= 4 ? destClean.substring(destClean.length - 4) : '3469'}',
+        amount: amount,
+        isCredit: true,
+        transactionType: 'TRANSFER_IN',
+        counterparty: last4.isNotEmpty ? '$sourceCategory •••• $last4' : sourceCategory,
+        status: 'Completed',
+        timestamp: now,
+        sourceAccount: source,
+        recipientAccount: recipient,
+      );
+    }
+
+    setState(() {
+      _transactions.removeWhere((t) => t.id == cleanRefId || t.id == '$cleanRefId-CR');
+      if (creditTx != null) {
+        _transactions.insert(0, creditTx);
+      }
+      _transactions.insert(0, newTx);
 
       _notifications.insert(
         0,
         {
           'id': DateTime.now().millisecondsSinceEpoch,
-          'title': 'Transfer successful',
-          'message': 'Sent ₱${amount.toStringAsFixed(2)} to $recipient. Ref: $refId',
+          'title': 'Transfer Successful',
+          'message': 'Sent ₱${amount.toStringAsFixed(2)} to $recipient. Ref: $cleanRefId',
           'time': 'Just now',
           'unread': true,
         },
       );
 
-      _currentIndex = 0; // Return to dashboard
+      _currentIndex = 0; // Return to Dashboard overview where Recent Activity is at the top
     });
 
     _triggerStatusToast('Sent ₱${amount.toStringAsFixed(2)} to $recipient', '✅');
+
+    // Bypass client-side caching to retrieve fresh balances directly from Azure SQL
+    _loadLiveDatabaseData(preserveLocalTransactions: true, bypassCache: true);
+  }
+
+  void _handleTransactionReversal(TransactionItem tx) {
+    if (!tx.isReversible && tx.status.toUpperCase() == 'REVERSED') {
+      _triggerStatusToast('Transaction has already been reversed.', '⚠️');
+      return;
+    }
+
+    final refundAmount = tx.amount;
+    final now = DateTime.now();
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
+    final ampm = now.hour >= 12 ? 'PM' : 'AM';
+    final timeStr = '${hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $ampm';
+    final dateStr = '${months[now.month - 1]} ${now.day}, ${now.year} · $timeStr';
+
+    // 1. Refund the debited source account in _userProfile
+    if (_userProfile != null && _userProfile!.accounts.isNotEmpty) {
+      final srcClean = (tx.sourceAccount ?? tx.account).replaceAll(RegExp(r'\D'), '');
+      final destClean = (tx.recipientAccount ?? tx.counterparty ?? '').replaceAll(RegExp(r'\D'), '');
+
+      final updatedAccounts = _userProfile!.accounts.map((acct) {
+        final acctClean = acct.accountNumber.replaceAll(RegExp(r'\D'), '');
+
+        // Refund sender account
+        if (acctClean == srcClean || (acct.last4.isNotEmpty && srcClean.contains(acct.last4)) || acctClean.endsWith(acct.last4)) {
+          return acct.copyWith(
+            currentBalance: acct.currentBalance + refundAmount,
+          );
+        }
+
+        // If target was owned account, revert the credit
+        if (destClean.isNotEmpty && (acctClean == destClean || (acct.last4.isNotEmpty && destClean.contains(acct.last4)))) {
+          return acct.copyWith(
+            currentBalance: (acct.currentBalance - refundAmount).clamp(0.0, double.infinity),
+          );
+        }
+
+        return acct;
+      }).toList();
+
+      _userProfile = _userProfile!.copyWith(accounts: updatedAccounts);
+    }
+
+    // 2. Mark original transaction as REVERSED
+    setState(() {
+      final idx = _transactions.indexWhere((t) => t.id == tx.id);
+      if (idx != -1) {
+        _transactions[idx] = tx.copyWith(
+          status: 'REVERSED',
+        );
+      }
+
+      // If there was an internal companion credit, mark it reversed too
+      final crIdx = _transactions.indexWhere((t) => t.id == '${tx.id}-CR');
+      if (crIdx != -1) {
+        _transactions[crIdx] = _transactions[crIdx].copyWith(status: 'REVERSED');
+      }
+
+      // 3. Prepend an explicit Reversal credit entry to activity
+      final reversalCreditTx = TransactionItem(
+        id: 'REV-${tx.id}',
+        title: 'Reversal: ${tx.title}',
+        date: dateStr,
+        account: tx.account,
+        amount: refundAmount,
+        isCredit: true,
+        transactionType: 'TRANSFER_IN',
+        counterparty: 'PayPink 15-Min Reversal Service',
+        status: 'Completed',
+        timestamp: now,
+        sourceAccount: 'PayPink Reversal System',
+        recipientAccount: tx.account,
+      );
+      _transactions.insert(0, reversalCreditTx);
+
+      // 4. Add notification
+      _notifications.insert(
+        0,
+        {
+          'id': DateTime.now().millisecondsSinceEpoch,
+          'title': 'Transfer Reversed',
+          'message': '₱${refundAmount.toStringAsFixed(2)} has been refunded to ${tx.account}. Ref: REV-${tx.id}',
+          'time': 'Just now',
+          'unread': true,
+        },
+      );
+    });
+
+    _triggerStatusToast('Transfer reversed! ₱${refundAmount.toStringAsFixed(2)} refunded to ${tx.account}', '↩');
+  }
+
+  void _handleLoanPaymentSuccess(double amount, String fundingAccount, String loanAccount) {
+    final now = DateTime.now();
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final dateStr = '${months[now.month - 1]} ${now.day}, ${now.year}';
+    final refId = 'LOAN-PAY-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+
+    // 1. Immediate in-memory optimistic balance mutation (funding debited, loan outstanding reduced)
+    if (_userProfile != null && _userProfile!.accounts.isNotEmpty) {
+      final fundClean = fundingAccount.replaceAll(RegExp(r'\D'), '');
+      final loanClean = loanAccount.replaceAll(RegExp(r'\D'), '');
+
+      final updatedAccounts = _userProfile!.accounts.map((acc) {
+        final accClean = acc.accountNumber.replaceAll(RegExp(r'\D'), '');
+        // Debit funding account
+        if (accClean == fundClean || acc.accountNumber == fundingAccount) {
+          final newBal = (acc.currentBalance - amount).clamp(0.0, double.infinity);
+          return acc.copyWith(currentBalance: newBal);
+        }
+        // Reduce loan debt & balance
+        if (accClean == loanClean || acc.accountNumber == loanAccount || acc.accountType.toUpperCase().contains('LOAN')) {
+          final newBal = (acc.currentBalance - amount).clamp(0.0, double.infinity);
+          final currentDebt = acc.outstandingDebt ?? 0.0;
+          final newDebt = (currentDebt - amount).clamp(0.0, double.infinity);
+          return acc.copyWith(currentBalance: newBal, outstandingDebt: newDebt);
+        }
+        return acc;
+      }).toList();
+
+      _userProfile = _userProfile!.copyWith(
+        accounts: updatedAccounts,
+      );
+    }
+
+    final newTx = TransactionItem(
+      id: refId,
+      title: 'Personal Loan Repayment',
+      date: dateStr,
+      account: fundingAccount.length >= 4 ? '•••• ${fundingAccount.substring(fundingAccount.length - 4)}' : fundingAccount,
+      amount: amount,
+      isCredit: false,
+      transactionType: 'LOAN_PAYMENT',
+      counterparty: 'Personal Loan',
+      status: 'COMPLETED',
+    );
+
+    setState(() {
+      _transactions.insert(0, newTx);
+      _notifications.insert(
+        0,
+        {
+          'id': DateTime.now().millisecondsSinceEpoch,
+          'title': 'Loan Payment Received',
+          'message': '₱${amount.toStringAsFixed(2)} applied toward personal loan balance.',
+          'time': 'Just now',
+          'unread': true,
+        },
+      );
+      _currentIndex = 0;
+    });
+
+    _triggerStatusToast('Loan payment of ₱${amount.toStringAsFixed(2)} processed!', '💳');
+    _loadLiveDatabaseData(preserveLocalTransactions: true, bypassCache: true);
   }
 
   void _markAllNotificationsRead() {
@@ -283,164 +633,19 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     });
   }
 
-  void _showChaosEngineeringMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(22),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Chaos & Architecture Controls',
-                  style: PayPinkTheme.display(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: PayPinkTheme.pinkSubtle,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: PayPinkTheme.pink),
-                  ),
-                  child: Text(
-                    'Capstone 2',
-                    style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.flash_on_rounded, color: PayPinkTheme.red),
-              title: const Text('Trip Circuit Breaker', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: const Text('Simulate SLA timeout <= 200ms -> Trips to OPEN fail-fast', style: TextStyle(fontSize: 11)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _circuitBreaker.tripBreaker();
-                _triggerStatusToast('Circuit Breaker: OPEN', '⚡');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.speed_rounded, color: PayPinkTheme.amber),
-              title: const Text('Trigger 429 Rate Limit', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: const Text('Redis token-bucket rate limiter (>10 req/s simulation)', style: TextStyle(fontSize: 11)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _triggerStatusToast('Edge Rate Limit: HTTP 429', '⚠️');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    backgroundColor: PayPinkTheme.amber,
-                    content: Text('HTTP 429: Too Many Requests (>10 req/s). Redis token bucket active.'),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.key_rounded, color: PayPinkTheme.wine),
-              title: const Text('Hardware KeyStore / Vault', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: const Text('Inspect iOS Keychain / Android KeyStore hardware tokens', style: TextStyle(fontSize: 11)),
-              onTap: () {
-                Navigator.pop(ctx);
-                PayPinkBottomSheets.showHardwareVault(
-                  context,
-                  hardwareKeyId: 'secp256r1-keychain-hardware-tsamson',
-                  circuitStatus: _circuitBreaker.isOpen ? 'OPEN (Tripped)' : 'CLOSED (Healthy)',
-                  gatewayRoute: '127.0.0.1:8080 (Reverse Proxy)',
-                  jwtToken: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0c2Ftc29uIiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxNzkxMDEwMDAwfQ',
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _confirmLogout() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: widget.isDarkMode ? PayPinkTheme.darkCard : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.logout_rounded, color: PayPinkTheme.wine, size: 24),
-            const SizedBox(width: 10),
-            Text(
-              'Log Out',
-              style: PayPinkTheme.display(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: widget.isDarkMode ? PayPinkTheme.darkInk : PayPinkTheme.ink,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to end your secure PayPink banking session?',
-          style: PayPinkTheme.body(
-            fontSize: 13,
-            color: widget.isDarkMode ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Cancel',
-              style: PayPinkTheme.body(
-                fontWeight: FontWeight.w600,
-                color: widget.isDarkMode ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.onLogout();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: PayPinkTheme.wine,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Log Out'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_circuitBreaker.isOpen) {
-      return Container(
-        color: widget.isDarkMode ? const Color(0xFF09060B) : const Color(0xFFF0EAEF),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: CircuitBreakerScreen(
-              onRecover: () {
-                setState(() {});
-                _triggerStatusToast('Circuit Breaker: CLOSED', '🛡️');
-              },
-            ),
-          ),
-        ),
-      );
-    }
 
     final hasUnreadNotifs = _notifications.any((n) => n['unread'] == true);
     final isDark = widget.isDarkMode;
+
+    final resolvedFullName = _userProfile?.fullName.isNotEmpty == true
+        ? _userProfile!.fullName
+        : (widget.currentFullName?.isNotEmpty == true ? widget.currentFullName! : widget.currentUser);
+    final resolvedFirstName = _userProfile?.firstName.isNotEmpty == true
+        ? _userProfile!.firstName
+        : (resolvedFullName.split(' ').first.isNotEmpty ? resolvedFullName.split(' ').first : widget.currentUser);
+    final primaryAccountNum = _userProfile?.primaryAccount?.accountNumber;
 
     final screens = [
       DashboardScreen(
@@ -448,15 +653,19 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         onToggleHideBalances: () => setState(() => _hideBalances = !_hideBalances),
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
         transactions: _transactions,
-        userName: _userProfile?.firstName.isNotEmpty == true ? _userProfile!.firstName : widget.currentUser,
+        userName: resolvedFirstName,
+        userFullName: resolvedFullName,
         accounts: _userProfile?.accounts,
         totalBalance: _userProfile?.totalBalance,
+        onLoanPaymentSuccess: _handleLoanPaymentSuccess,
+        onReverseTransaction: _handleTransactionReversal,
       ),
       AccountsScreen(
         hideBalances: _hideBalances,
         onToggleHideBalances: () => setState(() => _hideBalances = !_hideBalances),
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
         accounts: _userProfile?.accounts,
+        userName: resolvedFullName,
       ),
       RemittanceScreen(
         onTransferSuccess: _handleTransferSuccess,
@@ -464,17 +673,22 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       ),
       TransactionsScreen(
         transactions: _transactions,
+        customerName: resolvedFullName,
+        primaryAccountNumber: primaryAccountNum,
+        onReverseTransaction: _handleTransactionReversal,
       ),
     ];
 
     return Container(
-      color: isDark ? const Color(0xFF121828) : const Color(0xFFEFE8EC),
+      decoration: BoxDecoration(
+        gradient: isDark ? PayPinkTheme.darkBgGradient : PayPinkTheme.lightBgGradient,
+      ),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: Scaffold(
             extendBody: true,
-            backgroundColor: isDark ? PayPinkTheme.darkBg : PayPinkTheme.paper,
+            backgroundColor: Colors.transparent,
             body: SafeArea(
               bottom: false,
               child: Column(
@@ -486,106 +700,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: PayPinkTheme.wine,
-                                  borderRadius: BorderRadius.circular(10),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: PayPinkTheme.wine.withValues(alpha: 0.25),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    'p',
-                                    style: TextStyle(
-                                      fontFamily: 'Manrope',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'PayPink®',
-                                    style: PayPinkTheme.display(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                      color: isDark ? Colors.white : PayPinkTheme.wine,
-                                      letterSpacing: -0.8,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Oct 2, 2026',
-                                    style: PayPinkTheme.body(
-                                      fontSize: 9.5,
-                                      color: isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                          child: PayPinkLogo.header(
+                            isDark: isDark,
+                            subtitle: 'Oct 2, 2026',
                           ),
                         ),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Dark Mode Toggle
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(),
-                              icon: Icon(
-                                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                color: isDark ? const Color(0xFFFBBF24) : PayPinkTheme.wine,
-                                size: 19,
-                              ),
-                              tooltip: isDark ? 'Light Mode' : 'Dark Mode',
-                              onPressed: widget.onToggleTheme,
-                            ),
-                            const SizedBox(width: 4),
-                            // Log Out Button
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(),
-                              icon: Icon(
-                                Icons.logout_rounded,
-                                color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-                                size: 19,
-                              ),
-                              tooltip: 'Log Out',
-                              onPressed: _confirmLogout,
-                            ),
-                            const SizedBox(width: 4),
-                            // Chaos Testing Trigger Button
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(),
-                              icon: Icon(
-                                Icons.tune_rounded,
-                                color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-                                size: 19,
-                              ),
-                              tooltip: 'Chaos & Arch Controls',
-                              onPressed: _showChaosEngineeringMenu,
-                            ),
-                            const SizedBox(width: 4),
                             // Notification Bell with live red unread dot
                             Stack(
                               children: [
@@ -622,24 +744,35 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                                   ),
                               ],
                             ),
-                            const SizedBox(width: 6),
-                            // Customer Avatar TS (opens Hardware Vault + Logout)
+                            const SizedBox(width: 8),
+                            // Customer Avatar with dynamic initials (opens dedicated Profile View & Settings)
                             GestureDetector(
                               onTap: () {
-                                PayPinkBottomSheets.showHardwareVault(
+                                ProfileSheet.show(
                                   context,
-                                  hardwareKeyId: 'secp256r1-keychain-hardware-tsamson',
-                                  circuitStatus: _circuitBreaker.isOpen ? 'OPEN (Tripped)' : 'CLOSED (Healthy)',
-                                  gatewayRoute: '127.0.0.1:8080 (Reverse Proxy)',
-                                  jwtToken: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0c2Ftc29uIiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxNzkxMDEwMDAwfQ',
+                                  userProfile: _userProfile,
+                                  currentUser: widget.currentUser,
+                                  isDarkMode: isDark,
+                                  onToggleTheme: widget.onToggleTheme,
                                   onLogout: widget.onLogout,
+                                  onUpdateProfile: (newName, newEmail) {
+                                    setState(() {
+                                      if (_userProfile != null) {
+                                        _userProfile = _userProfile!.copyWith(
+                                          fullName: newName,
+                                          firstName: newName.split(' ').first,
+                                          email: newEmail,
+                                        );
+                                      }
+                                    });
+                                  },
                                 );
                               },
                               child: CircleAvatar(
                                 radius: 15,
                                 backgroundColor: isDark ? PayPinkTheme.wineDark : PayPinkTheme.pink,
                                 child: Text(
-                                  widget.currentUser.isNotEmpty ? widget.currentUser.substring(0, 1).toUpperCase() : 'T',
+                                  _avatarInitials,
                                   style: PayPinkTheme.display(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w800,

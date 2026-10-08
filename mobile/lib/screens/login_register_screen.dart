@@ -2,9 +2,10 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/paypink_theme.dart';
 import '../services/auth_service.dart';
+import '../widgets/paypink_logo.dart';
 
 class LoginRegisterScreen extends StatefulWidget {
-  final Function(String username) onLoginSuccess;
+  final void Function(String username, String fullName) onLoginSuccess;
   final bool isDarkMode;
   final VoidCallback onToggleTheme;
 
@@ -26,10 +27,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
   bool _rememberMe = true;
 
   // Controllers pre-filled with live database user
-  final _usernameController = TextEditingController(text: 'tsamson');
-  final _passwordController = TextEditingController(text: 'password123');
-  final _fullNameController = TextEditingController(text: 'Trixie Samson');
-  final _emailController = TextEditingController(text: 'tbsamson@eastwestbanker.com');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _fullNameController = TextEditingController();
+  final _emailController = TextEditingController();
   String _selectedAccountType = 'EVERYDAY';
 
   @override
@@ -68,7 +69,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
 
         if (res.success) {
           _showToast('Account created! Welcome to PayPink.', Icons.check_circle_rounded);
-          widget.onLoginSuccess(res.fullName ?? username);
+          widget.onLoginSuccess(
+            res.username ?? username,
+            res.fullName ?? (name.isNotEmpty ? name : username),
+          );
         } else {
           _showToast(res.message, Icons.error_outline_rounded);
         }
@@ -83,7 +87,10 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
 
         if (res.success) {
           _showToast(res.message, Icons.verified_user_rounded);
-          widget.onLoginSuccess(res.fullName ?? username);
+          widget.onLoginSuccess(
+            res.username ?? username,
+            res.fullName ?? username,
+          );
         } else {
           _showToast(res.message, Icons.error_outline_rounded);
         }
@@ -93,24 +100,6 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
       setState(() => _isLoading = false);
       _showToast('Authentication failed: ${e.toString()}', Icons.error_outline_rounded);
     }
-  }
-
-  void _quickFillUser(String user, String pass) {
-    setState(() {
-      _isRegister = false;
-      _usernameController.text = user;
-      _passwordController.text = pass;
-    });
-    _submit();
-  }
-
-  void _simulateBiometricLogin() async {
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-    _showToast('Face ID Verified · Hardware Vault Unlocked', Icons.fingerprint_rounded);
-    widget.onLoginSuccess('tsamson');
   }
 
   void _showToast(String message, IconData icon) {
@@ -140,7 +129,6 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDarkMode;
-    final bgColor = isDark ? PayPinkTheme.darkBg : const Color(0xFFFBF6F8);
     final cardBg = isDark ? PayPinkTheme.darkGlassCardBg : Colors.white.withValues(alpha: 0.92);
     final textColor = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
     final mutedColor = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
@@ -152,7 +140,9 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: Container(
-            color: bgColor,
+            decoration: BoxDecoration(
+              gradient: isDark ? PayPinkTheme.darkBgGradient : PayPinkTheme.lightBgGradient,
+            ),
             child: Stack(
               children: [
                 // Ambient Background Glow Orbs
@@ -223,7 +213,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    'Secure Gateway v2.0',
+                                    'Encrypted & Verified',
                                     style: PayPinkTheme.mono(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
@@ -262,51 +252,8 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
 
                         // PayPink Brand Header
                         Center(
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 68,
-                                height: 68,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF8A2754), Color(0xFF551633)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(22),
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: PayPinkTheme.wine.withValues(alpha: 0.35),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: const Center(
-                                  child: Icon(Icons.account_balance_rounded, color: Colors.white, size: 32),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              Text(
-                                'PayPink®',
-                                style: PayPinkTheme.display(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w900,
-                                  color: isDark ? Colors.white : PayPinkTheme.wineDark,
-                                  letterSpacing: -1,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Intelligent Multi-Currency Banking',
-                                style: PayPinkTheme.body(
-                                  fontSize: 12.5,
-                                  color: mutedColor,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                          child: PayPinkLogo.authHero(
+                            isDark: isDark,
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -420,7 +367,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                                     _buildLabel('Full Legal Name', textColor),
                                     _buildTextField(
                                       controller: _fullNameController,
-                                      hint: 'e.g. Trixie Samson',
+                                      hint: 'e.g. Maria Santos',
                                       icon: Icons.badge_outlined,
                                       isDark: isDark,
                                     ),
@@ -428,7 +375,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                                     _buildLabel('Email Address', textColor),
                                     _buildTextField(
                                       controller: _emailController,
-                                      hint: 'trixie@paypink.com',
+                                      hint: 'name@example.com',
                                       icon: Icons.email_outlined,
                                       keyboardType: TextInputType.emailAddress,
                                       isDark: isDark,
@@ -440,7 +387,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                                   _buildLabel(_isRegister ? 'Desired Username' : 'Username or Account Number', textColor),
                                   _buildTextField(
                                     controller: _usernameController,
-                                    hint: _isRegister ? 'trixie' : 'trixie or 001 1 5046 8001',
+                                    hint: _isRegister ? 'e.g. mariasantos' : 'Enter username or account number',
                                     icon: Icons.person_outline_rounded,
                                     isDark: isDark,
                                   ),
@@ -560,78 +507,6 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                                   ),
                                   const SizedBox(height: 14),
 
-                                  // Biometrics Simulation Button (Sign In only)
-                                  if (!_isRegister) ...[
-                                    SizedBox(
-                                      height: 46,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _isLoading ? null : _simulateBiometricLogin,
-                                        icon: const Icon(Icons.fingerprint_rounded, color: PayPinkTheme.wine, size: 20),
-                                        label: Text(
-                                          'Unlock with Face ID / Biometrics',
-                                          style: PayPinkTheme.body(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-                                          ),
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          side: BorderSide(
-                                            color: (isDark ? PayPinkTheme.pink : PayPinkTheme.wine).withValues(alpha: 0.35),
-                                          ),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-
-                                    // Live Database Accounts Quick-Switch
-                                    Column(
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.dns_rounded, size: 12, color: mutedColor),
-                                            const SizedBox(width: 5),
-                                            Text(
-                                              'Live Database Accounts:',
-                                              style: PayPinkTheme.mono(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: mutedColor,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Wrap(
-                                          alignment: WrapAlignment.center,
-                                          spacing: 6,
-                                          runSpacing: 6,
-                                          children: [
-                                            _buildDbAccountPill(
-                                              label: 'tsamson (Trixie)',
-                                              username: 'tsamson',
-                                              password: 'password123',
-                                              isDark: isDark,
-                                            ),
-                                            _buildDbAccountPill(
-                                              label: 'arosales (Aly)',
-                                              username: 'arosales',
-                                              password: 'password123',
-                                              isDark: isDark,
-                                            ),
-                                            _buildDbAccountPill(
-                                              label: 'lviernes (Levi)',
-                                              username: 'lviernes',
-                                              password: 'password123',
-                                              isDark: isDark,
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ],
                                 ],
                               ),
                             ),
@@ -728,44 +603,4 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
     );
   }
 
-  Widget _buildDbAccountPill({
-    required String label,
-    required String username,
-    required String password,
-    required bool isDark,
-  }) {
-    return GestureDetector(
-      onTap: () => _quickFillUser(username, password),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isDark ? PayPinkTheme.darkCard : PayPinkTheme.pinkSubtle,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.flash_on_rounded,
-              size: 13,
-              color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: PayPinkTheme.mono(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: isDark ? PayPinkTheme.darkInk : PayPinkTheme.wine,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

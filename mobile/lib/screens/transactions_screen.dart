@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
+import '../services/statement_service.dart';
 
 class TransactionItem {
   final String id;
@@ -10,8 +11,13 @@ class TransactionItem {
   final String account;
   final double amount;
   final bool isCredit;
+  final String transactionType; // 'TRANSFER_OUT', 'TRANSFER_IN', 'LOAN_PAYMENT', 'DEPOSIT'
+  final String? counterparty;
+  final String status; // 'Completed', 'Processing', 'Refunded', 'Failed', 'REVERSED'
   final String ofscore;
-  final String status; // 'COMPLETED', 'REVERSED', 'FAILED_DLQ'
+  final DateTime? timestamp;
+  final String? sourceAccount;
+  final String? recipientAccount;
 
   TransactionItem({
     required this.id,
@@ -20,15 +26,124 @@ class TransactionItem {
     required this.account,
     required this.amount,
     required this.isCredit,
-    required this.ofscore,
-    this.status = 'COMPLETED',
-  });
+    this.transactionType = 'TRANSFER_OUT',
+    this.counterparty,
+    this.status = 'Completed',
+    String? ofscore,
+    this.timestamp,
+    this.sourceAccount,
+    this.recipientAccount,
+  }) : ofscore = ofscore ?? 'TXN-REF-$id';
+
+  bool get isReversible {
+    if (isCredit) return false;
+    if (status.toUpperCase() == 'REVERSED' || status.toLowerCase().contains('refund')) return false;
+    if (timestamp == null) return false;
+    final diff = DateTime.now().difference(timestamp!);
+    return diff.inMinutes < 15 && !diff.isNegative;
+  }
+
+  int get reversalMinutesRemaining {
+    if (timestamp == null) return 0;
+    final diff = DateTime.now().difference(timestamp!);
+    final left = 15 - diff.inMinutes;
+    return left > 0 ? left : 0;
+  }
+
+  TransactionItem copyWith({
+    String? id,
+    String? title,
+    String? date,
+    String? account,
+    double? amount,
+    bool? isCredit,
+    String? transactionType,
+    String? counterparty,
+    String? status,
+    String? ofscore,
+    DateTime? timestamp,
+    String? sourceAccount,
+    String? recipientAccount,
+  }) {
+    return TransactionItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      date: date ?? this.date,
+      account: account ?? this.account,
+      amount: amount ?? this.amount,
+      isCredit: isCredit ?? this.isCredit,
+      transactionType: transactionType ?? this.transactionType,
+      counterparty: counterparty ?? this.counterparty,
+      status: status ?? this.status,
+      ofscore: ofscore ?? this.ofscore,
+      timestamp: timestamp ?? this.timestamp,
+      sourceAccount: sourceAccount ?? this.sourceAccount,
+      recipientAccount: recipientAccount ?? this.recipientAccount,
+    );
+  }
+
+  String get displayType {
+    if (transactionType == 'LOAN_PAYMENT' || title.toLowerCase().contains('loan payment')) {
+      return 'Loan Payment';
+    }
+    if (transactionType == 'DEPOSIT' || title.toLowerCase().contains('deposit') || title.toLowerCase().contains('welcome')) {
+      return 'Deposit';
+    }
+    if (isCredit) {
+      return 'Transfer In';
+    }
+    return 'Transfer Out';
+  }
+
+  bool get isLoanRelated =>
+      account.toLowerCase().contains('loan') ||
+      title.toLowerCase().contains('loan') ||
+      transactionType == 'LOAN_PAYMENT';
+
+  bool get isCheckingRelated =>
+      account.toLowerCase().contains('checking') ||
+      account.toLowerCase().contains('everyday') ||
+      account.toLowerCase().contains('5046') ||
+      account.toLowerCase().contains('3963') ||
+      account.toLowerCase().contains('3812') ||
+      (sourceAccount?.toLowerCase().contains('check') ?? false) ||
+      (recipientAccount?.toLowerCase().contains('check') ?? false) ||
+      title.toLowerCase().contains('checking');
+
+  bool get isSavingsRelated =>
+      account.toLowerCase().contains('savings') ||
+      account.toLowerCase().contains('5968') ||
+      account.toLowerCase().contains('1963') ||
+      account.toLowerCase().contains('8123') ||
+      account.toLowerCase().contains('8504') ||
+      account.toLowerCase().contains('3469') ||
+      (sourceAccount?.toLowerCase().contains('sav') ?? false) ||
+      (recipientAccount?.toLowerCase().contains('sav') ?? false) ||
+      title.toLowerCase().contains('savings');
+
+  bool get isPayPinkRelated =>
+      account.toLowerCase().contains('paypink') ||
+      title.toLowerCase().contains('paypink') ||
+      (counterparty?.toLowerCase().contains('paypink') ?? false) ||
+      (recipientAccount?.toLowerCase().contains('paypink') ?? false) ||
+      (!isLoanRelated && !account.toLowerCase().contains('bank'));
 }
 
 class TransactionsScreen extends StatefulWidget {
   final List<TransactionItem> transactions;
+  final VoidCallback? onRefresh;
+  final String? customerName;
+  final String? primaryAccountNumber;
+  final Function(TransactionItem tx)? onReverseTransaction;
 
-  const TransactionsScreen({super.key, required this.transactions});
+  const TransactionsScreen({
+    super.key,
+    required this.transactions,
+    this.onRefresh,
+    this.customerName,
+    this.primaryAccountNumber,
+    this.onReverseTransaction,
+  });
 
   @override
   State<TransactionsScreen> createState() => _TransactionsScreenState();
@@ -36,7 +151,109 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   String _searchQuery = '';
-  String _filter = 'all'; // 'all', 'credit', 'debit', 'reversal'
+  String _filter = 'all'; // 'all', 'credit', 'debit', 'reversal', 'checking', 'savings', 'paypink', 'loan'
+
+  void _confirmReversal(BuildContext context, TransactionItem tx) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final paperBg = isDark ? PayPinkTheme.darkCard : PayPinkTheme.paper;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: PayPinkTheme.wine.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.undo_rounded, color: PayPinkTheme.wine, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Reverse Transfer',
+              style: PayPinkTheme.display(fontSize: 16, fontWeight: FontWeight.w800, color: textInk),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You are within the 15-minute grace period to reverse this outgoing transfer.',
+              style: PayPinkTheme.body(fontSize: 12, color: textMuted),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: paperBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: textLine),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Amount to Refund', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
+                      Text('₱${tx.amount.toStringAsFixed(2)}', style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w800, color: PayPinkTheme.green)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Refund Destination', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
+                      Text(tx.account, style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: textInk)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Time Remaining', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
+                      Text('${tx.reversalMinutesRemaining} mins left', style: PayPinkTheme.mono(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Reversing will immediately cancel the transaction and credit ₱${tx.amount.toStringAsFixed(2)} back to your account balance.',
+              style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.wine, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: PayPinkTheme.body(color: textMuted, fontWeight: FontWeight.w700)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.onReverseTransaction?.call(tx);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: PayPinkTheme.wine,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('Confirm Reversal', style: PayPinkTheme.body(fontWeight: FontWeight.w700, color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,13 +266,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     var filtered = widget.transactions.where((tx) {
       if (_filter == 'credit' && !tx.isCredit) return false;
       if (_filter == 'debit' && tx.isCredit) return false;
-      if (_filter == 'reversal' && tx.status != 'REVERSED' && tx.status != 'FAILED_DLQ') return false;
+      if (_filter == 'reversal' && tx.status.toUpperCase() != 'REVERSED' && tx.status != 'Refunded') return false;
+      if (_filter == 'checking' && !tx.isCheckingRelated) return false;
+      if (_filter == 'savings' && !tx.isSavingsRelated) return false;
+      if (_filter == 'paypink' && !tx.isPayPinkRelated) return false;
+      if (_filter == 'loan' && !tx.isLoanRelated) return false;
 
       if (_searchQuery.trim().isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         return tx.title.toLowerCase().contains(q) ||
             tx.id.toLowerCase().contains(q) ||
-            tx.account.toLowerCase().contains(q);
+            tx.account.toLowerCase().contains(q) ||
+            (tx.counterparty?.toLowerCase().contains(q) ?? false);
       }
       return true;
     }).toList();
@@ -66,14 +288,44 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Every little detail.',
-            style: PayPinkTheme.display(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: textInk,
-              letterSpacing: -0.8,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Every little detail.',
+                style: PayPinkTheme.display(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: textInk,
+                  letterSpacing: -0.8,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.picture_as_pdf_rounded, color: brandWine, size: 21),
+                    tooltip: 'Export Statement (PDF)',
+                    onPressed: () {
+                      StatementService.generateAndExportStatement(
+                        context: context,
+                        customerName: widget.customerName?.isNotEmpty == true ? widget.customerName! : 'PayPink Client',
+                        accountNumber: widget.primaryAccountNumber ?? '001 1 5046 8001',
+                        accountType: 'All Accounts Activity',
+                        currentBalance: widget.transactions.isNotEmpty ? widget.transactions.first.amount : 50.0,
+                        transactions: widget.transactions,
+                      );
+                    },
+                  ),
+                  if (widget.onRefresh != null)
+                    IconButton(
+                      icon: Icon(Icons.refresh_rounded, color: brandWine, size: 22),
+                      tooltip: 'Sync via Gateway',
+                      onPressed: widget.onRefresh,
+                    ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
@@ -91,7 +343,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   onChanged: (v) => setState(() => _searchQuery = v),
                   style: PayPinkTheme.body(fontSize: 13, color: textInk),
                   decoration: InputDecoration(
-                    hintText: 'Search transactions or reference...',
+                    hintText: 'Search transactions, reference, counterparty...',
                     hintStyle: PayPinkTheme.body(fontSize: 12, color: textMuted),
                     prefixIcon: Icon(Icons.search_rounded, size: 20, color: textMuted),
                     filled: true,
@@ -114,6 +366,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 const SizedBox(height: 10),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
                   child: Row(
                     children: [
                       _buildFilterChip('All', 'all', isDark),
@@ -123,6 +376,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       _buildFilterChip('Money out', 'debit', isDark),
                       const SizedBox(width: 8),
                       _buildFilterChip('Reversals', 'reversal', isDark),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Checking', 'checking', isDark),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Savings', 'savings', isDark),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('PayPink', 'paypink', isDark),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('Loans', 'loan', isDark),
                     ],
                   ),
                 ),
@@ -165,7 +426,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           color: isReversed
                               ? (isDark ? const Color(0xFF382D16) : PayPinkTheme.amberBg)
                               : (isDlq
-                                  ? (isDark ? const Color(0xFF3B1818) : PayPinkTheme.redBg)
+                                  ? (isDark ? const Color(0xFF382D16) : PayPinkTheme.amberBg)
                                   : (tx.isCredit
                                       ? (isDark ? const Color(0xFF143823) : PayPinkTheme.greenBg)
                                       : (isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle))),
@@ -175,12 +436,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           isReversed
                               ? Icons.undo_rounded
                               : (isDlq
-                                  ? Icons.sync_problem_rounded
+                                  ? Icons.hourglass_top_rounded
                                   : (tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded)),
                           color: isReversed
                               ? PayPinkTheme.amber
                               : (isDlq
-                                  ? PayPinkTheme.red
+                                  ? PayPinkTheme.amber
                                   : (tx.isCredit
                                       ? (isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green)
                                       : (isDark ? const Color(0xFFF6A4C0) : PayPinkTheme.wine))),
@@ -195,9 +456,25 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           color: textInk,
                         ).copyWith(decoration: isReversed ? TextDecoration.lineThrough : null),
                       ),
-                      subtitle: Text(
-                        '${tx.account} · ${tx.date}',
-                        style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${tx.account} · ${tx.date}',
+                            style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
+                          ),
+                          if (tx.counterparty != null && tx.counterparty!.isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              'Recipient: ${tx.counterparty}',
+                              style: PayPinkTheme.body(
+                                fontSize: 10,
+                                color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -215,30 +492,73 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                       : textInk),
                             ),
                           ),
-                          Text(
-                            isReversed
-                                ? '• Reversed'
-                                : (isDlq ? '• DLQ Retrying' : 'Completed'),
-                            style: PayPinkTheme.body(
-                              fontSize: 9.5,
-                              color: isReversed
-                                  ? PayPinkTheme.amber
-                                  : (isDlq ? PayPinkTheme.red : textMuted),
-                              fontWeight: (isReversed || isDlq) ? FontWeight.w700 : FontWeight.normal,
+                          const SizedBox(height: 2),
+                          if (tx.isReversible)
+                            InkWell(
+                              onTap: () => _confirmReversal(context, tx),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.35) : PayPinkTheme.pinkSubtle,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: PayPinkTheme.wine, width: 0.8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.undo_rounded, size: 10, color: PayPinkTheme.wine),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Reverse (${tx.reversalMinutesRemaining}m)',
+                                      style: PayPinkTheme.mono(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: PayPinkTheme.wine,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            Text(
+                              isReversed
+                                  ? '• Refunded'
+                                  : (isDlq ? '• Processing' : 'Completed'),
+                              style: PayPinkTheme.body(
+                                fontSize: 9.5,
+                                color: isReversed
+                                    ? PayPinkTheme.amber
+                                    : (isDlq ? PayPinkTheme.wine : textMuted),
+                                fontWeight: (isReversed || isDlq) ? FontWeight.w700 : FontWeight.normal,
+                              ),
                             ),
-                          ),
                         ],
                       ),
-                      onTap: () => PayPinkBottomSheets.showTransactionDetails(
-                        context,
-                        name: tx.title,
-                        refId: tx.id,
-                        date: tx.date,
-                        amount: tx.amount,
-                        isCredit: tx.isCredit,
-                        ofscore: tx.ofscore,
-                        auditHash: 'pg-audit-sha256-${tx.id.toLowerCase()}',
-                      ),
+                      onTap: () {
+                        final cleanRef = tx.id.startsWith('TXN-')
+                            ? tx.id
+                            : (tx.id.startsWith('TRX-')
+                                ? tx.id.replaceFirst('TRX-', 'TXN-')
+                                : 'TXN-2026-${tx.id.replaceAll(RegExp(r'[^0-9]'), '').padRight(5, '0').substring(0, 5)}');
+                        PayPinkBottomSheets.showTransactionDetails(
+                          context,
+                          name: tx.title,
+                          refId: cleanRef,
+                          date: tx.date,
+                          amount: tx.amount,
+                          isCredit: tx.isCredit,
+                          ofscore: cleanRef,
+                          auditHash: 'SEC-$cleanRef',
+                          account: tx.account,
+                          counterparty: tx.counterparty ?? tx.recipientAccount,
+                          status: tx.status,
+                          canReverse: tx.isReversible,
+                          reversalMinutesRemaining: tx.reversalMinutesRemaining,
+                          onReverse: () => _confirmReversal(context, tx),
+                        );
+                      },
                     ),
                   );
                 },
