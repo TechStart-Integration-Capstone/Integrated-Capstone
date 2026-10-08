@@ -24,19 +24,19 @@ public class CustomerAccountReader {
     public record CustomerRow(Long customerId, int creditScore, BigDecimal monthlyIncome) {}
 
     public Optional<AccountRow> findAccountByNumber(String accountNumber) {
-        return jdbc.query("SELECT account_id, customer_id, account_number, status, currency FROM dbo.ACCOUNT WHERE account_number = ?",
+        return jdbc.query("SELECT account_id, customer_id, account_number, status, currency FROM t24.ACCOUNT WHERE account_number = ?",
                 (rs, i) -> new AccountRow(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getString(5)),
                 accountNumber).stream().findFirst();
     }
 
     public Optional<AccountRow> findAccountById(Long accountId) {
-        return jdbc.query("SELECT account_id, customer_id, account_number, status, currency FROM dbo.ACCOUNT WHERE account_id = ?",
+        return jdbc.query("SELECT account_id, customer_id, account_number, status, currency FROM t24.ACCOUNT WHERE account_id = ?",
                 (rs, i) -> new AccountRow(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getString(5)),
                 accountId).stream().findFirst();
     }
 
     public Optional<CustomerRow> findCustomer(Long customerId) {
-        return jdbc.query("SELECT customer_id, credit_score, monthly_income FROM dbo.CUSTOMER WHERE customer_id = ?",
+        return jdbc.query("SELECT customer_id, credit_score, monthly_income FROM app.CUSTOMER WHERE customer_id = ?",
                 (rs, i) -> new CustomerRow(rs.getLong(1), rs.getInt(2), rs.getBigDecimal(3)),
                 customerId).stream().findFirst();
     }

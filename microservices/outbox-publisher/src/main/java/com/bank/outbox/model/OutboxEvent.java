@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
  * guaranteeing at-least-once delivery without a two-phase commit.
  */
 @Entity
-@Table(name = "OUTBOX_EVENT")
+@Table(name = "OUTBOX_EVENT", schema = "app")
 public class OutboxEvent {
 
     @Id

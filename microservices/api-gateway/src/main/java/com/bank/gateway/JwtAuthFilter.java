@@ -36,10 +36,27 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     );
 
     // Paths that additionally require ROLE_ADMIN in the JWT
-    private static final List<String> ADMIN_PATHS = List.of(
+    private static final List<String> ADMIN_PREFIXES = List.of(
             "/api/v1/loans/eod",
-            "/api/v1/interest/eod"
+            "/api/v1/interest/eod",
+            "/api/v1/auth/admin",
+            "/api/v1/transactions/admin",
+            "/api/v1/stress",
+            "/api/v1/ledger",
+            "/api/v1/t24",
+            "/api/v1/risk"
     );
+
+    static boolean isAdminPath(String path) {
+        if (ADMIN_PREFIXES.stream().anyMatch(path::startsWith)) {
+            return true;
+        }
+        if (path.startsWith("/api/v1/accounts/") &&
+                (path.endsWith("/reset-balance") || path.endsWith("/status") || path.contains("/status/"))) {
+            return true;
+        }
+        return false;
+    }
 
     public JwtAuthFilter(
             @Value("${app.security.jwt-secret:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}") String secret) {
@@ -94,7 +111,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                     .parseClaimsJws(token)
                     .getBody();
 
-            if (ADMIN_PATHS.stream().anyMatch(path::startsWith) && !roles(claims).contains("ROLE_ADMIN")) {
+            if (isAdminPath(path) && !roles(claims).contains("ROLE_ADMIN")) {
                 sanitizedExchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
                 return sanitizedExchange.getResponse().setComplete();
             }

@@ -40,6 +40,37 @@ spring:
           predicates:
             - Path=/api/v1/interest/eod/**
 
+        # Transaction Service (Phase 4 CQRS Read-Store) — Activity, reports, and admin monitor
+        - id: transaction-queries
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/api/v1/transactions/**
+
+        # Legacy Auth compatibility routes (Phase 6 Slimming):
+        # Route legacy admin transaction monitor to transaction-service:8083
+        - id: legacy-auth-admin-transactions
+          uri: http://${TRANSACTION_SERVICE_HOST:transaction-service}:8083
+          predicates:
+            - Path=/api/v1/auth/admin/transactions/today
+          filters:
+            - SetPath=/api/v1/transactions/admin/today
+
+        # Route legacy recipient lookup/directory to account-service:8082
+        - id: legacy-auth-recipients
+          uri: http://${ACCOUNT_SERVICE_HOST:account-service}:8082
+          predicates:
+            - Path=/api/v1/auth/banking/recipients, /api/v1/auth/banking/recipients/**
+          filters:
+            - RewritePath=/api/v1/auth/banking/recipients(?<remaining>.*), /api/v1/accounts/recipients$1
+
+        # Route legacy favorites to account-service:8082
+        - id: legacy-auth-favorites
+          uri: http://${ACCOUNT_SERVICE_HOST:account-service}:8082
+          predicates:
+            - Path=/api/v1/auth/banking/favorites, /api/v1/auth/banking/favorites/**
+          filters:
+            - RewritePath=/api/v1/auth/banking/favorites(?<remaining>.*), /api/v1/accounts/favorites$1
+
         # Auth Service — public, no rate limiting
         - id: auth-service
           uri: http://${AUTH_SERVICE_HOST:auth-service}:8081

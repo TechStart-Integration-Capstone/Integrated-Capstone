@@ -320,6 +320,55 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    @DisplayName("/api/v1/accounts/{id}/reset-balance with a customer token: 403 Forbidden")
+    void resetBalance_customerToken_returns403() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .post("/api/v1/accounts/3/reset-balance")
+                .header("Authorization", "Bearer " + validToken("jdelacruz", 1L))
+                .build());
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    @DisplayName("/api/v1/accounts/{id}/reset-balance with an admin token: passes through")
+    void resetBalance_adminToken_passesThrough() {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .post("/api/v1/accounts/3/reset-balance")
+                .header("Authorization", "Bearer " + tokenWithRoles("admin", 0L, List.of("ROLE_ADMIN")))
+                .build());
+        StepVerifier.create(filter.filter(exchange, recordingChain(chainCalled))).verifyComplete();
+        assertThat(chainCalled.get()).isTrue();
+    }
+
+    @Test
+    @DisplayName("/api/v1/t24/transfer with customer token: 403 Forbidden (internal-only)")
+    void t24Transfer_customerToken_returns403() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .post("/api/v1/t24/transfer")
+                .header("Authorization", "Bearer " + validToken("jdelacruz", 1L))
+                .build());
+        GatewayFilterChain chain = mock(GatewayFilterChain.class);
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        verify(chain, never()).filter(any());
+    }
+
+    @Test
+    @DisplayName("/api/v1/t24/health passes through publicly without credentials")
+    void t24Health_publicAccess_passesThrough() {
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .get("/api/v1/t24/health")
+                .build());
+        StepVerifier.create(filter.filter(exchange, recordingChain(chainCalled))).verifyComplete();
+        assertThat(chainCalled.get()).isTrue();
+    }
+
+    @Test
     @DisplayName("Filter ordering: JwtAuthFilter must run before other filters (order = -100)")
     void filterOrder_isNegativeHundred() {
         assertThat(filter.getOrder()).isEqualTo(-100);

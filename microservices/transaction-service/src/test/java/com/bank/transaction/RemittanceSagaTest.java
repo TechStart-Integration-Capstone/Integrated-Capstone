@@ -8,6 +8,8 @@ import com.bank.transaction.dto.RemittanceResponse;
 import com.bank.transaction.dto.RiskResult;
 import com.bank.transaction.dto.T24Result;
 import com.bank.transaction.model.Remittance;
+import com.bank.transaction.model.TransactionRecord;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.bank.transaction.repository.OutboxEventRepository;
 import com.bank.transaction.repository.RemittanceRepository;
 import com.bank.transaction.repository.TransactionRepository;
@@ -462,8 +464,8 @@ class RemittanceSagaTest {
     }
 
     @Test
-    @DisplayName("Cancel window activates Reserved status with 30s countdown and bypasses instant T24 dispatch")
-    void cancelWindow_activatesReservedStatusWith30sCountdown() {
+    @DisplayName("Direct dispatch bypasses client cancel window and executes core banking immediately")
+    void directDispatch_withoutClientCancelWindow() {
         RemittanceRequest request = new RemittanceRequest();
         request.setSourceAccountId("1");
         request.setTargetAccountId("2");
@@ -483,24 +485,29 @@ class RemittanceSagaTest {
         when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
 
         Remittance savedRemittance = new Remittance("TX-PH-WIN", 1L, 2L, new BigDecimal("100.00"), "PHP", Remittance.STATUS_RESERVED);
-        savedRemittance.setCancelUntil(LocalDateTime.now().plusSeconds(30));
         when(remittanceRepository.save(any(Remittance.class))).thenReturn(savedRemittance);
 
         when(riskEngineClient.evaluateRisk(any(), any(), any(), any(), any()))
                 .thenReturn(new RiskResult(new BigDecimal("0.10"), "ALLOW", List.of()));
 
+        when(t24AdapterClient.executeTransfer(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new T24Result("POSTED", "FT202610080001", null, null, false));
+
+        when(transactionRepository.save(any())).thenAnswer(invocation -> {
+            TransactionRecord tx = invocation.getArgument(0);
+            ReflectionTestUtils.setField(tx, "transactionId", 123L);
+            return tx;
+        });
+
         ResponseEntity<RemittanceResponse> responseEntity = controller.processRemittance(request, "idemp-window", "corr-win", "1");
 
-        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
         RemittanceResponse body = responseEntity.getBody();
         assertThat(body).isNotNull();
-        assertThat(body.getStatus()).isEqualTo(Remittance.STATUS_RESERVED);
-        assertThat(body.isCanCancel()).isTrue();
-        assertThat(body.getCancelWindowSeconds()).isEqualTo(30);
-        assertThat(body.getCancelUntil()).isNotNull();
+        assertThat(body.getStatus()).isEqualToIgnoringCase(Remittance.STATUS_POSTED);
 
-        // Verify T24 adapter was NOT invoked yet because funds are reserved in the cancel window
-        verify(t24AdapterClient, never()).executeTransfer(any(), any(), any(), any(), any(), any());
+        // Verify T24 adapter WAS invoked immediately without client cancellation delay
+        verify(t24AdapterClient).executeTransfer(any(), any(), any(), any(), any(), any());
     }
 
     @Test

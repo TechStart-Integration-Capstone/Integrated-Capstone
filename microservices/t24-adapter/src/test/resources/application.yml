@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:t24test;DB_CLOSE_DELAY=-1;MODE=MSSQLServer;INIT=CREATE SCHEMA IF NOT EXISTS t24
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+app:
+  t24:
+    simulator-url: http://localhost:8090/ofs/process
+    connect-timeout-ms: 1000
+    read-timeout-ms: 2000

@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  * Always saved in the same DB transaction as the state change it announces.
  */
 @Entity
-@Table(name = "OUTBOX_EVENT")
+@Table(name = "OUTBOX_EVENT", schema = "app")
 public class OutboxEvent {
 
     @Id

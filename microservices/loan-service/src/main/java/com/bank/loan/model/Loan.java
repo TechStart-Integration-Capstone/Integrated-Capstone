@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "LOAN")
+@Table(name = "LOAN", schema = "t24")
 public class Loan {
 
     public static final String STATUS_ACTIVE = "ACTIVE";

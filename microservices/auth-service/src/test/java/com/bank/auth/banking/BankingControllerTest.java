@@ -18,13 +18,10 @@ class BankingControllerTest {
 
     @BeforeEach void setUp() { mvc = MockMvcBuilders.standaloneSetup(new BankingController(banking,auth,transfers,mock(BankingRecipientService.class))).build(); }
 
-    @Test void invalidTransfersAreRejectedBeforeWriting() throws Exception {
-        for (String amount : new String[]{"0", "-1", "0.001", "100000000000000"}) {
-            mvc.perform(post("/api/v1/auth/banking/transfers").contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"sourceAccountId\":1,\"destinationAccountNumber\":\"PP-TEST\",\"amount\":" + amount
-                            + ",\"idempotencyKey\":\"1234567890123456\"}"))
-                    .andExpect(status().isBadRequest());
-        }
+    @Test void transfersEndpointIsDeprecated() throws Exception {
+        mvc.perform(post("/api/v1/auth/banking/transfers").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"sourceAccountId\":1,\"destinationAccountNumber\":\"PP-TEST\",\"amount\":100,\"idempotencyKey\":\"1234567890123456\"}"))
+                .andExpect(status().isGone());
         verifyNoInteractions(transfers);
     }
 

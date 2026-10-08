@@ -37,17 +37,29 @@ public class RemittanceLedgerService {
     private final TransactionRepository transactionRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final com.bank.transaction.client.T24HoldClient t24HoldClient;
 
     public RemittanceLedgerService(
             RemittanceRepository remittanceRepository,
             TransactionRepository transactionRepository,
             OutboxEventRepository outboxEventRepository,
             JdbcTemplate jdbcTemplate) {
+        this(remittanceRepository, transactionRepository, outboxEventRepository, jdbcTemplate, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RemittanceLedgerService(
+            RemittanceRepository remittanceRepository,
+            TransactionRepository transactionRepository,
+            OutboxEventRepository outboxEventRepository,
+            JdbcTemplate jdbcTemplate,
+            com.bank.transaction.client.T24HoldClient t24HoldClient) {
 
         this.remittanceRepository = remittanceRepository;
         this.transactionRepository = transactionRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.t24HoldClient = t24HoldClient;
     }
 
     public record AccountInfo(Long id, Long customerId, String number, BigDecimal balance, BigDecimal heldBalance) {
@@ -69,7 +81,7 @@ public class RemittanceLedgerService {
     }
 
     public AccountInfo resolveAccount(String accountIdOrNumber) {
-        String sql = "SELECT account_id, customer_id, account_number, current_balance, held_balance FROM dbo.ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_number = ? OR CAST(account_id AS NVARCHAR(50)) = ?";
+        String sql = "SELECT account_id, customer_id, account_number, current_balance, held_balance FROM dbo.ACCOUNT WHERE account_number = ? OR CAST(account_id AS NVARCHAR(50)) = ?";
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, accountIdOrNumber, accountIdOrNumber);
         if (rows.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found in ledger: " + accountIdOrNumber);
@@ -114,13 +126,24 @@ public class RemittanceLedgerService {
                     "Insufficient available funds in source account (Available: " + source.availableBalance() + ")");
         }
 
-        // 4. Atomic conditional UPDATE on ACCOUNT: hold funds without lock contention
-        String updateSql = "UPDATE dbo.ACCOUNT SET held_balance = held_balance + ? " +
-                           "WHERE account_id = ? AND (current_balance - held_balance) >= ?";
-        int rowsUpdated = jdbcTemplate.update(updateSql, request.getAmount(), source.id(), request.getAmount());
-        if (rowsUpdated == 0) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "Insufficient available funds in source account at hold execution");
+        // 4. Delegate hold placement to T24 Core Hold Engine (Phase 3)
+        if (t24HoldClient != null) {
+            com.bank.transaction.client.T24HoldClient.HoldResult holdResult = t24HoldClient.placeHold(
+                    source.id(), source.number(), request.getAmount(), request.getCurrency(), referenceNo);
+            if (!holdResult.success()) {
+                log.warn("[ledger-service] T24 Core rejected hold ref={}: {}", referenceNo, holdResult.errorMessage());
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Hold rejected by T24 Core: " + holdResult.errorMessage());
+            }
+        } else {
+            // Local fallback conditional UPDATE on ACCOUNT
+            String updateSql = "UPDATE dbo.ACCOUNT SET held_balance = held_balance + ? " +
+                               "WHERE account_id = ? AND (current_balance - held_balance) >= ?";
+            int rowsUpdated = jdbcTemplate.update(updateSql, request.getAmount(), source.id(), request.getAmount());
+            if (rowsUpdated == 0) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Insufficient available funds in source account at hold execution");
+            }
         }
 
         Remittance remittance = new Remittance(
@@ -259,7 +282,9 @@ public class RemittanceLedgerService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void releaseHoldFunds(Remittance remittance, Long sourceAccountId, BigDecimal amount, String reason) {
-        if (sourceAccountId != null && amount != null) {
+        if (t24HoldClient != null && remittance != null && remittance.getReferenceNo() != null) {
+            t24HoldClient.releaseHold(remittance.getReferenceNo());
+        } else if (sourceAccountId != null && amount != null) {
             String releaseSql = "UPDATE dbo.ACCOUNT SET held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END WHERE account_id = ?";
             jdbcTemplate.update(releaseSql, amount, amount, sourceAccountId);
         }
@@ -297,7 +322,9 @@ public class RemittanceLedgerService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void cancelAndReleaseHold(Remittance remittance, String reason) {
-        if (remittance.getSourceAccountId() != null && remittance.getAmount() != null) {
+        if (t24HoldClient != null && remittance != null && remittance.getReferenceNo() != null) {
+            t24HoldClient.releaseHold(remittance.getReferenceNo());
+        } else if (remittance != null && remittance.getSourceAccountId() != null && remittance.getAmount() != null) {
             String releaseSql = "UPDATE dbo.ACCOUNT SET held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END WHERE account_id = ?";
             jdbcTemplate.update(releaseSql, remittance.getAmount(), remittance.getAmount(), remittance.getSourceAccountId());
         }
@@ -359,20 +386,34 @@ public class RemittanceLedgerService {
         AccountInfo currentSource = resolveAccount(String.valueOf(sourceAccId));
         AccountInfo currentTarget = resolveAccount(String.valueOf(targetAccId));
 
-        BigDecimal sourceBefore = currentSource.balance();
-        BigDecimal sourceAfter = sourceBefore.subtract(amount);
+        BigDecimal sourceBefore;
+        BigDecimal sourceAfter;
+        BigDecimal targetBefore;
+        BigDecimal targetAfter;
 
-        BigDecimal targetBefore = currentTarget.balance();
-        BigDecimal targetAfter = (targetBefore != null ? targetBefore : BigDecimal.ZERO).add(amount);
+        if (ftReference != null) {
+            // T24 Core double-entry posting has already updated balances in t24.ACCOUNT
+            sourceAfter = currentSource.balance();
+            sourceBefore = sourceAfter.add(amount);
+            targetAfter = currentTarget.balance() != null ? currentTarget.balance() : BigDecimal.ZERO;
+            targetBefore = targetAfter.subtract(amount);
+            log.info("[ledger-service] T24 Core posting authoritative (ftRef={}): source={} -> {}, target={} -> {}",
+                    ftReference, sourceBefore, sourceAfter, targetBefore, targetAfter);
+        } else {
+            // Fallback: local database balance update
+            sourceBefore = currentSource.balance();
+            sourceAfter = sourceBefore.subtract(amount);
+            targetBefore = currentTarget.balance();
+            targetAfter = (targetBefore != null ? targetBefore : BigDecimal.ZERO).add(amount);
 
-        // 1. Update balances: debit source & release hold; credit target
-        String updateSourceSql = "UPDATE dbo.ACCOUNT SET current_balance = ?, " +
-                                 "held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END " +
-                                 "WHERE account_id = ?";
-        jdbcTemplate.update(updateSourceSql, sourceAfter, amount, amount, currentSource.id());
+            String updateSourceSql = "UPDATE dbo.ACCOUNT SET current_balance = ?, " +
+                                     "held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END " +
+                                     "WHERE account_id = ?";
+            jdbcTemplate.update(updateSourceSql, sourceAfter, amount, amount, currentSource.id());
 
-        String updateTargetSql = "UPDATE dbo.ACCOUNT SET current_balance = ? WHERE account_id = ?";
-        jdbcTemplate.update(updateTargetSql, targetAfter, currentTarget.id());
+            String updateTargetSql = "UPDATE dbo.ACCOUNT SET current_balance = ? WHERE account_id = ?";
+            jdbcTemplate.update(updateTargetSql, targetAfter, currentTarget.id());
+        }
 
         // 2. Save LEDGER_TRANSACTION row (plain transfers keep their existing P2P_REMITTANCE type)
         String remittanceType = remittance.getTransactionType();

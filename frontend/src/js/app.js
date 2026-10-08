@@ -729,11 +729,15 @@ function testScenario(scenario) {
         badgeClass = 'badge-chip tag-error';
     }
 
-    document.getElementById('code-request-json').textContent = typeof reqPayload === 'string' ? reqPayload : JSON.stringify(reqPayload, null, 2);
-    document.getElementById('code-response-json').textContent = JSON.stringify(respPayload, null, 2);
+    const reqJsonEl = document.getElementById('code-request-json');
+    if (reqJsonEl) reqJsonEl.textContent = typeof reqPayload === 'string' ? reqPayload : JSON.stringify(reqPayload, null, 2);
+    const respJsonEl = document.getElementById('code-response-json');
+    if (respJsonEl) respJsonEl.textContent = JSON.stringify(respPayload, null, 2);
     const badgeEl = document.getElementById('response-status-badge');
-    badgeEl.textContent = statusBadge;
-    badgeEl.className = badgeClass;
+    if (badgeEl) {
+        badgeEl.textContent = statusBadge;
+        badgeEl.className = badgeClass;
+    }
 }
 
 /**
