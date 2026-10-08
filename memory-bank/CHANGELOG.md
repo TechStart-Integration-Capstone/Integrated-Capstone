@@ -1,6 +1,100 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Comprehensive Endpoint-Level OpenAPI / Swagger Documentation:
+  - **Account Service (`account-service`):**
+    - Annotated [`AccountController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/AccountController.java) and [`BeneficiaryController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/BeneficiaryController.java) with `@Tag`, `@Operation`, `@ApiResponses`, and `@Parameter` descriptions and examples for profile (`/me`), accounts list/pagination (`/`), account details (`/{accountId}`), customer lookup (`/customer/{customerId}`), status update (`/status`), balance reset (`/reset-balance`), recipient directory/lookup (`/recipients`), and favorites (`/favorites`). Tests: 20/20 passed.
+  - **Auth Service (`auth-service`):**
+    - Annotated [`AuthController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/controller/AuthController.java), [`BankingController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/banking/BankingController.java), [`TransactionMonitorController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/admin/TransactionMonitorController.java), [`ExternalTransferController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/banking/ExternalTransferController.java), and [`TransactionReportController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/banking/TransactionReportController.java) with detailed OpenAPI operation descriptions and deprecation notices where applicable. Tests: 54/54 passed.
+  - **Loan Service (`loan-service`):**
+    - Annotated [`LoanController.java`](file:///microservices/loan-service/src/main/java/com/bank/loan/controller/LoanController.java) covering loan applications (`/applications`), acceptance & disbursement (`/applications/{ref}/accept`), customer loans list (`/`), eligibility & limits (`/eligibility`), repayment schedules (`/{loanId}/schedule`), repayments (`/{loanId}/repayments`), admin EOD overdue job (`/eod/run`), and admin application status reset (`/applications/{ref}/reset`). Tests: 43/43 passed.
+  - **Core Banking Adapter (`t24-adapter`):**
+    - Annotated [`T24AccountInquiryController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24AccountInquiryController.java), [`T24AdapterController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24AdapterController.java), [`T24HoldController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24HoldController.java), and [`T24SimulatorController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24SimulatorController.java) covering authoritative account balance inquiry, OFS transfer processing, atomic balance locks and releases (`/api/v1/t24/holds`), and simulator controls (`/ofs/**`). Tests: 31/31 passed.
+  - **Transaction Service (`transaction-service`):**
+    - Annotated [`RemittanceController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/RemittanceController.java) (4-step saga transfer, cancellation grace window, send-now, transfer status), [`TransactionQueryController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/TransactionQueryController.java) (CQRS activity feed & PDF statements), [`AdminTransactionMonitorController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/AdminTransactionMonitorController.java) (Operations Desk live feed), [`InternalTransferController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/InternalTransferController.java) (loan-service internal money movement), [`LedgerMutationController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/LedgerMutationController.java), [`StressTestController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/StressTestController.java), [`TelemetryController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/TelemetryController.java), and [`InterestEodController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/orchestrator/interest/InterestEodController.java). Tests: 107/107 passed.
+  - **Risk Engine (`risk-engine`):**
+    - Added OpenAPI tags, summaries, and descriptions to FastAPI routes in [`main.py`](file:///microservices/risk-engine/main.py) for `/score`, `/health`, and `/`.
+  - **Verification & Documentation:**
+    - Verified 100% test pass rate across all microservices (277/277 tests passed).
+    - Updated [`docs/API_REFERENCE.md`](file:///docs/API_REFERENCE.md) to document centralized Swagger UI paths, pagination, automated bank loan retry (max 3 attempts) with admin reset, and Phase 10 changes.
+    - Updated [`scripts/generate_postman_collection.py`](file:///scripts/generate_postman_collection.py) and regenerated [`postman/PayPink_2.0_API_Reference_Collection.json`](file:///postman/PayPink_2.0_API_Reference_Collection.json) covering 10 categories and 70 comprehensive API verification requests (including all microservice OpenAPI endpoints). — [dom]
+  - **Gateway Central Aggregator (`api-gateway`):**
+    - Added `springdoc-openapi-starter-webflux-ui` (v2.3.0) to `pom.xml`.
+    - Added `/swagger-ui`, `/v3/api-docs`, and `/webjars` to `PUBLIC_PATHS` in `JwtAuthFilter.java` to permit browser access without requiring an initial login token.
+    - Configured centralized Swagger UI at `/swagger-ui.html` aggregating OpenAPI specs from all services (`auth`, `account`, `transaction`, `loan`, `t24`, and `risk`).
+    - Added gateway proxy routes forwarding `/v3/api-docs/{service}` to downstream services and `/openapi.json` for `risk-engine`.
+  - **Downstream Spring Boot Microservices (`account`, `auth`, `transaction`, `loan`, `t24-adapter`):**
+    - Added `springdoc-openapi-starter-webmvc-ui` (v2.3.0) to each service's `pom.xml`.
+    - Implemented `OpenApiConfig.java` in each service configuring OpenAPI metadata, service descriptions, and global `BearerAuth` JWT security scheme for interactive Swagger UI authorization.
+  - **Verification & Documentation:**
+    - Verified 100% test pass rate across all services (`api-gateway` 22/22, `account-service` 20/20, `auth-service` 54/54, `transaction-service` 107/107, `loan-service` 43/43, `t24-adapter` 31/31).
+    - Updated `docs/API_REFERENCE.md` and added Swagger UI / OpenAPI requests to `postman/PayPink_2.0_API_Reference_Collection.json`. — [dom]
+
+- 2026-10-08 — Loan Disbursement Automated Bank-Side Retry (Max 3 Attempts) & Manual Admin Retry Removal:
+  - **Automated Bank-Side Retries (`loan-service`):**
+    - Added `retry_count` column to `LOAN_APPLICATION` table definition in `schema-azuresql.sql`, `scripts/migrate_phase6_loans.sql`, and `db/phase6_loans.sql`.
+    - Added `retryCount` field with getter and setter to `LoanApplication.java`.
+    - Updated `LoanDisbursementService.java` to enforce `MAX_DISBURSEMENT_ATTEMPTS = 3`. On core rejection or timeout, the loan application remains in `DISBURSING` status with incremented attempt counter. The background recovery scheduler (`recoverDisbursements()`) automatically retries up to 3 times before setting `FAILED`.
+    - Removed manual admin retry method `adminRetryDisbursement` from `LoanDisbursementService.java` and removed `POST /loans/applications/{referenceNo}/retry` from `LoanController.java`.
+    - Preserved `adminResetApplication` (`POST /loans/applications/{referenceNo}/reset`) which safely reopens a failed application back to `DECIDED` with reset `retry_count = 0`.
+    - Updated `LoanFlowsTest.java` with test cases verifying automatic bank recovery across background passes and failure transition after 3 exhausted attempts. Verified 43/43 tests passing in `loan-service`.
+    - Updated `docs/API_REFERENCE.md` Bug #5 entry and regenerated Postman collection `postman/PayPink_2.0_API_Reference_Collection.json`. — [dom]
+
+- 2026-10-08 — Platform-Wide RFC-7807 Problem Details Standardisation:
+  - **Standardised Error Envelope (`application/problem+json`):**
+    - `api-gateway`: Updated `JwtAuthFilter.java` to emit RFC-7807 compliant JSON error payloads (`type`, `title`, `status`, `detail`, `instance`) with `Content-Type: application/problem+json` on 401 Unauthorized and 403 Forbidden gateway rejections.
+    - `account-service`: Created `GlobalExceptionHandler.java` utilizing Spring 6 `ProblemDetail` covering `ResponseStatusException`, `IllegalArgumentException`, `IllegalStateException`, `MethodArgumentNotValidException`, and fallback `Exception`.
+    - `auth-service`: Created `GlobalExceptionHandler.java` utilizing Spring 6 `ProblemDetail` covering `BadCredentialsException`, `ResponseStatusException`, `IllegalArgumentException`, `IllegalStateException`, `MethodArgumentNotValidException`, and fallback `Exception`.
+    - `transaction-service`: Updated `GlobalExceptionHandler.java` with a dedicated handler for `ResponseStatusException` returning `ProblemDetails` (`application/problem+json`) alongside existing domain exception handlers. Fixed unit test `InternalTransferTest.java` post-posting balance stub.
+    - `t24-adapter`: Created `GlobalExceptionHandler.java` utilizing Spring 6 `ProblemDetail` covering `ResponseStatusException`, `IllegalArgumentException`, `IllegalStateException`, `MethodArgumentNotValidException`, and fallback `Exception`.
+    - `loan-service`: Verified existing full compliance with RFC-7807 problem details.
+  - **Verification:** Ran test suites across all modified microservices (`api-gateway` 22/22, `account-service` 20/20, `auth-service` 54/54, `transaction-service` 107/107, `t24-adapter` 31/31, `loan-service` 42/42) — 100% test pass rate across the platform. — [dom]
+
+- 2026-10-08 — Phase 10 Database RBAC Migration & Bug 11 Fixes (CORS Allow-List & Account Pagination):
+  - **Database-Driven RBAC Migration (Finding #3):**
+    - Added `roles` column to `app.CUSTOMER` (defaulting to `'ROLE_CUSTOMER,ROLE_RETAIL_USER'`).
+    - Seeded administrative user `admin` with BCrypt password hash (`$2a$10$5X2WM6Ws...`, password `Admin@PayPink2026!`) and roles `ROLE_ADMIN,ROLE_CORE_ENGINEER`.
+    - Created idempotent SQL migration script `scripts/migrate_phase10_rbac_roles.sql` and mounted as `07_rbac_roles.sql` under Azure SQL setup scripts in `docker/docker-compose.yml`.
+    - Updated DDL in `schema-azuresql.sql` and seed script `scripts/seed_demo_azure_sql.sql` to include `roles` and seed `admin`.
+    - Updated JPA model `Customer.java` with `roles` column and `getRolesList()` parser.
+    - Refactored `AuthService.java` to remove hardcoded in-memory admin credentials check and string-matching role assignment; all authentications now uniformly query the database, verify credentials via `BCryptPasswordEncoder`, and populate token claims dynamically from `customer.getRolesList()`.
+    - Fixed timezone conversion drift in `TransactionReportService.java` using `Timestamp.from(Instant)`.
+  - **Gateway CORS Allow-List & Account Pagination (Finding #11):**
+    - Updated `api-gateway` `application.yml` global CORS configuration to replace wildcard `allowedOriginPatterns: "*"` with trusted origin patterns (`http://localhost:[*]`, `http://127.0.0.1:[*]`, `https://*.paypink.ph`, `https://*.cloudapp.azure.com`).
+    - Added optional `page` and `size` query parameter pagination to `AccountController.java` (`GET /api/v1/accounts`, `GET /api/v1/accounts/customers`) while maintaining full backward compatibility for unpaginated callers.
+  - **Documentation & Verification Suite Alignment:**
+    - Updated `docs/API_REFERENCE.md` reflecting Phase 10 RBAC resolution and Bug 11 CORS/pagination fixes.
+    - Updated Postman generator `scripts/generate_postman_collection.py` with `Admin@PayPink2026!` default admin credentials and pagination query parameters, regenerating `postman/PayPink_2.0_API_Reference_Collection.json`.
+    - Verified 100% test pass rate across `auth-service` (54/54), `account-service` (20/20), and `api-gateway` (22/22). — [dom]
+
+- 2026-10-08 — Complete Postman Collection for PayPink 2.0 API Reference:
+  - Created generator script `scripts/generate_postman_collection.py` and output file `postman/PayPink_2.0_API_Reference_Collection.json` (v2.1.0 schema).
+  - Includes 64 requests organized across 10 folders mirroring `docs/API_REFERENCE.md`: Authentication, Accounts & Beneficiaries, Remittance Saga, CQRS Activity, Admin Operations, Interest EOD, T24 Core SoR, Loans Lifecycle, Risk Engine, and Observability.
+  - Preconfigured with automated collection variable persistence for `customer_token`, `admin_token`, `customer_id`, `account_id`, `remittance_reference_no`, `loan_reference_no`, and dynamic GUID `Idempotency-Key` headers. — [dom]
+
+- 2026-10-08 — Security & API Bug Fixes Implementation (Excluding Bug #4):
+  - **Account Service IDOR & Parameter Hardening (`account-service`):** Enforced customer ownership checks and `ROLE_ADMIN` RBAC across `AccountController.java` (`/api/v1/accounts`, `/accounts/{accountId}`, `/accounts/customer/{customerId}`, `/accounts/customers`). Removed insecure query parameter (`?customerId=`) fallback for non-admins in `AccountController` and `BeneficiaryController.java` (`/recipients`, `/favorites`). Added `getAccountsByCustomerId` to safely return caller's accounts when non-admin accesses `/api/v1/accounts`.
+  - **Account DB Circuit Breaker 404 Resiliency (`account-service`):** Replaced generic `RuntimeException` with `ResponseStatusException(HttpStatus.NOT_FOUND)` on missing account and customer lookups in `AccountService.java`. Configured Resilience4j `ignore-exceptions: [org.springframework.web.server.ResponseStatusException]` in `application.yml` and added fallback pass-through to prevent 404 lookups from tripping the `accountDb` circuit breaker.
+  - **Ops Ingress Hardening (`api-gateway`):** Added `/api/v1/reconciliation`, `/api/v1/audit`, `/api/v1/analytics`, and `/api/v1/telemetry` to `ADMIN_PREFIXES` in `JwtAuthFilter.java`, blocking non-admin customer JWTs from initiating reconciliation sweeps or reading system-wide audit/telemetry logs.
+  - **Transaction Service Admin Monitor & Parameter Hardening (`transaction-service`):** Updated `AdminTransactionMonitorController.java` to fail-closed on missing `X-Auth-Roles` and enforce exact `ROLE_ADMIN` equality. Removed query param identity fallback in `TransactionQueryController.java` for non-admin callers (`/activity`, `/reports/transactions.pdf`).
+  - **Loan Disbursement Recovery Mechanism (`loan-service`):** Added administrative recovery endpoints `POST /loans/applications/{referenceNo}/retry` and `POST /loans/applications/{referenceNo}/reset` (backed by `adminRetryDisbursement` and `adminResetApplication` in `LoanDisbursementService.java`), resolving permanent `FAILED` deadlocks upon rejected core transfers while preserving duplicate disbursement idempotency (`LOAN-DISB-{ref}`).
+  - **T24 Idempotency Store Persistence (`t24-adapter`):** Upgraded `T24IdempotencyStore.java` to check persistent `t24.POSTING_JOURNAL` on cache miss, allowing double-entry posting responses and FT references to survive container restarts.
+  - **Legacy Route Deprecation (`auth-service`):** Marked shadowed/unreachable `recipients` and `favorites` endpoints in `BankingController.java` and `TransactionMonitorController.java` as `@Deprecated`.
+  - **Verification:** Ran test suites across all modified microservices (`account-service` 20/20, `api-gateway` 22/22, `transaction-service` 7/7, `loan-service` 42/42, `t24-adapter` 31/31, `auth-service` 53/53) — 100% test pass rate with zero regressions. — [dom]
+
+- 2026-10-08 — API Bug Verification & Reference Alignment (`docs/API_REFERENCE.md`):
+  - Verified historical bug reports against current codebase: confirmed `POST /ledger/mutate`, `POST /stress/**`, `POST /t24/**`, and legacy `POST /auth/banking/transfers` (410 GONE) are fixed/mitigated at the gateway perimeter.
+  - Verified Interest EOD missing day outage is fixed via administrative backfill proposal/approval workflows in `InterestEodService`.
+  - Confirmed persistent double-entry posting idempotency in `t24.POSTING_JOURNAL` and complete removal of client hold window in `RemittanceOrchestratorService`.
+  - Excluded interbank/external transfer (`ExternalTransferService`) findings from the active bug table in `docs/API_REFERENCE.md` as the module is under active development. Added finding on permanent failure status in `LoanDisbursementService`. — [dom]
+
+- 2026-10-08 — Updated `docs/API_REFERENCE.md` for post-refactor (T24 Core / DDD) architecture:
+  - Catalogued all API routes across the 11 microservices reflecting Phases 0–9 refactoring and removal of the 15-second client hold.
+  - Documented perimeter access rules in `api-gateway`: admin locks on `/api/v1/ledger/**`, `/api/v1/stress/**`, `/api/v1/t24/**`, `/api/v1/risk/**`, `/api/v1/accounts/**/status`, and `reset-balance`.
+  - Documented legacy path cutovers to `account-service` (`/recipients`, `/favorites`) and `transaction-service` (`/activity`, `/reports`, `/admin/today`).
+  - Recorded authoritative Core SoR role of `t24-adapter` (`t24.LOCKED_AMOUNT`, `t24.POSTING_JOURNAL`) and direct core banking dispatch in `RemittanceOrchestratorService`.
+  - Audited remaining open findings: external transfer domain leakage, unpaginated account lookups, and host port exposures. Documentation only; no application code changed. — [dom]
+
 - 2026-10-08 — Loan Interest Rate Set to a Flat 7% a Year:
   - `microservices/loan-service/src/main/resources/application.yml` and `LoanProperties.defaults()`: `annual-rate` for all credit bands (LOW, NORMAL, HIGH) changed from 28.0 / 18.0 / 10.5 to 7.0. Band score ranges, max amounts and max terms are unchanged.
   - Updated rate-dependent expectations in `LoanDecisionEngineTest`, `LoanFlowsTest` and `LoanServiceApplicationTest` (e.g. ₱250,000 / 36 mo installment now ₱7,719.27; 2% late fee ₱154.39). All 41 loan-service tests pass (run on JDK 19; JDK 25 breaks Mockito/ByteBuddy inline mocking).
