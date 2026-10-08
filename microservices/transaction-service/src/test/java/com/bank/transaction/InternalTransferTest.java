@@ -72,7 +72,7 @@ class InternalTransferTest {
         controller = new InternalTransferController(orchestratorService);
 
         // Bank loan pool (account 10, owned by customer 99) and a customer savings account (account 4, customer 2)
-        stubAccount(10L, 99L, BANK_ACCOUNT, "50000000.00");
+        stubAccount(10L, 99L, BANK_ACCOUNT, "49750000.00");
         stubAccount(4L, 2L, CUSTOMER_ACCOUNT, "84320.50");
         when(jdbcTemplate.update(anyString(), any(), any(), any())).thenReturn(1);
         when(remittanceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
