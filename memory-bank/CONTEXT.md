@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (Removal of Client 15s Reversal & Direct Core Banking Dispatch by [dom])_  
+_Last Updated: 2026-10-08 (JMeter CLI Runners & PowerShell 5.1 Encoding Fix by [dom])_  
 
 ---
 

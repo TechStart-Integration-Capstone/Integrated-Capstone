@@ -926,9 +926,12 @@
           "options": {
             "excludeByName": {
               "flags": true,
+              "id": true,
               "instrumentation_scope": true,
+              "labels": true,
               "resources": true,
-              "spanid": true
+              "spanid": true,
+              "tsNs": true
             },
             "indexByName": {},
             "renameByName": {
@@ -988,9 +991,12 @@
           "options": {
             "excludeByName": {
               "flags": true,
+              "id": true,
               "instrumentation_scope": true,
+              "labels": true,
               "resources": true,
-              "spanid": true
+              "spanid": true,
+              "tsNs": true
             },
             "indexByName": {},
             "renameByName": {
@@ -1069,7 +1075,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "redis_up or vector(1)",
+          "expr": "max(redis_up)",
           "legendFormat": "Redis Status",
           "refId": "A"
         },
@@ -1078,7 +1084,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "redis_connected_clients or vector(1)",
+          "expr": "max(redis_connected_clients)",
           "legendFormat": "Connected Clients",
           "refId": "B"
         }

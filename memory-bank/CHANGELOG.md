@@ -1,6 +1,43 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — PowerShell Encoding Fix & Native CMD Runner in `scripts/`:
+  - Replaced UTF-8 multi-byte em-dashes (`—`) with standard ASCII hyphens (`-`) in `scripts/run_jmeter_test.ps1` to prevent Windows PowerShell 5.1 from misinterpreting byte `0x94` as ANSI closing double-quote (`”`), fixing `TerminatorExpectedAtEndOfString`.
+  - Added native Windows Batch alternative `scripts/run_jmeter_test.bat` with identical auto-cleanup and browser launch behavior. — [dom]
+
+- 2026-10-08 — PowerShell Runner Syntax Fix in `run_jmeter_test.ps1`:
+  - Fixed PowerShell backtick line-continuation syntax in `scripts/run_jmeter_test.ps1` to prevent `TerminatorExpectedAtEndOfString` parser errors during CLI execution. — [dom]
+
+- 2026-10-08 — Automated JMeter CLI Runner Script with Report Auto-Cleanup:
+  - Created `scripts/run_jmeter_test.ps1` to automate JMeter CLI execution, handle previous report cleanup (preventing "folder is not empty" error), and automatically launch the HTML dashboard in the browser on completion. — [dom]
+
+- 2026-10-08 — T24 Core Remittance Saga JMeter Test Plan Cutover:
+  - Upgraded `performance/PayPink_800TPS_Stress_Plan.jmx` from legacy direct mutation to full PayPink 2.0 4-step Distributed Remittance Saga (`POST /api/v1/remittance/transfer`).
+  - Integrated dynamic customer authentication (`/api/v1/auth/banking/login`), dynamic per-thread `Idempotency-Key` headers, and verified end-to-end execution through Risk Engine ML, T24 Core Hold placement, and Ledger Settlement with 0.00% error rate. — [dom]
+
+- 2026-10-08 — JMeter Stress Test Plans & Load Test Script Upgrade (GUI & CLI):
+  - Updated `performance/PayPink_800TPS_Stress_Plan.jmx` and `docker/jmeter/balance_mutation_stress.jmx` with dynamic pre-authentication (`SetupThreadGroup`), Bearer JWT token extraction, and `Idempotency-Key` headers matching API Gateway RBAC (`ROLE_ADMIN`).
+  - Added GUI listeners (`View Results Tree` and `Summary Report`) to enable interactive execution directly within the Apache JMeter desktop application.
+  - Made duration latency assertions configurable via properties (`sla_mutation_ms` and `sla_redis_ms`) to accommodate host loopback networking.
+  - Updated `docker/jmeter/run_load_test.ps1` to authenticate via `/api/v1/auth/login` instead of deprecated `/api/v1/auth/demo-token`.
+  - Verified live CLI execution with 0% error rate on both test plans and load runner. — [dom]
+
+- 2026-10-08 — End-to-End Distributed Integration Test Suite (Node.js & PowerShell):
+  - Created standalone automated integration test runner `scripts/run_integration_tests.mjs` (and PowerShell wrapper `scripts/run_integration_tests.ps1`) using native Node.js fetch with zero external dependencies.
+  - Implemented 13 comprehensive end-to-end integration test scenarios across 7 domain suites: Authentication & RBAC (Customer & Admin), Live T24 Account & Balance Inquiry, 4-step Remittance Saga (ML risk scoring, T24 hold, ledger settlement), Concurrency & Idempotency double-spending protection (Redis), CQRS Activity read-store indexing, Kafka Event-Driven Immutable Audit persistence in PostgreSQL, Interest EOD Overview, and 12/12 Prometheus observability fleet health.
+  - Verified 100% pass rate (13/13 passed) against running live cluster via API Gateway (:8080). — [dom]
+
+- 2026-10-08 — Interest EOD Service Configuration & Overview Endpoint Fix:
+  - Enabled Interest EOD in `docker/docker-compose.yml` under `transaction-service` environment (`INTEREST_EOD_ENABLED=true`, `INTEREST_START_DATE=2026-10-01`, `INTEREST_POSTGRES_URL`, `INTEREST_POSTGRES_USERNAME`).
+  - Resolved `NoResourceFoundException: No static resource api/v1/interest/eod/overview` error on the Admin UI Interest page by activating `InterestEodController` bean.
+  - Recreated `transaction-service` container; verified `InterestAuditPool` PostgreSQL secondary pool startup and live HTTP 200 responses from `/api/v1/interest/eod/overview`. — [dom]
+
+- 2026-10-08 — Observability Dashboard Polish & Prometheus Target Alignment:
+  - Added `t24-adapter:8090` scrape config to `docker/prometheus.yml`, bringing the Active Healthy Microservices count to 12 (matching PayPink 2.0 active microservices directory).
+  - Resolved duplicate cards in Redis Idempotency Matrix panel by aggregating PromQL queries with `max(redis_up)` and `max(redis_connected_clients)`.
+  - Cleaned up Log Stream tables (Panel 12 & 13) in `paypink-observability-dashboard.json`: excluded raw `labels`, `tsNs`, and `id` columns, presenting clean `Time`, `Message Payload`, and `Jaeger Trace` links without horizontal clutter.
+  - Restarted Prometheus and Grafana containers and verified clean telemetry metrics and dashboard rendering. — [dom]
+
 - 2026-10-08 — Removal of Client-Side 15s Reversal / Direct Core Banking Dispatch:
   - Removed client-side 15-second cancellation hold window from `frontend/bank/bank.js`: transfers submit directly without `cancelWindowSeconds` or countdown timer intercepts, immediately rendering receipts on core posting.
   - Removed `applyClientWindow` intercept in `microservices/transaction-service`'s `RemittanceOrchestratorService.java`: transfers hold funds and immediately dispatch to T24 core banking rather than pausing in `Reserved` status.
