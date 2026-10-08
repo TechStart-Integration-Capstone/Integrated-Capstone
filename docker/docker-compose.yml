@@ -91,7 +91,7 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_log:/var/lib/zookeeper/log
+      - zookeeper_log:/var/lib/zookeeper/log   
     networks:
       - ledger-net
 

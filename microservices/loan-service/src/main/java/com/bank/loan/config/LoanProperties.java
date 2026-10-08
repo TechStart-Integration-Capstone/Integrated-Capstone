@@ -54,9 +54,9 @@ public class LoanProperties {
     /** The rules exactly as shipped in application.yml — used by unit tests. */
     public static LoanProperties defaults() {
         LoanProperties p = new LoanProperties();
-        p.bands.put("LOW", new Band(300, 579, new BigDecimal("30000"), new BigDecimal("28.0"), 12));
-        p.bands.put("NORMAL", new Band(580, 719, new BigDecimal("250000"), new BigDecimal("18.0"), 36));
-        p.bands.put("HIGH", new Band(720, 850, new BigDecimal("1000000"), new BigDecimal("10.5"), 60));
+        p.bands.put("LOW", new Band(300, 579, new BigDecimal("30000"), new BigDecimal("7.0"), 12));
+        p.bands.put("NORMAL", new Band(580, 719, new BigDecimal("250000"), new BigDecimal("7.0"), 36));
+        p.bands.put("HIGH", new Band(720, 850, new BigDecimal("1000000"), new BigDecimal("7.0"), 60));
         return p;
     }
 

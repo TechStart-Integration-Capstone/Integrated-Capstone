@@ -36,9 +36,9 @@ loan:
   disbursement-recovery-ms: 30000  # retry half-done disbursements (DISBURSING) every 30 s
   bank-account-no: PH1000000LOAN
   bands:
-    LOW:    { min-score: 300, max-score: 579, max-amount: 30000,   annual-rate: 28.0, max-term: 12 }
-    NORMAL: { min-score: 580, max-score: 719, max-amount: 250000,  annual-rate: 18.0, max-term: 36 }
-    HIGH:   { min-score: 720, max-score: 850, max-amount: 1000000, annual-rate: 10.5, max-term: 60 }
+    LOW:    { min-score: 300, max-score: 579, max-amount: 30000,   annual-rate: 7.0,  max-term: 12 }
+    NORMAL: { min-score: 580, max-score: 719, max-amount: 250000,  annual-rate: 7.0,  max-term: 36 }
+    HIGH:   { min-score: 720, max-score: 850, max-amount: 1000000, annual-rate: 7.0,  max-term: 60 }
 
 management:
   endpoints:

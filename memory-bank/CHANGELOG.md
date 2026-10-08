@@ -1,6 +1,17 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Loan Interest Rate Set to a Flat 7% a Year:
+  - `microservices/loan-service/src/main/resources/application.yml` and `LoanProperties.defaults()`: `annual-rate` for all credit bands (LOW, NORMAL, HIGH) changed from 28.0 / 18.0 / 10.5 to 7.0. Band score ranges, max amounts and max terms are unchanged.
+  - Updated rate-dependent expectations in `LoanDecisionEngineTest`, `LoanFlowsTest` and `LoanServiceApplicationTest` (e.g. ₱250,000 / 36 mo installment now ₱7,719.27; 2% late fee ₱154.39). All 41 loan-service tests pass (run on JDK 19; JDK 25 breaks Mockito/ByteBuddy inline mocking).
+  - Only new offers use 7%: existing loans and already-issued offers keep the rate stored on their `t24.LOAN` / `app.LOAN_APPLICATION` rows.
+  - Packaged `target/loan-service.jar`, rebuilt and recreated the `loan-service` container; verified a new ₱20,000 / 12 mo offer shows 7% and ₱1,730.53 a month. — [dom]
+
+- 2026-10-08 — Loan Terms & Conditions Review Before Acceptance:
+  - `frontend/bank/loans.js`: the loan offer card's "Accept and receive" button is replaced by "Review and accept", which opens a "Review your loan agreement" modal (same pattern as "Review your transfer") showing key facts (amount and payout account, term, rate, monthly installment, approximate total to repay and interest), scrollable terms and conditions (disbursement finality, repayment, auto-debit authorization, 2% one-time late fee, no prepayment fee, Truth in Lending Act RA 3765 disclosure, Data Privacy Act RA 10173), and a required "I have read and agree" checkbox.
+  - The "Agree and receive" button stays disabled until the checkbox is ticked; the accept call (`POST /api/v1/loans/applications/{ref}/accept`) only fires from inside the modal. No backend or API contract change; mobile untouched.
+  - `frontend/bank/bank.css`: added `.loan-terms` / `.loan-terms-agree` styles; bumped `bank.css` and `loans.js` cache-busters in `frontend/bank/index.html`.
+  - Rebuilt and redeployed the `frontend` (`frontend-spa`) container; verified in browser (apply → offer → review modal; accept disabled until agreed). — [dom]
 - 2026-10-08 — PowerShell Encoding Fix & Native CMD Runner in `scripts/`:
   - Replaced UTF-8 multi-byte em-dashes (`—`) with standard ASCII hyphens (`-`) in `scripts/run_jmeter_test.ps1` to prevent Windows PowerShell 5.1 from misinterpreting byte `0x94` as ANSI closing double-quote (`”`), fixing `TerminatorExpectedAtEndOfString`.
   - Added native Windows Batch alternative `scripts/run_jmeter_test.bat` with identical auto-cleanup and browser launch behavior. — [dom]
