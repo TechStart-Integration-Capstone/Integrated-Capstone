@@ -24,9 +24,10 @@ Write-Host ""
 # 1. Acquire JWT Bearer Token
 # ------------------------------------------------------------------------------
 Write-Host "[1/4] Authenticating with Auth Service..." -ForegroundColor Yellow
-$authResponse = Invoke-RestMethod -Uri "$GatewayUrl/api/v1/auth/demo-token" -Method Get
+$authBody = @{ username = "admin"; password = "Admin@PayPink2026!" } | ConvertTo-Json
+$authResponse = Invoke-RestMethod -Uri "$GatewayUrl/api/v1/auth/login" -Method Post -Body $authBody -ContentType "application/json"
 $token = $authResponse.token
-Write-Host "       Authenticated as $($authResponse.username) (Customer #$($authResponse.customerId))" -ForegroundColor Green
+Write-Host "       Authenticated as $($authResponse.username) with roles: $($authResponse.roles -join ', ')" -ForegroundColor Green
 Write-Host ""
 
 # ------------------------------------------------------------------------------

@@ -4,6 +4,19 @@ server:
 spring:
   application:
     name: t24-adapter
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
+    hikari:
+      maximum-pool-size: 10
+      pool-name: T24HikariPool
+  jpa:
+    database-platform: org.hibernate.dialect.SQLServerDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: false
 
 app:
   t24:

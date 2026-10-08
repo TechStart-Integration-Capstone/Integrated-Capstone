@@ -27,6 +27,16 @@ public class T24SimulatorController {
 
     private final Map<String, Map<String, Object>> processedMap = new ConcurrentHashMap<>();
     private final Map<String, String> accountStatusMap = new ConcurrentHashMap<>();
+    private final com.bank.t24.service.T24PostingService postingService;
+
+    public T24SimulatorController() {
+        this.postingService = null;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public T24SimulatorController(com.bank.t24.service.T24PostingService postingService) {
+        this.postingService = postingService;
+    }
 
     public record OfsParseResult(
             boolean valid,
@@ -100,7 +110,21 @@ public class T24SimulatorController {
             return rejectAccount(referenceNo, ftRef, "T24 Account Frozen: Credit account " + parseResult.creditAccountNo() + " is FROZEN (OFS /-1)");
         }
 
-        // 3. OFS valid and accounts active -> POSTED (Success)
+        // 3. OFS valid and accounts active -> Execute Double-Entry Posting
+        if (postingService != null && referenceNo != null) {
+            com.bank.t24.service.T24PostingService.PostingResult postRes = postingService.executeDoubleEntryPosting(
+                    referenceNo,
+                    parseResult.debitAccountNo(),
+                    parseResult.creditAccountNo(),
+                    parseResult.amount(),
+                    parseResult.currency(),
+                    ftRef
+            );
+            if (!postRes.success()) {
+                return rejectAccount(referenceNo, ftRef, postRes.errorMessage() + " (OFS /-1)");
+            }
+        }
+
         Map<String, Object> successResp = Map.of(
                 "status", "POSTED",
                 "ftReference", ftRef,

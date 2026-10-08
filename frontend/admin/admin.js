@@ -1,6 +1,7 @@
 /* Presentation for the operations workspace. Ledger actions remain in app.js. */
 (() => {
     const pages = {
+        interest: ['Interest', 'Daily interest & recovery.', 'Find missing days, file historical balances, and review interest recovery.', 'M12 3v18 M17 7H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6'],
         dashboard: ['Overview', 'Banking operations, in view.', 'Manage the demo portfolio and follow every ledger movement.', 'M3 10l9-7 9 7v11H3z M9 21v-8h6v8'],
         customers: ['Manage Users', 'Customers, Roles & Transaction Limits.', 'Manage users, assign roles, configure transfer limits, and freeze/unfreeze accounts.', 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75'],
         transactions: ['Monitor Transactions', 'Real-Time Ledger Transaction Feed.', 'Monitor all live mutations, channel settlements, and authorization events.', 'M4 7h16m-4-4 4 4-4 4 M20 17H4m4-4-4 4 4 4'],

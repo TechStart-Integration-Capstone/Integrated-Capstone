@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "AUDIT_LOG")
+@Table(name = "AUDIT_LOG", schema = "app")
 public class AuditLog {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "audit_id") private Long auditId;
     @Column(name = "customer_id") private Long customerId;

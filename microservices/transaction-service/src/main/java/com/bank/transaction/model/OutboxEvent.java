@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "OUTBOX_EVENT")
+@Table(name = "OUTBOX_EVENT", schema = "app")
 public class OutboxEvent {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "event_id") private Long eventId;
     @Column(name = "transaction_id") private Long transactionId;

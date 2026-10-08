@@ -31,15 +31,26 @@ public class AccountService {
     private final CustomerRepository customerRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final com.bank.account.client.T24AccountClient t24AccountClient;
 
     public AccountService(AccountRepository accountRepository,
                           CustomerRepository customerRepository,
                           StringRedisTemplate redisTemplate,
                           ObjectMapper objectMapper) {
+        this(accountRepository, customerRepository, redisTemplate, objectMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AccountService(AccountRepository accountRepository,
+                          CustomerRepository customerRepository,
+                          StringRedisTemplate redisTemplate,
+                          ObjectMapper objectMapper,
+                          com.bank.account.client.T24AccountClient t24AccountClient) {
         this.accountRepository = accountRepository;
         this.customerRepository = customerRepository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.t24AccountClient = t24AccountClient;
     }
 
     @Transactional(readOnly = true)
@@ -162,8 +173,49 @@ public class AccountService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public com.bank.account.dto.UserProfileDto getUserProfile(Long customerId) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.UNAUTHORIZED, "Please log in again."));
+
+        List<com.bank.account.dto.UserProfileDto.AccountSummaryDto> summaries = accountRepository.findByCustomerId(customerId)
+                .stream().map(a -> {
+                    BigDecimal balance = a.getCurrentBalance();
+                    if (t24AccountClient != null) {
+                        var live = t24AccountClient.getLiveBalance(a.getAccountNumber());
+                        if (live.isPresent()) {
+                            balance = live.get().currentBalance();
+                        }
+                    }
+                    return new com.bank.account.dto.UserProfileDto.AccountSummaryDto(
+                            a.getAccountId(),
+                            a.getAccountNumber(),
+                            a.getAccountType(),
+                            a.getCurrency(),
+                            balance,
+                            a.getStatus()
+                    );
+                }).collect(Collectors.toList());
+
+        return new com.bank.account.dto.UserProfileDto(
+                customer.getFirstName(),
+                customer.getFirstName() + " " + customer.getLastName(),
+                customer.getUsername(),
+                customer.getEmail(),
+                summaries
+        );
+    }
+
     private AccountDto mapToDto(Account a) {
+        BigDecimal balance = a.getCurrentBalance();
+        if (t24AccountClient != null) {
+            var live = t24AccountClient.getLiveBalance(a.getAccountNumber());
+            if (live.isPresent()) {
+                balance = live.get().currentBalance();
+            }
+        }
         return new AccountDto(a.getAccountId(), a.getCustomerId(), a.getAccountNumber(),
-                a.getAccountType(), a.getCurrency(), a.getCurrentBalance(), a.getStatus(), a.getCreatedDate());
+                a.getAccountType(), a.getCurrency(), balance, a.getStatus(), a.getCreatedDate());
     }
 }

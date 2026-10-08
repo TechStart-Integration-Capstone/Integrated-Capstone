@@ -87,21 +87,6 @@ erDiagram
         datetime2 ended_at
     }
 
-    GL_ENTRY {
-        bigint gl_entry_id PK
-        bigint account_id FK
-        decimal amount "18,2"
-        nvarchar entry_type "CREDIT or DEBIT"
-        nvarchar posting_type "MONTHLY_INTEREST"
-        nvarchar description
-        date business_date
-        date period_start
-        date period_end "Unique with account_id and posting_type"
-        bigint job_run_id FK
-        bigint transaction_id FK "Nullable for zero interest"
-        datetime2 created_at
-    }
-
     INTEREST_ACCRUAL {
         bigint accrual_id PK
         bigint account_id "Logical Azure SQL reference"
@@ -116,6 +101,29 @@ erDiagram
         date business_date PK
         int account_count
         timestamptz created_at
+        varchar resolution_type "SNAPSHOT or approved BACKFILL; legacy WAIVER retained only"
+        varchar resolved_by "Admin identity for recovery"
+        varchar resolution_reason
+        varchar source_reference
+        char request_hash "64-character SHA-256 for recovery replay"
+        uuid proposal_id FK "Nullable; required for new BACKFILL"
+    }
+
+    INTEREST_BACKFILL_PROPOSAL {
+        uuid proposal_id PK
+        date business_date "Unique with request_hash"
+        varchar prepared_by "Original admin identity"
+        char request_hash "SHA-256"
+        jsonb request_json "Complete historical manifest, reason and source"
+        timestamptz created_at
+    }
+
+    INTEREST_BACKFILL_APPROVAL {
+        uuid proposal_id PK,FK
+        date business_date UK "Composite FK with proposal_id"
+        varchar approved_by "Must differ from preparer"
+        varchar approval_reason
+        timestamptz approved_at
     }
 
     AUDIT_LOG {
@@ -305,11 +313,10 @@ erDiagram
     CUSTOMER ||--o{ AUDIT_LOG : "audited (customer_id)"
     CUSTOMER ||--o{ BANKING_FAVORITE : "saves (customer_id)"
     ACCOUNT ||--o{ BANKING_FAVORITE : "bookmarked as (account_id)"
-    ACCOUNT ||--o{ GL_ENTRY : "posted interest"
-    EOD_JOB_RUN ||--o{ GL_ENTRY : "posting job"
-    LEDGER_TRANSACTION |o--o| GL_ENTRY : "interest credit"
     ACCOUNT ||..o{ INTEREST_ACCRUAL : "daily EOD snapshot"
     INTEREST_ACCRUAL_BATCH ||..o{ INTEREST_ACCRUAL : "completed business date"
+    INTEREST_BACKFILL_PROPOSAL ||--o| INTEREST_BACKFILL_APPROVAL : "independent approval"
+    INTEREST_BACKFILL_PROPOSAL |o--o| INTEREST_ACCRUAL_BATCH : "approved recovery"
     ACCOUNT ||--o{ LEDGER_TRANSACTION : "debited from (from_account_id)"
     ACCOUNT |o--o{ LEDGER_TRANSACTION : "credited to (to_account_id)"
     LEDGER_TRANSACTION ||--o{ OUTBOX_EVENT : "publishes (transaction_id)"
@@ -560,10 +567,14 @@ Repayment allocations settling principal, interest, and late fees.
 
 Interest extensions: `INTEREST_ACCRUAL` stores the immutable `(account_id, business_date)`
 balance/rate/interest snapshot. `INTEREST_ACCRUAL_BATCH` seals each complete date atomically,
-including empty dates; it never records monthly posting status. Both tables block UPDATE,
-DELETE and TRUNCATE. Azure SQL `GL_ENTRY` records the posted accounting period with a
-unique `(account_id, posting_type, period_end)` key and references `EOD_JOB_RUN` and the
-credit's `LEDGER_TRANSACTION`. `ACCOUNT.interest_rate` stores the annual fraction for
+including empty dates; it never records monthly posting status. Backfills additionally
+require immutable `INTEREST_BACKFILL_PROPOSAL` and `INTEREST_BACKFILL_APPROVAL` records
+from different admins. All four tables block UPDATE, DELETE and TRUNCATE. New waivers
+are rejected; any legacy waiver remains archived and does not complete a day.
+Azure SQL `LEDGER_TRANSACTION.reference_no` identifies each monthly interest credit
+(`INT-<period-end>-<account-id>`); `EOD_JOB_RUN` logs completion. The existing outbox
+delivers GL credit events to PostgreSQL `LEDGER_MUTATION_AUDIT`. There is no separate
+Azure SQL `GL_ENTRY` in the current implementation. `ACCOUNT.interest_rate` stores the annual fraction for
 loan accounts. See [interest EOD](interest-eod.md) for precision, migrations and recovery.
 
 ### 4.1 `LEDGER_MUTATION_AUDIT`
