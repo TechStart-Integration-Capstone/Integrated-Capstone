@@ -1,6 +1,11 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-08 — Branch Alignment & Docker Compose Parity on Main:
+  - Reconciled changes onto `main` following remote rename/merge of `refactor/domain-t24-core` into `main`.
+  - Ensured all automated setup script mounts in `docker/docker-compose.yml` (`05_t24_core.sql`, `06_interest.sql`, `04_interest_recovery.sql`, `05_interest_approval.sql`) are aligned and active on `main`.
+  - Updated active working branch in `memory-bank/CONTEXT.md` to `main`. — [dom]
+
 - 2026-10-08 — T24 Core Schema Migration & Docker Compose Full Volume Parity:
   - Executed `scripts/migrate_phase2_t24_core.sql` on live Azure SQL container (`azure-sql-master`), creating `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables along with backward-compatible `dbo.*` synonyms.
   - Verified `t24-adapter` hold placement and release endpoints (`/api/v1/t24/holds/lock` and `/holds/release`) succeed without SQL error `Invalid object name 't24.locked_amount'`.

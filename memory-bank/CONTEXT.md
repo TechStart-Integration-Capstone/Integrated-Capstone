@@ -1,7 +1,7 @@
 # PayPink 2.0 — Project Context
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
-_Active Working Branch: refactor/domain-t24-core_  
+_Active Working Branch: main_  
 _Last Updated: 2026-10-08 (T24 Core Schema Migration & Docker Compose Full Volume Parity by [dom])_  
 
 ---
