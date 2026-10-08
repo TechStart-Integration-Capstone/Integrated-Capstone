@@ -319,23 +319,80 @@ class LoanFlowsTest {
     }
 
     @Test
-    @DisplayName("Disbursement rejected → 422 disbursement-failed, application FAILED, never retried")
-    void rejectedDisbursement_marksFailed() {
+    @DisplayName("Disbursement rejected -> retries automatically up to 3 bank attempts then marks FAILED")
+    void rejectedDisbursement_retriesUpToMaxAttemptsThenMarksFailed() {
         ApplicationResponse app = applyNormal("apply-key-1");
         stubDisbursement(new TransferResult("REJECTED", null, null, "Core banking T24 rejected transfer"));
 
+        // Attempt 1: Customer accept fails with core-unavailable; status stays DISBURSING for bank recovery
         assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
                 .isInstanceOfSatisfying(LoanException.class, e -> {
-                    assertThat(e.getType()).isEqualTo("disbursement-failed");
-                    assertThat(e.getStatus().value()).isEqualTo(422);
+                    assertThat(e.getType()).isEqualTo("core-unavailable");
                 });
-        assertThat(applications.get(1L).getStatus()).isEqualTo("FAILED");
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DISBURSING");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(1);
         assertThat(loans).isEmpty();
 
+        // Attempt 2: Bank background recovery runs
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DISBURSING");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(2);
+
+        // Attempt 3: Bank background recovery runs -> reaches max attempts (3), marks FAILED
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("FAILED");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(3);
+
+        // Further recovery sweeps skip the FAILED application
         disbursementService.recoverDisbursements();
         assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-2", "corr"))
                 .isInstanceOfSatisfying(LoanException.class, e -> assertThat(e.getType()).isEqualTo("disbursement-failed"));
-        verify(orchestrator, times(1)).transfer(any(), any(), any(), any(), any(), any(), any());
+        verify(orchestrator, times(3)).transfer(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Disbursement rejected initially -> automatically succeeds on bank retry without admin intervention")
+    void rejectedDisbursement_recoversOnBankRetry() {
+        ApplicationResponse app = applyNormal("apply-key-auto-recovery");
+        // Attempt 1 fails
+        stubDisbursement(new TransferResult("REJECTED", null, null, "Transient lock contention"));
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
+                .isInstanceOf(LoanException.class);
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DISBURSING");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(1);
+
+        // Attempt 2 succeeds
+        stubDisbursement(new TransferResult("POSTED", 777L, "FT26278AUTO", null));
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("ACCEPTED");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(2);
+        assertThat(loans.values()).singleElement().satisfies(l -> {
+            assertThat(l.getDisbursementTxnId()).isEqualTo(777L);
+            assertThat(l.getFtReference()).isEqualTo("FT26278AUTO");
+        });
+    }
+
+    @Test
+    @DisplayName("Admin reset sets FAILED application back to DECIDED for customer acceptance")
+    void adminReset_reopensApplication() {
+        ApplicationResponse app = applyNormal("apply-key-reset");
+        stubDisbursement(new TransferResult("REJECTED", null, null, "Core banking T24 rejected transfer"));
+
+        // Exhaust all 3 attempts
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
+                .isInstanceOf(LoanException.class);
+        disbursementService.recoverDisbursements();
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("FAILED");
+
+        disbursementService.adminResetApplication(app.referenceNo());
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DECIDED");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(0);
+
+        stubDisbursement(new TransferResult("POSTED", 999L, "FT26278RESET", null));
+        LoanSummary loan = disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-after-reset", "corr2");
+        assertThat(loan).isNotNull();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("ACCEPTED");
     }
 
     // ── Credit limit ────────────────────────────────────────────────────────

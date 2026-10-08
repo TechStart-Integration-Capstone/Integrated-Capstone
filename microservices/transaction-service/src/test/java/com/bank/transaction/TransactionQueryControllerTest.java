@@ -109,4 +109,25 @@ class TransactionQueryControllerTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Administrator access required");
     }
+
+    @Test
+    @DisplayName("getTodayTransactions throws 403 when X-Auth-Roles header is missing (fail-closed)")
+    void getTodayTransactions_forbiddenWhenRolesHeaderMissing() {
+        assertThatThrownBy(() -> adminController.getTodayTransactions(null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Administrator access required");
+    }
+
+    @Test
+    @DisplayName("getCustomerActivity ignores customerId param when caller is not admin")
+    void getCustomerActivity_nonAdminIgnoresParamFallback() {
+        when(activityService.getCustomerActivity(42L)).thenReturn(List.of());
+
+        // Regular user with customerIdHeader=42L attempts to pass customerIdParam=99L
+        ResponseEntity<List<ActivityItem>> response = queryController.getCustomerActivity(42L, 99L, "ROLE_CUSTOMER");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(activityService, times(1)).getCustomerActivity(42L);
+        verify(activityService, never()).getCustomerActivity(99L);
+    }
 }

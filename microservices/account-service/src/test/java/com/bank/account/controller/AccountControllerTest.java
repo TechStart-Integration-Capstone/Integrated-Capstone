@@ -55,4 +55,36 @@ class AccountControllerTest {
 
         verify(accountService, never()).updateAccountStatus(anyLong(), anyString());
     }
+
+    @Test
+    @DisplayName("getAccount throws 403 Forbidden when customer does not own account")
+    void getAccount_notOwned_throws403() {
+        AccountDto dto = new AccountDto(1L, 99L, "001100000001", "SAVINGS", "PHP", BigDecimal.TEN, "ACTIVE", java.time.LocalDateTime.now());
+        when(accountService.getAccountById(1L)).thenReturn(dto);
+
+        assertThatThrownBy(() -> controller.getAccount(null, 10L, 1L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
+    @Test
+    @DisplayName("getAccount succeeds when customer owns account or caller is ROLE_ADMIN")
+    void getAccount_ownerOrAdmin_succeeds() {
+        AccountDto dto = new AccountDto(1L, 10L, "001100000001", "SAVINGS", "PHP", BigDecimal.TEN, "ACTIVE", java.time.LocalDateTime.now());
+        when(accountService.getAccountById(1L)).thenReturn(dto);
+
+        ResponseEntity<AccountDto> ownerResp = controller.getAccount(null, 10L, 1L);
+        assertThat(ownerResp.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<AccountDto> adminResp = controller.getAccount("ROLE_ADMIN", 99L, 1L);
+        assertThat(adminResp.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @DisplayName("getAllCustomers without ROLE_ADMIN throws 403 Forbidden")
+    void getAllCustomers_withoutAdmin_throws403() {
+        assertThatThrownBy(() -> controller.getAllCustomers("ROLE_CUSTOMER"))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
 }

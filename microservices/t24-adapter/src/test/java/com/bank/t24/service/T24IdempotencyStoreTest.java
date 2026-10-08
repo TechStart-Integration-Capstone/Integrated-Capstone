@@ -35,4 +35,21 @@ class T24IdempotencyStoreTest {
         assertThat(retrieved).isPresent();
         assertThat(retrieved.get().getFtReference()).isEqualTo("FT12345");
     }
+
+    @Test
+    @DisplayName("Should recover idempotent response from persistent posting journal when in-memory cache is empty")
+    void testGetFromPersistentJournal() {
+        com.bank.t24.repository.PostingJournalRepository repo = org.mockito.Mockito.mock(com.bank.t24.repository.PostingJournalRepository.class);
+        com.bank.t24.model.PostingJournal journal = new com.bank.t24.model.PostingJournal();
+        journal.setJournalId(99999L);
+        journal.setReferenceNo("TX-PERSISTENT");
+        org.mockito.Mockito.when(repo.findByReferenceNo("TX-PERSISTENT")).thenReturn(Optional.of(journal));
+
+        T24IdempotencyStore persistentStore = new T24IdempotencyStore(repo);
+        Optional<T24TransferResponse> retrieved = persistentStore.get("TX-PERSISTENT");
+
+        assertThat(retrieved).isPresent();
+        assertThat(retrieved.get().getFtReference()).isEqualTo("FT99999");
+        assertThat(retrieved.get().isCachedResponse()).isTrue();
+    }
 }
