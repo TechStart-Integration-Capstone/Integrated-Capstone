@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupRailsSelector();
     startTelemetryPolling();
     renderInitialLifecycleState();
-    testScenario('valid'); // Pre-populate RFC-7807 tab
+    if (document.getElementById('code-request-json')) testScenario('valid'); // Optional perimeter panel
     setupRealtimeSync(); // Cross-tab & broadcast real-time sync
 
     // Periodic live synchronization with Azure SQL Database
@@ -230,6 +230,7 @@ async function handleAdminLoginSubmit(event) {
 }
 
 function updateAdminUI(adminData) {
+    if (document.getElementById('tab-interest')?.classList.contains('active')) window.InterestAdmin?.load();
     const claimsEl = document.getElementById('modal-jwt-claims');
     if (claimsEl) {
         claimsEl.textContent = JSON.stringify({
@@ -252,6 +253,7 @@ function updateAdminUI(adminData) {
 }
 
 function handleAdminLogout() {
+    window.InterestAdmin?.reset();
     sessionStorage.removeItem('paypink_admin_jwt');
     sessionStorage.removeItem('paypink_admin_user');
     currentJwtToken = null;
@@ -727,11 +729,15 @@ function testScenario(scenario) {
         badgeClass = 'badge-chip tag-error';
     }
 
-    document.getElementById('code-request-json').textContent = typeof reqPayload === 'string' ? reqPayload : JSON.stringify(reqPayload, null, 2);
-    document.getElementById('code-response-json').textContent = JSON.stringify(respPayload, null, 2);
+    const reqJsonEl = document.getElementById('code-request-json');
+    if (reqJsonEl) reqJsonEl.textContent = typeof reqPayload === 'string' ? reqPayload : JSON.stringify(reqPayload, null, 2);
+    const respJsonEl = document.getElementById('code-response-json');
+    if (respJsonEl) respJsonEl.textContent = JSON.stringify(respPayload, null, 2);
     const badgeEl = document.getElementById('response-status-badge');
-    badgeEl.textContent = statusBadge;
-    badgeEl.className = badgeClass;
+    if (badgeEl) {
+        badgeEl.textContent = statusBadge;
+        badgeEl.className = badgeClass;
+    }
 }
 
 /**
@@ -994,7 +1000,9 @@ function switchTab(tabName) {
     if (btn) btn.classList.add('active');
     if (panel) panel.classList.add('active');
 
-    if (tabName === 'reconciliation' || tabName === 'reports') {
+    if (tabName === 'interest') {
+        window.InterestAdmin?.load();
+    } else if (tabName === 'reconciliation' || tabName === 'reports') {
         loadReconciliationLogs();
     } else if (tabName === 'customers') {
         loadAllCustomers();

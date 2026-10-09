@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "LOAN_APPLICATION")
+@Table(name = "LOAN_APPLICATION", schema = "app")
 public class LoanApplication {
 
     public static final String STATUS_DECIDED = "DECIDED";
@@ -61,6 +61,9 @@ public class LoanApplication {
     @Column(name = "status", nullable = false, length = 15)
     private String status; // DECIDED | DISBURSING | ACCEPTED | FAILED | EXPIRED
 
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount = 0;
+
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt; // UTC
 
@@ -99,6 +102,8 @@ public class LoanApplication {
     public void setDeclineReason(String declineReason) { this.declineReason = declineReason; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getRetryCount() { return retryCount != null ? retryCount : 0; }
+    public void setRetryCount(Integer retryCount) { this.retryCount = retryCount != null ? retryCount : 0; }
     public LocalDateTime getExpiresAt() { return expiresAt; }
     public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
     public LocalDateTime getCreatedDate() { return createdDate; }

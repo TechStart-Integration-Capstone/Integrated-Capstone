@@ -8,6 +8,10 @@ import com.bank.transaction.model.Account;
 import com.bank.transaction.repository.AccountRepository;
 import com.bank.transaction.service.AccountResetService;
 import com.bank.transaction.service.LedgerMutationService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +31,7 @@ import java.util.concurrent.*;
  * Route:  POST /api/v1/stress/double-spend-test
  * Proxied: API Gateway → transaction-service:8083
  */
+@Tag(name = "Stress Testing & Race Conditions", description = "High-concurrency double-spend race condition simulation and pessimistic locking verification")
 @RestController
 @RequestMapping("/api/v1/stress")
 @CrossOrigin(origins = "*")
@@ -44,6 +49,10 @@ public class StressTestController {
         this.accountResetService   = accountResetService;
     }
 
+    @Operation(summary = "Run double-spend race condition stress test", description = "Spawns concurrent worker threads attempting simultaneous debits against an account to verify row-level pessimistic locking prevents overdrafts.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stress test completed and detailed execution telemetry returned")
+    })
     @PostMapping("/double-spend-test")
     public ResponseEntity<StressTestResult> runDoubleSpendStressTest(
             @RequestBody(required = false) StressTestRequest request) {

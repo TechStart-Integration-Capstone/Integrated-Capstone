@@ -107,4 +107,17 @@ class AuthServiceTest {
         assertThat(r.getToken()).isEqualTo("demo.token");
         verify(customerRepository).findByUsername("lviernes");
     }
+
+    @Test @DisplayName("authenticate: admin credentials load ROLE_ADMIN from customer entity")
+    void authenticate_admin_loadsRolesFromCustomer() {
+        Customer admin = new Customer("admin", "$2a$10$hash", "PayPink", "Administrator", "admin@paypink.internal", "+630000000000", "ROLE_ADMIN,ROLE_CORE_ENGINEER");
+        try { var f = Customer.class.getDeclaredField("customerId"); f.setAccessible(true); f.set(admin, 99L); } catch (Exception ignored) {}
+        when(customerRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("Admin@PayPink2026!", admin.getPasswordHash())).thenReturn(true);
+        when(jwtTokenProvider.generateToken(eq(99L), eq("admin"), anyList())).thenReturn("admin.jwt.token");
+        AuthResponse r = authService.authenticate(new AuthRequest("admin", "Admin@PayPink2026!"));
+        assertThat(r.getToken()).isEqualTo("admin.jwt.token");
+        assertThat(r.getCustomerId()).isEqualTo(99L);
+        assertThat(r.getRoles()).containsExactlyInAnyOrder("ROLE_ADMIN", "ROLE_CORE_ENGINEER");
+    }
 }

@@ -33,7 +33,7 @@ class LoanServiceApplicationTest {
         assertThat(props.getBankAccountNo()).isEqualTo("PH1000000LOAN");
         assertThat(props.getBands()).containsOnlyKeys("LOW", "NORMAL", "HIGH");
         assertThat(props.getBands().get("NORMAL").getMaxAmount()).isEqualByComparingTo("250000");
-        assertThat(props.getBands().get("HIGH").getAnnualRate()).isEqualByComparingTo("10.5");
+        assertThat(props.getBands().get("HIGH").getAnnualRate()).isEqualByComparingTo("7.0");
         assertThat(props.getBands().get("LOW").getMaxTerm()).isEqualTo(12);
         assertThat(props.getPenaltyRate()).isEqualByComparingTo("0.02");
     }

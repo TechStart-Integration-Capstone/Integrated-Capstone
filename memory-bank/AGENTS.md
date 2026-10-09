@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Read `CONTEXT.md` before writing code. After any change, add an entry to `CHANGELOG.md` and update `CONTEXT.md`.
-Project owner: **dom**
+Project team: **Team 4** (Collaborative capstone; no single owner)
 
 ## Memory Bank Protocol
 - **MANDATORY:** Always update the memory bank (`memory-bank/CHANGELOG.md` and `memory-bank/CONTEXT.md`) after completing any change — whether code, database schema, CI/CD pipeline, test refactoring, or infrastructure deployment.

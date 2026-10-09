@@ -147,7 +147,14 @@ class ScoreResponseBody(BaseModel):
 
 
 # ── Scoring endpoint ──────────────────────────────────────────────────────────
-@app.post("/score", response_model=ScoreResponseBody, status_code=200)
+@app.post(
+    "/score",
+    response_model=ScoreResponseBody,
+    status_code=200,
+    tags=["Risk Scoring"],
+    summary="Score transfer for fraud risk",
+    description="Two-layer fraud scoring combining deterministic business rules (Layer 1) and Isolation Forest ML anomaly detection (Layer 2).",
+)
 async def score_transfer(body: ScoreRequestBody, request: Request):
     """
     Two-layer fraud score for a transfer request.
@@ -251,7 +258,12 @@ async def score_transfer(body: ScoreRequestBody, request: Request):
 
 
 # ── Health / root ─────────────────────────────────────────────────────────────
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["Health & Diagnostics"],
+    summary="Risk engine health check",
+    description="Actuator and Docker health check compatible endpoint.",
+)
 async def health():
     """Docker health check + actuator-compatible response."""
     return {
@@ -262,7 +274,12 @@ async def health():
     }
 
 
-@app.get("/")
+@app.get(
+    "/",
+    tags=["Health & Diagnostics"],
+    summary="Service root & documentation link",
+    description="Returns service metadata and interactive OpenAPI /docs link.",
+)
 async def root():
     return {
         "service": "risk-engine",

@@ -139,7 +139,6 @@ function renderPage() {
     return;
   }
   main.innerHTML = (state.error ? `<div class="notice" role="alert">${escapeHtml(state.error)} Showing your last loaded information.</div>` : '')
-    + (state.transfer?.cancellation && state.page !== 'transfer' ? holdBanner(state.transfer.cancellation) : '')
     + (state.page === 'overview' ? overview() : state.page === 'accounts' ? accountsPage() : state.page === 'transfer' ? transferPage() : state.page === 'loans' ? loansPage() : activityPage())
     + `<footer class="page-footer"><span>© ${new Date().getFullYear()} PayPink. A little more everyday.</span><span>${icon('lock')} ${state.updated ? `Updated ${state.updated.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}` : 'Personal banking'} · Philippine peso accounts</span></footer>`;
 }
@@ -390,7 +389,6 @@ document.addEventListener('click', async event => {
     case 'send-transfer-now': await sendActiveTransferNow(button.dataset.ref, button); break;
     case 'new-transfer': if (cancelCountdownInterval) clearInterval(cancelCountdownInterval); state.transfer = null; state.page = 'transfer'; renderPage(); break;
     case 'send-to-recipient':
-      if (state.transfer?.cancellation) { state.page = 'transfer'; renderPage(); break; }
       state.transfer = null; state.page = 'transfer'; renderPage(); // initialises the transfer form
       Object.assign(state.transfer, {mode:'other', number:button.dataset.number, recipient:null, error:''});
       renderPage(); document.querySelector('#main').focus({preventScroll:true}); window.scrollTo(0,0); await lookupRecipient(); break;
@@ -482,7 +480,6 @@ function transferPage() {
   }
   const form = state.transfer;
   if (form.receipt) return form.receipt.mock ? mockReceipt(form.receipt) : transferReceipt(form.receipt);
-  if (form.cancellation) return transferCancellationPendingView(form.cancellation);
   if (form.cancelled) return transferCancelledView(form.cancelled);
   if (form.reversed) return transferReversedView(form.reversed);
   if (form.mode === 'external') return externalTransferPage(accounts);
@@ -557,8 +554,7 @@ async function sendTransfer() {
       sourceAccountId: String(request.sourceAccountId),
       targetAccountId: String(request.destinationAccountNumber),
       amount: parseFloat(request.amount),
-      currency: 'PHP',
-      cancelWindowSeconds: HOLD_SECONDS
+      currency: 'PHP'
     };
 
     const res = await api('/api/v1/remittance/transfer', {
@@ -572,30 +568,6 @@ async function sendTransfer() {
     });
 
     if (generation !== state.generation || !state.session) return;
-
-    if (res.status === 'Reserved' && (res.canCancel || res.cancelWindowSeconds > 0)) {
-      delete state.session.pendingTransfer;
-      saveSession();
-
-      const cancellation = {
-        referenceNo: res.referenceNo,
-        amount: res.amount || request.amount,
-        currency: 'PHP',
-        sourceAccountId: request.sourceAccountId,
-        destinationAccountNumber: request.destinationAccountNumber,
-        recipientName: form.recipient ? form.recipient.fullName : (form.mode === 'own' ? state.profile.fullName : 'PayPink customer'),
-        cancelUntil: res.cancelUntil ? new Date(res.cancelUntil) : new Date(Date.now() + 30000),
-        remainingSeconds: res.cancelWindowSeconds || HOLD_SECONDS
-      };
-
-      form.cancellation = cancellation;
-      form.review = null;
-      await refresh();
-      renderPage();
-      startCancellationCountdown(cancellation, request, form);
-      toast(`Transfer on hold. You have ${HOLD_SECONDS} seconds to cancel, or send it now.`);
-      return;
-    }
 
     delete state.session.pendingTransfer; saveSession();
 

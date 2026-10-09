@@ -4,6 +4,277 @@ Newest first. One line per change: date, what changed, who.
 - 2026-10-06 — Dynamic Mobile Dashboard & Accounts Binding: updated `mobile/lib/screens/dashboard_screen.dart` to dynamically render live database accounts (`widget.accounts`) fetched from Azure SQL instead of static hardcoded cards. — [Antigravity]
 - 2026-10-06 — Enforced project memory workflow in root `AGENTS.md`: read `memory-bank/CONTEXT.md` before code and update CONTEXT/CHANGELOG after every change, including migrations and deployments. Updated context to reflect actual local runtime rather than pending activation. — [Codex; uncommitted]
 
+- 2026-10-08 — Comprehensive Endpoint-Level OpenAPI / Swagger Documentation:
+  - **Account Service (`account-service`):**
+    - Annotated [`AccountController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/AccountController.java) and [`BeneficiaryController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/BeneficiaryController.java) with `@Tag`, `@Operation`, `@ApiResponses`, and `@Parameter` descriptions and examples for profile (`/me`), accounts list/pagination (`/`), account details (`/{accountId}`), customer lookup (`/customer/{customerId}`), status update (`/status`), balance reset (`/reset-balance`), recipient directory/lookup (`/recipients`), and favorites (`/favorites`). Tests: 20/20 passed.
+  - **Auth Service (`auth-service`):**
+    - Annotated [`AuthController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/controller/AuthController.java), [`BankingController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/banking/BankingController.java), [`TransactionMonitorController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/admin/TransactionMonitorController.java), [`ExternalTransferController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/banking/ExternalTransferController.java), and [`TransactionReportController.java`](file:///microservices/auth-service/src/main/java/com/bank/auth/banking/TransactionReportController.java) with detailed OpenAPI operation descriptions and deprecation notices where applicable. Tests: 54/54 passed.
+  - **Loan Service (`loan-service`):**
+    - Annotated [`LoanController.java`](file:///microservices/loan-service/src/main/java/com/bank/loan/controller/LoanController.java) covering loan applications (`/applications`), acceptance & disbursement (`/applications/{ref}/accept`), customer loans list (`/`), eligibility & limits (`/eligibility`), repayment schedules (`/{loanId}/schedule`), repayments (`/{loanId}/repayments`), admin EOD overdue job (`/eod/run`), and admin application status reset (`/applications/{ref}/reset`). Tests: 43/43 passed.
+  - **Core Banking Adapter (`t24-adapter`):**
+    - Annotated [`T24AccountInquiryController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24AccountInquiryController.java), [`T24AdapterController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24AdapterController.java), [`T24HoldController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24HoldController.java), and [`T24SimulatorController.java`](file:///microservices/t24-adapter/src/main/java/com/bank/t24/controller/T24SimulatorController.java) covering authoritative account balance inquiry, OFS transfer processing, atomic balance locks and releases (`/api/v1/t24/holds`), and simulator controls (`/ofs/**`). Tests: 31/31 passed.
+  - **Transaction Service (`transaction-service`):**
+    - Annotated [`RemittanceController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/RemittanceController.java) (4-step saga transfer, cancellation grace window, send-now, transfer status), [`TransactionQueryController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/TransactionQueryController.java) (CQRS activity feed & PDF statements), [`AdminTransactionMonitorController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/AdminTransactionMonitorController.java) (Operations Desk live feed), [`InternalTransferController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/InternalTransferController.java) (loan-service internal money movement), [`LedgerMutationController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/LedgerMutationController.java), [`StressTestController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/StressTestController.java), [`TelemetryController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/controller/TelemetryController.java), and [`InterestEodController.java`](file:///microservices/transaction-service/src/main/java/com/bank/transaction/orchestrator/interest/InterestEodController.java). Tests: 107/107 passed.
+  - **Risk Engine (`risk-engine`):**
+    - Added OpenAPI tags, summaries, and descriptions to FastAPI routes in [`main.py`](file:///microservices/risk-engine/main.py) for `/score`, `/health`, and `/`.
+  - **Verification & Documentation:**
+    - Verified 100% test pass rate across all microservices (277/277 tests passed).
+    - Updated [`docs/API_REFERENCE.md`](file:///docs/API_REFERENCE.md) to document centralized Swagger UI paths, pagination, automated bank loan retry (max 3 attempts) with admin reset, and Phase 10 changes.
+    - Updated [`scripts/generate_postman_collection.py`](file:///scripts/generate_postman_collection.py) and regenerated [`postman/PayPink_2.0_API_Reference_Collection.json`](file:///postman/PayPink_2.0_API_Reference_Collection.json) covering 10 categories and 70 comprehensive API verification requests (including all microservice OpenAPI endpoints). — [dom]
+  - **Gateway Central Aggregator (`api-gateway`):**
+    - Added `springdoc-openapi-starter-webflux-ui` (v2.3.0) to `pom.xml`.
+    - Added `/swagger-ui`, `/v3/api-docs`, and `/webjars` to `PUBLIC_PATHS` in `JwtAuthFilter.java` to permit browser access without requiring an initial login token.
+    - Configured centralized Swagger UI at `/swagger-ui.html` aggregating OpenAPI specs from all services (`auth`, `account`, `transaction`, `loan`, `t24`, and `risk`).
+    - Added gateway proxy routes forwarding `/v3/api-docs/{service}` to downstream services and `/openapi.json` for `risk-engine`.
+  - **Downstream Spring Boot Microservices (`account`, `auth`, `transaction`, `loan`, `t24-adapter`):**
+    - Added `springdoc-openapi-starter-webmvc-ui` (v2.3.0) to each service's `pom.xml`.
+    - Implemented `OpenApiConfig.java` in each service configuring OpenAPI metadata, service descriptions, and global `BearerAuth` JWT security scheme for interactive Swagger UI authorization.
+  - **Verification & Documentation:**
+    - Verified 100% test pass rate across all services (`api-gateway` 22/22, `account-service` 20/20, `auth-service` 54/54, `transaction-service` 107/107, `loan-service` 43/43, `t24-adapter` 31/31).
+    - Updated `docs/API_REFERENCE.md` and added Swagger UI / OpenAPI requests to `postman/PayPink_2.0_API_Reference_Collection.json`. — [dom]
+
+- 2026-10-08 — Loan Disbursement Automated Bank-Side Retry (Max 3 Attempts) & Manual Admin Retry Removal:
+  - **Automated Bank-Side Retries (`loan-service`):**
+    - Added `retry_count` column to `LOAN_APPLICATION` table definition in `schema-azuresql.sql`, `scripts/migrate_phase6_loans.sql`, and `db/phase6_loans.sql`.
+    - Added `retryCount` field with getter and setter to `LoanApplication.java`.
+    - Updated `LoanDisbursementService.java` to enforce `MAX_DISBURSEMENT_ATTEMPTS = 3`. On core rejection or timeout, the loan application remains in `DISBURSING` status with incremented attempt counter. The background recovery scheduler (`recoverDisbursements()`) automatically retries up to 3 times before setting `FAILED`.
+    - Removed manual admin retry method `adminRetryDisbursement` from `LoanDisbursementService.java` and removed `POST /loans/applications/{referenceNo}/retry` from `LoanController.java`.
+    - Preserved `adminResetApplication` (`POST /loans/applications/{referenceNo}/reset`) which safely reopens a failed application back to `DECIDED` with reset `retry_count = 0`.
+    - Updated `LoanFlowsTest.java` with test cases verifying automatic bank recovery across background passes and failure transition after 3 exhausted attempts. Verified 43/43 tests passing in `loan-service`.
+    - Updated `docs/API_REFERENCE.md` Bug #5 entry and regenerated Postman collection `postman/PayPink_2.0_API_Reference_Collection.json`. — [dom]
+
+- 2026-10-08 — Platform-Wide RFC-7807 Problem Details Standardisation:
+  - **Standardised Error Envelope (`application/problem+json`):**
+    - `api-gateway`: Updated `JwtAuthFilter.java` to emit RFC-7807 compliant JSON error payloads (`type`, `title`, `status`, `detail`, `instance`) with `Content-Type: application/problem+json` on 401 Unauthorized and 403 Forbidden gateway rejections.
+    - `account-service`: Created `GlobalExceptionHandler.java` utilizing Spring 6 `ProblemDetail` covering `ResponseStatusException`, `IllegalArgumentException`, `IllegalStateException`, `MethodArgumentNotValidException`, and fallback `Exception`.
+    - `auth-service`: Created `GlobalExceptionHandler.java` utilizing Spring 6 `ProblemDetail` covering `BadCredentialsException`, `ResponseStatusException`, `IllegalArgumentException`, `IllegalStateException`, `MethodArgumentNotValidException`, and fallback `Exception`.
+    - `transaction-service`: Updated `GlobalExceptionHandler.java` with a dedicated handler for `ResponseStatusException` returning `ProblemDetails` (`application/problem+json`) alongside existing domain exception handlers. Fixed unit test `InternalTransferTest.java` post-posting balance stub.
+    - `t24-adapter`: Created `GlobalExceptionHandler.java` utilizing Spring 6 `ProblemDetail` covering `ResponseStatusException`, `IllegalArgumentException`, `IllegalStateException`, `MethodArgumentNotValidException`, and fallback `Exception`.
+    - `loan-service`: Verified existing full compliance with RFC-7807 problem details.
+  - **Verification:** Ran test suites across all modified microservices (`api-gateway` 22/22, `account-service` 20/20, `auth-service` 54/54, `transaction-service` 107/107, `t24-adapter` 31/31, `loan-service` 42/42) — 100% test pass rate across the platform. — [dom]
+
+- 2026-10-08 — Phase 10 Database RBAC Migration & Bug 11 Fixes (CORS Allow-List & Account Pagination):
+  - **Database-Driven RBAC Migration (Finding #3):**
+    - Added `roles` column to `app.CUSTOMER` (defaulting to `'ROLE_CUSTOMER,ROLE_RETAIL_USER'`).
+    - Seeded administrative user `admin` with BCrypt password hash (`$2a$10$5X2WM6Ws...`, password `Admin@PayPink2026!`) and roles `ROLE_ADMIN,ROLE_CORE_ENGINEER`.
+    - Created idempotent SQL migration script `scripts/migrate_phase10_rbac_roles.sql` and mounted as `07_rbac_roles.sql` under Azure SQL setup scripts in `docker/docker-compose.yml`.
+    - Updated DDL in `schema-azuresql.sql` and seed script `scripts/seed_demo_azure_sql.sql` to include `roles` and seed `admin`.
+    - Updated JPA model `Customer.java` with `roles` column and `getRolesList()` parser.
+    - Refactored `AuthService.java` to remove hardcoded in-memory admin credentials check and string-matching role assignment; all authentications now uniformly query the database, verify credentials via `BCryptPasswordEncoder`, and populate token claims dynamically from `customer.getRolesList()`.
+    - Fixed timezone conversion drift in `TransactionReportService.java` using `Timestamp.from(Instant)`.
+  - **Gateway CORS Allow-List & Account Pagination (Finding #11):**
+    - Updated `api-gateway` `application.yml` global CORS configuration to replace wildcard `allowedOriginPatterns: "*"` with trusted origin patterns (`http://localhost:[*]`, `http://127.0.0.1:[*]`, `https://*.paypink.ph`, `https://*.cloudapp.azure.com`).
+    - Added optional `page` and `size` query parameter pagination to `AccountController.java` (`GET /api/v1/accounts`, `GET /api/v1/accounts/customers`) while maintaining full backward compatibility for unpaginated callers.
+  - **Documentation & Verification Suite Alignment:**
+    - Updated `docs/API_REFERENCE.md` reflecting Phase 10 RBAC resolution and Bug 11 CORS/pagination fixes.
+    - Updated Postman generator `scripts/generate_postman_collection.py` with `Admin@PayPink2026!` default admin credentials and pagination query parameters, regenerating `postman/PayPink_2.0_API_Reference_Collection.json`.
+    - Verified 100% test pass rate across `auth-service` (54/54), `account-service` (20/20), and `api-gateway` (22/22). — [dom]
+
+- 2026-10-08 — Complete Postman Collection for PayPink 2.0 API Reference:
+  - Created generator script `scripts/generate_postman_collection.py` and output file `postman/PayPink_2.0_API_Reference_Collection.json` (v2.1.0 schema).
+  - Includes 64 requests organized across 10 folders mirroring `docs/API_REFERENCE.md`: Authentication, Accounts & Beneficiaries, Remittance Saga, CQRS Activity, Admin Operations, Interest EOD, T24 Core SoR, Loans Lifecycle, Risk Engine, and Observability.
+  - Preconfigured with automated collection variable persistence for `customer_token`, `admin_token`, `customer_id`, `account_id`, `remittance_reference_no`, `loan_reference_no`, and dynamic GUID `Idempotency-Key` headers. — [dom]
+
+- 2026-10-08 — Security & API Bug Fixes Implementation (Excluding Bug #4):
+  - **Account Service IDOR & Parameter Hardening (`account-service`):** Enforced customer ownership checks and `ROLE_ADMIN` RBAC across `AccountController.java` (`/api/v1/accounts`, `/accounts/{accountId}`, `/accounts/customer/{customerId}`, `/accounts/customers`). Removed insecure query parameter (`?customerId=`) fallback for non-admins in `AccountController` and `BeneficiaryController.java` (`/recipients`, `/favorites`). Added `getAccountsByCustomerId` to safely return caller's accounts when non-admin accesses `/api/v1/accounts`.
+  - **Account DB Circuit Breaker 404 Resiliency (`account-service`):** Replaced generic `RuntimeException` with `ResponseStatusException(HttpStatus.NOT_FOUND)` on missing account and customer lookups in `AccountService.java`. Configured Resilience4j `ignore-exceptions: [org.springframework.web.server.ResponseStatusException]` in `application.yml` and added fallback pass-through to prevent 404 lookups from tripping the `accountDb` circuit breaker.
+  - **Ops Ingress Hardening (`api-gateway`):** Added `/api/v1/reconciliation`, `/api/v1/audit`, `/api/v1/analytics`, and `/api/v1/telemetry` to `ADMIN_PREFIXES` in `JwtAuthFilter.java`, blocking non-admin customer JWTs from initiating reconciliation sweeps or reading system-wide audit/telemetry logs.
+  - **Transaction Service Admin Monitor & Parameter Hardening (`transaction-service`):** Updated `AdminTransactionMonitorController.java` to fail-closed on missing `X-Auth-Roles` and enforce exact `ROLE_ADMIN` equality. Removed query param identity fallback in `TransactionQueryController.java` for non-admin callers (`/activity`, `/reports/transactions.pdf`).
+  - **Loan Disbursement Recovery Mechanism (`loan-service`):** Added administrative recovery endpoints `POST /loans/applications/{referenceNo}/retry` and `POST /loans/applications/{referenceNo}/reset` (backed by `adminRetryDisbursement` and `adminResetApplication` in `LoanDisbursementService.java`), resolving permanent `FAILED` deadlocks upon rejected core transfers while preserving duplicate disbursement idempotency (`LOAN-DISB-{ref}`).
+  - **T24 Idempotency Store Persistence (`t24-adapter`):** Upgraded `T24IdempotencyStore.java` to check persistent `t24.POSTING_JOURNAL` on cache miss, allowing double-entry posting responses and FT references to survive container restarts.
+  - **Legacy Route Deprecation (`auth-service`):** Marked shadowed/unreachable `recipients` and `favorites` endpoints in `BankingController.java` and `TransactionMonitorController.java` as `@Deprecated`.
+  - **Verification:** Ran test suites across all modified microservices (`account-service` 20/20, `api-gateway` 22/22, `transaction-service` 7/7, `loan-service` 42/42, `t24-adapter` 31/31, `auth-service` 53/53) — 100% test pass rate with zero regressions. — [dom]
+
+- 2026-10-08 — API Bug Verification & Reference Alignment (`docs/API_REFERENCE.md`):
+  - Verified historical bug reports against current codebase: confirmed `POST /ledger/mutate`, `POST /stress/**`, `POST /t24/**`, and legacy `POST /auth/banking/transfers` (410 GONE) are fixed/mitigated at the gateway perimeter.
+  - Verified Interest EOD missing day outage is fixed via administrative backfill proposal/approval workflows in `InterestEodService`.
+  - Confirmed persistent double-entry posting idempotency in `t24.POSTING_JOURNAL` and complete removal of client hold window in `RemittanceOrchestratorService`.
+  - Excluded interbank/external transfer (`ExternalTransferService`) findings from the active bug table in `docs/API_REFERENCE.md` as the module is under active development. Added finding on permanent failure status in `LoanDisbursementService`. — [dom]
+
+- 2026-10-08 — Updated `docs/API_REFERENCE.md` for post-refactor (T24 Core / DDD) architecture:
+  - Catalogued all API routes across the 11 microservices reflecting Phases 0–9 refactoring and removal of the 15-second client hold.
+  - Documented perimeter access rules in `api-gateway`: admin locks on `/api/v1/ledger/**`, `/api/v1/stress/**`, `/api/v1/t24/**`, `/api/v1/risk/**`, `/api/v1/accounts/**/status`, and `reset-balance`.
+  - Documented legacy path cutovers to `account-service` (`/recipients`, `/favorites`) and `transaction-service` (`/activity`, `/reports`, `/admin/today`).
+  - Recorded authoritative Core SoR role of `t24-adapter` (`t24.LOCKED_AMOUNT`, `t24.POSTING_JOURNAL`) and direct core banking dispatch in `RemittanceOrchestratorService`.
+  - Audited remaining open findings: external transfer domain leakage, unpaginated account lookups, and host port exposures. Documentation only; no application code changed. — [dom]
+
+- 2026-10-08 — Loan Interest Rate Set to a Flat 7% a Year:
+  - `microservices/loan-service/src/main/resources/application.yml` and `LoanProperties.defaults()`: `annual-rate` for all credit bands (LOW, NORMAL, HIGH) changed from 28.0 / 18.0 / 10.5 to 7.0. Band score ranges, max amounts and max terms are unchanged.
+  - Updated rate-dependent expectations in `LoanDecisionEngineTest`, `LoanFlowsTest` and `LoanServiceApplicationTest` (e.g. ₱250,000 / 36 mo installment now ₱7,719.27; 2% late fee ₱154.39). All 41 loan-service tests pass (run on JDK 19; JDK 25 breaks Mockito/ByteBuddy inline mocking).
+  - Only new offers use 7%: existing loans and already-issued offers keep the rate stored on their `t24.LOAN` / `app.LOAN_APPLICATION` rows.
+  - Packaged `target/loan-service.jar`, rebuilt and recreated the `loan-service` container; verified a new ₱20,000 / 12 mo offer shows 7% and ₱1,730.53 a month. — [dom]
+
+- 2026-10-08 — Loan Terms & Conditions Review Before Acceptance:
+  - `frontend/bank/loans.js`: the loan offer card's "Accept and receive" button is replaced by "Review and accept", which opens a "Review your loan agreement" modal (same pattern as "Review your transfer") showing key facts (amount and payout account, term, rate, monthly installment, approximate total to repay and interest), scrollable terms and conditions (disbursement finality, repayment, auto-debit authorization, 2% one-time late fee, no prepayment fee, Truth in Lending Act RA 3765 disclosure, Data Privacy Act RA 10173), and a required "I have read and agree" checkbox.
+  - The "Agree and receive" button stays disabled until the checkbox is ticked; the accept call (`POST /api/v1/loans/applications/{ref}/accept`) only fires from inside the modal. No backend or API contract change; mobile untouched.
+  - `frontend/bank/bank.css`: added `.loan-terms` / `.loan-terms-agree` styles; bumped `bank.css` and `loans.js` cache-busters in `frontend/bank/index.html`.
+  - Rebuilt and redeployed the `frontend` (`frontend-spa`) container; verified in browser (apply → offer → review modal; accept disabled until agreed). — [dom]
+- 2026-10-08 — PowerShell Encoding Fix & Native CMD Runner in `scripts/`:
+  - Replaced UTF-8 multi-byte em-dashes (`—`) with standard ASCII hyphens (`-`) in `scripts/run_jmeter_test.ps1` to prevent Windows PowerShell 5.1 from misinterpreting byte `0x94` as ANSI closing double-quote (`”`), fixing `TerminatorExpectedAtEndOfString`.
+  - Added native Windows Batch alternative `scripts/run_jmeter_test.bat` with identical auto-cleanup and browser launch behavior. — [dom]
+
+- 2026-10-08 — PowerShell Runner Syntax Fix in `run_jmeter_test.ps1`:
+  - Fixed PowerShell backtick line-continuation syntax in `scripts/run_jmeter_test.ps1` to prevent `TerminatorExpectedAtEndOfString` parser errors during CLI execution. — [dom]
+
+- 2026-10-08 — Automated JMeter CLI Runner Script with Report Auto-Cleanup:
+  - Created `scripts/run_jmeter_test.ps1` to automate JMeter CLI execution, handle previous report cleanup (preventing "folder is not empty" error), and automatically launch the HTML dashboard in the browser on completion. — [dom]
+
+- 2026-10-08 — T24 Core Remittance Saga JMeter Test Plan Cutover:
+  - Upgraded `performance/PayPink_800TPS_Stress_Plan.jmx` from legacy direct mutation to full PayPink 2.0 4-step Distributed Remittance Saga (`POST /api/v1/remittance/transfer`).
+  - Integrated dynamic customer authentication (`/api/v1/auth/banking/login`), dynamic per-thread `Idempotency-Key` headers, and verified end-to-end execution through Risk Engine ML, T24 Core Hold placement, and Ledger Settlement with 0.00% error rate. — [dom]
+
+- 2026-10-08 — JMeter Stress Test Plans & Load Test Script Upgrade (GUI & CLI):
+  - Updated `performance/PayPink_800TPS_Stress_Plan.jmx` and `docker/jmeter/balance_mutation_stress.jmx` with dynamic pre-authentication (`SetupThreadGroup`), Bearer JWT token extraction, and `Idempotency-Key` headers matching API Gateway RBAC (`ROLE_ADMIN`).
+  - Added GUI listeners (`View Results Tree` and `Summary Report`) to enable interactive execution directly within the Apache JMeter desktop application.
+  - Made duration latency assertions configurable via properties (`sla_mutation_ms` and `sla_redis_ms`) to accommodate host loopback networking.
+  - Updated `docker/jmeter/run_load_test.ps1` to authenticate via `/api/v1/auth/login` instead of deprecated `/api/v1/auth/demo-token`.
+  - Verified live CLI execution with 0% error rate on both test plans and load runner. — [dom]
+
+- 2026-10-08 — End-to-End Distributed Integration Test Suite (Node.js & PowerShell):
+  - Created standalone automated integration test runner `scripts/run_integration_tests.mjs` (and PowerShell wrapper `scripts/run_integration_tests.ps1`) using native Node.js fetch with zero external dependencies.
+  - Implemented 13 comprehensive end-to-end integration test scenarios across 7 domain suites: Authentication & RBAC (Customer & Admin), Live T24 Account & Balance Inquiry, 4-step Remittance Saga (ML risk scoring, T24 hold, ledger settlement), Concurrency & Idempotency double-spending protection (Redis), CQRS Activity read-store indexing, Kafka Event-Driven Immutable Audit persistence in PostgreSQL, Interest EOD Overview, and 12/12 Prometheus observability fleet health.
+  - Verified 100% pass rate (13/13 passed) against running live cluster via API Gateway (:8080). — [dom]
+
+- 2026-10-08 — Interest EOD Service Configuration & Overview Endpoint Fix:
+  - Enabled Interest EOD in `docker/docker-compose.yml` under `transaction-service` environment (`INTEREST_EOD_ENABLED=true`, `INTEREST_START_DATE=2026-10-01`, `INTEREST_POSTGRES_URL`, `INTEREST_POSTGRES_USERNAME`).
+  - Resolved `NoResourceFoundException: No static resource api/v1/interest/eod/overview` error on the Admin UI Interest page by activating `InterestEodController` bean.
+  - Recreated `transaction-service` container; verified `InterestAuditPool` PostgreSQL secondary pool startup and live HTTP 200 responses from `/api/v1/interest/eod/overview`. — [dom]
+
+- 2026-10-08 — Observability Dashboard Polish & Prometheus Target Alignment:
+  - Added `t24-adapter:8090` scrape config to `docker/prometheus.yml`, bringing the Active Healthy Microservices count to 12 (matching PayPink 2.0 active microservices directory).
+  - Resolved duplicate cards in Redis Idempotency Matrix panel by aggregating PromQL queries with `max(redis_up)` and `max(redis_connected_clients)`.
+  - Cleaned up Log Stream tables (Panel 12 & 13) in `paypink-observability-dashboard.json`: excluded raw `labels`, `tsNs`, and `id` columns, presenting clean `Time`, `Message Payload`, and `Jaeger Trace` links without horizontal clutter.
+  - Restarted Prometheus and Grafana containers and verified clean telemetry metrics and dashboard rendering. — [dom]
+
+- 2026-10-08 — Removal of Client-Side 15s Reversal / Direct Core Banking Dispatch:
+  - Removed client-side 15-second cancellation hold window from `frontend/bank/bank.js`: transfers submit directly without `cancelWindowSeconds` or countdown timer intercepts, immediately rendering receipts on core posting.
+  - Removed `applyClientWindow` intercept in `microservices/transaction-service`'s `RemittanceOrchestratorService.java`: transfers hold funds and immediately dispatch to T24 core banking rather than pausing in `Reserved` status.
+  - Preserved bank-side bounded retries (up to 3 retries with exponential backoff) and automated bank reversal in `RemittanceSagaWorker.java`: when core banking/service failures persist beyond max retries, the background worker automatically releases held funds with `INTERNAL_AUTO_REVERSED`.
+  - Updated `RemittanceSagaTest.java` test suite to verify direct core banking dispatch; all 24 unit tests pass cleanly.
+  - Rebuilt and deployed `transaction-service` and updated `frontend-spa`. — [dom]
+
+- 2026-10-08 — Branch Alignment & Docker Compose Parity on Main:
+  - Reconciled changes onto `main` following remote rename/merge of `refactor/domain-t24-core` into `main`.
+  - Ensured all automated setup script mounts in `docker/docker-compose.yml` (`05_t24_core.sql`, `06_interest.sql`, `04_interest_recovery.sql`, `05_interest_approval.sql`) are aligned and active on `main`.
+  - Updated active working branch in `memory-bank/CONTEXT.md` to `main`. — [dom]
+
+- 2026-10-08 — T24 Core Schema Migration & Docker Compose Full Volume Parity:
+  - Executed `scripts/migrate_phase2_t24_core.sql` on live Azure SQL container (`azure-sql-master`), creating `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables along with backward-compatible `dbo.*` synonyms.
+  - Verified `t24-adapter` hold placement and release endpoints (`/api/v1/t24/holds/lock` and `/holds/release`) succeed without SQL error `Invalid object name 't24.locked_amount'`.
+  - Updated `docker/docker-compose.yml` to mount `scripts/migrate_phase2_t24_core.sql` as `/mssql-server-setup-scripts.d/05_t24_core.sql:ro` and adjusted interest migration to `06_interest.sql:ro`.
+  - Mounted `scripts/migrate_interest_recovery_postgres.sql` and `scripts/migrate_interest_approval_postgres.sql` into PostgreSQL's `/docker-entrypoint-initdb.d/` (`04` and `05`) for complete fresh container provisioning parity on `docker compose down -v`. — [dom]
+
+- 2026-10-08 — Automated Azure SQL Fresh Volume Initialization in Docker Compose:
+  - Mounted `scripts/migrate_phase1_schema_split.sql` as `/mssql-server-setup-scripts.d/04_schema_split.sql:ro` and `scripts/migrate_interest_azuresql.sql` as `/mssql-server-setup-scripts.d/05_interest.sql:ro` in `docker/docker-compose.yml`.
+  - Ensures that when running `docker compose down -v` followed by `docker compose up`, SQL Server's automated setup executes all scripts in order (`01_schema` -> `02_loans` -> `03_seed` -> `04_schema_split` -> `05_interest`) with zero manual steps required. — [dom]
+
+- 2026-10-08 — Azure SQL Phase 1 Schema Split Migration & Auth Service Resolution:
+  - Executed `scripts/migrate_phase1_schema_split.sql` on local Azure SQL container (`azure-sql-master`), creating schemas `t24` and `app`, transferring tables (`CUSTOMER`, `BANKING_FAVORITE`, `AUDIT_LOG`, `OUTBOX_EVENT`, `REMITTANCE`, `LOAN_APPLICATION` to `app`; `ACCOUNT`, `LEDGER_TRANSACTION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT`, `EOD_JOB_RUN` to `t24`), and establishing `dbo.*` synonyms for full backward compatibility.
+  - Resolved `auth-service` startup crash loop caused by `Invalid object name 'app.customer'` during `DataInitializer` run.
+  - Verified live login endpoints through `api-gateway`: Admin login (`/api/v1/auth/login`) returns HTTP 200 with `ROLE_ADMIN`, and Bank customer login (`/api/v1/auth/banking/login`) returns HTTP 200 with customer JWT and profile. — [dom]
+
+- 2026-10-08 — Interest EOD Schema Provisioning (PostgreSQL & Azure SQL):
+  - Applied `scripts/migrate_interest_postgres.sql` to live PostgreSQL `ledger_audit_db`, provisioning immutable tables `interest_accrual`, `interest_accrual_batch`, `interest_backfill_proposal`, and `interest_backfill_approval` with audit truncate/update guard triggers and rules.
+  - Applied `scripts/migrate_interest_azuresql.sql` to live Azure SQL Server, adding `interest_rate` column to `t24.ACCOUNT` and creating `t24.EOD_JOB_RUN` with backward-compatible `dbo.EOD_JOB_RUN` synonym.
+  - Mounted `./../scripts/migrate_interest_postgres.sql` as `/docker-entrypoint-initdb.d/03_interest.sql` in `docker/docker-compose.yml` for automated fresh container provisioning.
+  - Aligned `scripts/migrate_interest_azuresql.sql` with Phase 1 DDD schema split (`t24.*`). — [dom]
+
+- 2026-10-08 — PostgreSQL Notification Schema Provisioning & Volume Fix:
+  - Created missing microservices/notification-service/src/main/resources/schema-postgres.sql defining the NOTIFICATION table (UQ on reference_no, account_id).
+  - Provisioned the NOTIFICATION table in PostgreSQL ledger_audit_db, eliminating consumer failures in notification-service.
+  - Corrected Docker Compose PostgreSQL init mount path from legacy backend/ directory to microservices/ directory.
+  - Restarted notification-service; Kafka consumer group rebalanced and operational across remittance.events and ledger.transaction.events. — [dom]
+
+- 2026-10-08 — Account Service Live Balance Client Fix & Frontend Guard:
+  - Resolved 500 Internal Server Error on /api/v1/accounts/customers and /api/v1/accounts/customer/{id} by adding missing MediaType import in T24AccountClient and cleanly recompiling/restarting account-service.
+  - Added null element guards in frontend/src/js/app.js (testScenario) preventing unhandled TypeError when rendering admin tabs without perimeter badge elements.
+  - Reloaded nginx static assets in frontend-spa; confirmed 200 OK responses with live T24 balances on customer directory endpoints. — [dom]
+
+- 2026-10-08 — Transfer Saga Double-Debit/Credit Fix & Hold Deadlock Elimination:
+  - Eliminated duplicate balance deductions and credits during transfers in RemittanceLedgerService: when T24 Core double-entry posting succeeds (ftReference != null), local SQL balance updates on dbo.ACCOUNT are skipped because T24PostingService has already authoritatively settled both legs on t24.ACCOUNT.
+  - Eliminated distributed HTTP-to-SQL deadlock between transaction-service and t24-adapter by removing conflicting WITH (UPDLOCK, ROWLOCK) hints in RemittanceLedgerService.resolveAccount.
+  - Corrected T24HoldClient HTTP request routing and MediaType.APPLICATION_JSON negotiation with T24HoldController.
+  - Fixed API Gateway RewritePath regex syntax for recipient and favorite routes.
+  - Verified clean container rebuild and live deployment of transaction-service. — [dom]
+
+- 2026-10-08 — Phase 9: Frontend Polish, Synonym Cleanup Script & Final Global Test Verification:
+  - Verified `mobile/` directory remains 100% frozen with zero diffs against `pre-domain-refactor` baseline tag; confirmed strict backward compatibility across all 6 core mobile API contracts.
+  - Verified Web SPA (`frontend/`) contracts, routes, and API clients seamlessly operate against refactored backend and API gateway routing.
+  - Generated idempotent synonym retirement script `scripts/retire_phase9_synonyms.sql` to drop transitional `dbo.*` synonyms once all services communicate via direct `t24.*` and `app.*` schemas.
+  - Verified 100% test pass rate across all microservices (api-gateway: 20/20, account-service: 17/17, t24-adapter: 30/30, loan-service: 41/41, transaction-service: 105/105, audit-service: 10/10, reconciliation-service: 8/8, notification-service: 16/16, outbox-publisher: 9/9, analytics-service: 17/17).
+  - All 10 phases (Phase 0 through Phase 9) of PayPink 2.0 T24 Core Banking and DDD Architecture Refactoring successfully completed. — [dom]
+
+- 2026-10-08 — Phase 8: Events, Audit & Reconciliation Re-point:
+  - Audited and verified event consumption pipelines for T24 Core double-entry ledger postings across `remittance.events` and `ledger.transaction.events`.
+  - Confirmed `audit-service` immutably captures `LEDGER_MUTATION_AUDIT` records in PostgreSQL for all transfer, loan, and interest debits.
+  - Confirmed `reconciliation-service` reconciles `t24.LEDGER_TRANSACTION` against PostgreSQL audit logs with zero drift across real-time and scheduled jobs.
+  - Confirmed `notification-service` dispatches multi-channel alerts and `analytics-service` streams ledger metrics with dedicated consumer groups.
+  - All test suites passing cleanly: audit-service (10/10), reconciliation-service (8/8), notification-service (16/16), outbox-publisher (9/9), and analytics-service (17/17). — [dom]
+
+- 2026-10-08 — Phase 7: EOD Service Alignment:
+  - Aligned `InterestLedger` in `transaction-service` with Phase 1 DDD schema boundaries, qualifying raw SQL operations to `t24.ACCOUNT`, `t24.EOD_JOB_RUN`, `t24.LEDGER_TRANSACTION`, and `app.OUTBOX_EVENT`.
+  - Verified Interest EOD accrual and monthly posting flows, with outbox events emitted for downstream ledger consumers.
+  - Verified Loan EOD in `loan-service`: auto-debits route via `transaction-service` internal saga to settle against T24 Core double-entry ledger.
+  - All unit test suites passed cleanly: Interest EOD suite (53/53 passed) and Loan test suite (36/36 passed). — [dom]
+
+- 2026-10-08 — Phase 6: Auth Slimming & Loan Service Alignment:
+  - Slimmed `auth-service` perimeter responsibilities by introducing API Gateway backward-compatible routing cutovers: mapped legacy `/api/v1/auth/admin/transactions/today` to `transaction-service` CQRS monitor (`/api/v1/transactions/admin/today`), and legacy `/api/v1/auth/banking/recipients/**` and `/favorites/**` to `account-service` (`/api/v1/accounts/recipients/**` and `/favorites/**`).
+  - Verified loan money movements in `loan-service`: loan disbursements (`LOAN_DISBURSEMENT`) and loan repayments (`LOAN_REPAYMENT`) route exclusively through the internal saga orchestrator in `transaction-service` to post double-entry entries in T24 Core (`t24.POSTING_JOURNAL`).
+  - Ran and verified unit test suites across affected domains: loan-service (41/41 passing), api-gateway (20/20 passing), account-service (17/17 passing), t24-adapter (30/30 passing), and transaction-service (105/105 passing). — [dom]
+
+- 2026-10-08 — Phase 5: Account Service Consolidation:
+  - Added authoritative Core Account balance inquiry endpoint in `t24-adapter`: `GET /api/v1/t24/accounts/{accountIdOrNumber}/balance` with `T24AccountInquiryControllerTest` (2/2 passing, 30/30 total in `t24-adapter`).
+  - Built `T24AccountClient` in `account-service` to query live core account balances from T24 Core.
+  - Added `getUserProfile` and `GET /api/v1/accounts/me` to `account-service` serving customer profile and accounts with live core balances.
+  - Ported recipient lookup, directory, and favorites management into `account-service` via `BeneficiaryService` and `BeneficiaryController` (`/api/v1/accounts/recipients/**` and `/favorites/**`).
+  - Added test suite `AccountConsolidationControllerTest` (5/5 passing). All 17/17 unit tests in `account-service` passing cleanly. — [dom]
+
+- 2026-10-07 — Phase 4: Transaction History & CQRS Read-Model Consolidation:
+  - Added Apache PDFBox 3.0.8 dependency to `transaction-service`.
+  - Built CQRS query layer in `transaction-service`: `TransactionActivityService` (customer transaction activity with counterparty details), `TransactionStatementReportService` (PDF statement export), and `AdminTransactionMonitorService` (Operations Desk real-time feed).
+  - Implemented `TransactionQueryController` (`GET /api/v1/transactions/activity` and `GET /api/v1/transactions/reports/transactions.pdf`) and `AdminTransactionMonitorController` (`GET /api/v1/transactions/admin/today`).
+  - Added `transaction-queries` route in `api-gateway` and added `/api/v1/transactions/admin` to `ADMIN_PREFIXES` in `JwtAuthFilter`.
+  - Created test suite `TransactionQueryControllerTest` (5/5 passing). All 81/81 unit tests in `transaction-service` and 20/20 in `api-gateway` passing cleanly. — [dom]
+
+- 2026-10-07 — Phase 3: Remittance Saga Hold Integration & Cutover:
+  - Built `T24HoldClient` in `transaction-service` with circuit breaker and fallback support calling `t24-adapter` (`/api/v1/t24/holds/lock` and `/api/v1/t24/holds/release`).
+  - Configured `app.t24-adapter.base-url` in `transaction-service`'s `application.yml`.
+  - Refactored `RemittanceLedgerService` to delegate hold placement (`holdFunds`) and hold releases (`releaseHoldFunds`, `cancelAndReleaseHold`) to `t24HoldClient` with seamless fallback for backward compatibility.
+  - Added test suite `T24HoldIntegrationTest` verifying hold placement delegation, rejection exception handling, and cancellation/reversal release calls. All 76/76 unit tests passing cleanly in `transaction-service`. — [dom]
+
+- 2026-10-07 — Phase 2: Stateful T24 Core Banking Engine (Sub-phases 2a, 2b, 2c):
+  - Sub-phase 2a (Persistence & Schema): Created migration script `scripts/migrate_phase2_t24_core.sql` adding `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables with `dbo.*` synonyms; created `scripts/rollback_phase2_t24_core.sql`. Applied migration to local SQL Server. Added Spring Data JPA and SQL Server dependencies to `t24-adapter` (`pom.xml`, `application.yml`, and `docker-compose.yml`). Created JPA entities (`Account`, `LockedAmount`, `PostingJournal`) and repositories (`AccountRepository`, `LockedAmountRepository`, `PostingJournalRepository`).
+  - Sub-phase 2b (Hold/Lock Engine): Built `T24HoldService` and `T24HoldController` providing `POST /api/v1/t24/holds/lock`, `POST /api/v1/t24/holds/release`, and `GET /api/v1/t24/holds/{referenceNo}` with atomic pessimistic locking, available balance verification, and idempotent hold management.
+  - Sub-phase 2c (Double-Entry Posting Journal): Built `T24PostingService` and integrated into `T24SimulatorController` to atomically settle holds, deduct debit balance, credit target balance, and record immutable double-entry records in `t24.POSTING_JOURNAL`. Added unit test suites `T24CorePersistenceTest`, `T24HoldServiceTest`, `T24HoldControllerTest`, `T24PostingServiceTest` (all 28/28 passing in `t24-adapter`). — [dom]
+
+- 2026-10-07 — Phase 1: Azure SQL Schema Split (T24 Core vs Application):
+  - Created idempotent migration script `scripts/migrate_phase1_schema_split.sql` establishing `t24` and `app` schemas, dynamically removing cross-boundary foreign key constraints, transferring domain tables (`ACCOUNT`, `LEDGER_TRANSACTION`, `LOAN`, `LOAN_SCHEDULE`, `LOAN_REPAYMENT`, `EOD_JOB_RUN` -> `t24`; `CUSTOMER`, `BANKING_FAVORITE`, `AUDIT_LOG`, `OUTBOX_EVENT`, `REMITTANCE`, `LOAN_APPLICATION` -> `app`), and creating backward-compatible `dbo.*` synonyms.
+  - Created corresponding rollback script `scripts/rollback_phase1_schema_split.sql`.
+  - Qualified JPA `@Table(schema = "...")` annotations across all microservices: `account-service` (Account, Customer), `auth-service` (Customer), `loan-service` (Loan, LoanApplication, LoanRepayment, LoanSchedule, OutboxEvent), `outbox-publisher` (OutboxEvent), `reconciliation-service` (TransactionRecord), `transaction-service` (Account, AuditLog, OutboxEvent, Remittance, TransactionRecord).
+  - Executed and validated migration script on local SQL Server container `azure-sql-master`; verified synonym resolution and queries. All test suites pass cleanly across microservices. — [dom]
+
+- 2026-10-07 — Phase 0: Perimeter Lockdown and Bypass Elimination:
+  - Enforced `ROLE_ADMIN` in `api-gateway` (`JwtAuthFilter.java`) for `/api/v1/accounts/*/reset-balance`, `/api/v1/accounts/*/status`, `/api/v1/stress/**`, `/api/v1/ledger/**`, and internal core/risk routes `/api/v1/t24/**` and `/api/v1/risk/**`. Added 4 unit tests (20/20 passing).
+  - Added defense-in-depth `ROLE_ADMIN` assertion in `account-service` (`AccountController.java`) for status updates and balance reset endpoints; added unit test suite `AccountControllerTest.java` (12/12 passing).
+  - Deprecated unscored direct transfer bypass in `auth-service` (`POST /api/v1/auth/banking/transfers`) with `410 GONE`, redirecting all transfers to `/api/v1/remittance/transfer` via Remittance Orchestrator. Updated unit test suite (3/3 passing). — [dom]
+
+- 2026-10-07 — Safety Net Phase & Baseline Checkpoint for Domain Architecture Refactor:
+  - Committed untracked documentation (`docs/project-review.md`) and pushed 17 commits on `feature/capstone2-paypink-2.0-dom` to GitHub.
+  - Created and pushed immutable fallback tag `pre-domain-refactor` to GitHub remote.
+  - Created isolated refactor branch `refactor/domain-t24-core`.
+  - Executed unit test baseline: api-gateway (16/16), account-service (9/9), t24-adapter (11/11), transaction-service (96/96), loan-service (41/41), audit-service (10/10) all passing cleanly. Recorded pre-existing timezone failure in auth-service (52/53).
+  - Confirmed mobile directory (`mobile/`) remains frozen and untouched. — [dom]
+
+- 2026-10-07 — Implemented single-admin simulation workflow and deployed Interest Admin UI:
+  - Allowed same-admin historical backfill submission and separate review/approval in `InterestEodService.java` while recording distinct audit entries.
+  - Applied `scripts/migrate_interest_single_admin_postgres.sql` to PostgreSQL `postgres-immutable-audit` container to drop same-admin trigger guard.
+  - Configured and deployed `transaction-service` container in local Docker network with active Interest EOD schedule, PostgreSQL audit writer credentials, and Azure SQL data source.
+  - Integrated Interest operations tab and UI in `frontend/admin/interest.js`, `interest.css`, `admin.js`, and `frontend/index.html` with month selector, missing days listing, historical balance submission, and review/approval flows. Rebuilt and redeployed `frontend-spa` container.
+  - Verified backend test suite (96 tests passed) and frontend HTTP delivery. — [dom / aly]
+
+- 2026-10-06 - Replaced interest waivers with independently approved historical backfills in transaction-service/orchestrator/interest. `/resolve` now prepares an immutable proposal; admin review and approval endpoints require a different preparer/checker identity. Missing days remain unresolved until approval, snapshots and completion commit atomically; API and PostgreSQL reject waivers and self-approval. Added migrate_interest_approval_postgres.sql plus bootstrap/full migration definitions, immutable proposal/approval records, replay/concurrency/rollback coverage and updated EOD docs/ERD. Restored the existing 23:59:59 default cutoff while retaining scheduled-date and midnight guards. Validation: 94/94 transaction-service tests passed, including 23 native PostgreSQL 15/SQL Server 2022 tests; disposable containers removed. Not deployed: apply recovery then approval migrations and rebuild transaction-service, preserving runtime start date, cutoff and connection settings. Legacy sealed corrections and delayed-capitalization compensation require a separate adjustment process. - aly
+
+- 2026-10-06 - Fixed interest EOD missed-day recovery in transaction-service/orchestrator/interest: default cutoff 23:55, scheduled business date retained across queue delays, guard against midnight capture, admin missing-date listing and immutable BACKFILL/WAIVER resolutions with identity/reason/source/confirmation and replay checks. Hourly recovery reports missing periods and continues complete later periods. Added PostgreSQL recovery migration, API docs and regressions including September 20-30 customer accrual. Validation: 90/90 transaction-service tests passed, including 20 native PostgreSQL 15/SQL Server 2022 tests and HTTP validation/authorization tests. Disposable containers removed. This fix has not been deployed; apply migrate_interest_recovery_postgres.sql, rebuild transaction-service and change the existing runtime cron override from 23:59:59 to 23:55. - aly
 - 2026-10-06 — CI/CD Port 80 Exposing & Automated Database Migration Step:
   - **Port 80/3001 Dual Binding (`docker/docker-compose.yml`):** Exposed `80:80` alongside `3001:80` for `frontend-spa` container, resolving `curl: (7) Failed to connect to localhost port 80` in the CI/CD deployment health check and aligning host ingress with Azure NSG Rule 110.
   - **Automated Schema Migration (`.github/workflows/pipeline.yml`):** Added post-startup `Apply additive database migrations` step executing `migrate_phase6_reversals.sql`, `migrate_transaction_monitoring.sql`, `migrate_phase6_loans.sql`, `migrate_reconciliation_fix.sql`, and `migrate_interest_*.sql` on live containers, resolving `Invalid column name 'cancel_until'` in `transaction-service`.

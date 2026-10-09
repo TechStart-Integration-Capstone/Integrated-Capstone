@@ -35,7 +35,7 @@ class LoanDecisionEngineTest {
     }
 
     @Test
-    @DisplayName("TC-LD-01: NORMAL customer asks 250,000 / 36 → APPROVED 18%, 9,038.10")
+    @DisplayName("TC-LD-01: NORMAL customer asks 250,000 / 36 → APPROVED 7%, 7,719.27")
     void tcLd01_normalApproved() {
         LoanDecisionEngine.Decision d = engine.decide(670, bd("45000"), bd("250000.00"), 36, false, BigDecimal.ZERO);
 
@@ -43,23 +43,23 @@ class LoanDecisionEngineTest {
         assertThat(d.band()).isEqualTo("NORMAL");
         assertThat(d.amount()).isEqualByComparingTo("250000.00");
         assertThat(d.termMonths()).isEqualTo(36);
-        assertThat(d.annualRate()).isEqualByComparingTo("18.0");
-        assertThat(d.monthlyInstallment()).isEqualByComparingTo("9038.10");
+        assertThat(d.annualRate()).isEqualByComparingTo("7.0");
+        assertThat(d.monthlyInstallment()).isEqualByComparingTo("7719.27");
     }
 
     @Test
-    @DisplayName("TC-LD-02: HIGH customer asks 1,000,000 / 60 → APPROVED 10.5%, 21,493.90")
+    @DisplayName("TC-LD-02: HIGH customer asks 1,000,000 / 60 → APPROVED 7%, 19,801.20")
     void tcLd02_highApproved() {
         LoanDecisionEngine.Decision d = engine.decide(800, bd("150000"), bd("1000000"), 60, false, BigDecimal.ZERO);
 
         assertThat(d.decision()).isEqualTo("APPROVED");
         assertThat(d.band()).isEqualTo("HIGH");
-        assertThat(d.annualRate()).isEqualByComparingTo("10.5");
-        assertThat(d.monthlyInstallment()).isEqualByComparingTo("21493.90");
+        assertThat(d.annualRate()).isEqualByComparingTo("7.0");
+        assertThat(d.monthlyInstallment()).isEqualByComparingTo("19801.20");
     }
 
     @Test
-    @DisplayName("TC-LD-03: LOW customer asks 100,000 / 24 → COUNTER_OFFER 30,000 / 12 at 28%, 2,895.18")
+    @DisplayName("TC-LD-03: LOW customer asks 100,000 / 24 → COUNTER_OFFER 30,000 / 12 at 7%, 2,595.80")
     void tcLd03_lowCounterOffer() {
         LoanDecisionEngine.Decision d = engine.decide(520, bd("20000"), bd("100000"), 24, false, BigDecimal.ZERO);
 
@@ -67,8 +67,8 @@ class LoanDecisionEngineTest {
         assertThat(d.band()).isEqualTo("LOW");
         assertThat(d.amount()).isEqualByComparingTo("30000.00");
         assertThat(d.termMonths()).isEqualTo(12);
-        assertThat(d.annualRate()).isEqualByComparingTo("28.0");
-        assertThat(d.monthlyInstallment()).isEqualByComparingTo("2895.18");
+        assertThat(d.annualRate()).isEqualByComparingTo("7.0");
+        assertThat(d.monthlyInstallment()).isEqualByComparingTo("2595.80");
     }
 
     @Test

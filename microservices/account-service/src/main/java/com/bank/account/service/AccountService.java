@@ -31,20 +31,36 @@ public class AccountService {
     private final CustomerRepository customerRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final com.bank.account.client.T24AccountClient t24AccountClient;
 
     public AccountService(AccountRepository accountRepository,
                           CustomerRepository customerRepository,
                           StringRedisTemplate redisTemplate,
                           ObjectMapper objectMapper) {
+        this(accountRepository, customerRepository, redisTemplate, objectMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AccountService(AccountRepository accountRepository,
+                          CustomerRepository customerRepository,
+                          StringRedisTemplate redisTemplate,
+                          ObjectMapper objectMapper,
+                          com.bank.account.client.T24AccountClient t24AccountClient) {
         this.accountRepository = accountRepository;
         this.customerRepository = customerRepository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.t24AccountClient = t24AccountClient;
     }
 
     @Transactional(readOnly = true)
     public List<AccountDto> getAllAccounts() {
         return accountRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AccountDto> getAccountsByCustomerId(Long customerId) {
+        return accountRepository.findByCustomerId(customerId).stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
     /**
@@ -58,7 +74,8 @@ public class AccountService {
     @Transactional(readOnly = true)
     public AccountDto getAccountById(Long accountId) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("Account ID " + accountId + " not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Account ID " + accountId + " not found."));
         AccountDto dto = mapToDto(account);
         cacheAccount(dto);
         return dto;
@@ -69,6 +86,9 @@ public class AccountService {
      * Response includes mayBeStale=true so the caller knows this is not a live value.
      */
     public AccountDto getAccountByIdFallback(Long accountId, Throwable ex) {
+        if (ex instanceof org.springframework.web.server.ResponseStatusException rse) {
+            throw rse;
+        }
         log.warn("[account-service] Circuit breaker fallback for accountId={} reason={}",
                 accountId, ex.getMessage());
         String cached = redisTemplate.opsForValue().get(CACHE_PREFIX + accountId);
@@ -92,7 +112,8 @@ public class AccountService {
     @Transactional(readOnly = true)
     public CustomerDto getCustomerProfile(Long customerId) {
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Customer not found"));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Customer not found"));
         CustomerDto dto = new CustomerDto(customer.getCustomerId(), customer.getUsername(),
                 customer.getFirstName(), customer.getLastName(), customer.getEmail(),
                 customer.getContactNo(), customer.getStatus(), customer.getCreatedDate());
@@ -105,6 +126,9 @@ public class AccountService {
     }
 
     public CustomerDto getCustomerProfileFallback(Long customerId, Throwable ex) {
+        if (ex instanceof org.springframework.web.server.ResponseStatusException rse) {
+            throw rse;
+        }
         log.warn("[account-service] Circuit breaker fallback for customerId={} reason={}",
                 customerId, ex.getMessage());
         throw new RuntimeException("Customer profile is currently unavailable. Please try again shortly.");
@@ -126,7 +150,8 @@ public class AccountService {
     @Transactional
     public AccountDto updateAccountStatus(Long accountId, String status) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("Account ID " + accountId + " not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Account ID " + accountId + " not found."));
         account.setStatus(status.toUpperCase());
         return mapToDto(accountRepository.save(account));
     }
@@ -134,7 +159,8 @@ public class AccountService {
     @Transactional
     public CustomerDto updateCustomerStatus(Long customerId, String status) {
         Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Customer ID " + customerId + " not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Customer ID " + customerId + " not found."));
         customer.setStatus(status.toUpperCase());
         customerRepository.save(customer);
         return getCustomerProfile(customerId);
@@ -143,7 +169,8 @@ public class AccountService {
     @Transactional
     public AccountDto resetAccountBalance(Long accountId, BigDecimal targetBalance) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new RuntimeException("Account not found."));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Account not found."));
         account.setCurrentBalance(targetBalance);
         AccountDto dto = mapToDto(accountRepository.save(account));
         cacheAccount(dto);
@@ -162,8 +189,49 @@ public class AccountService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public com.bank.account.dto.UserProfileDto getUserProfile(Long customerId) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.UNAUTHORIZED, "Please log in again."));
+
+        List<com.bank.account.dto.UserProfileDto.AccountSummaryDto> summaries = accountRepository.findByCustomerId(customerId)
+                .stream().map(a -> {
+                    BigDecimal balance = a.getCurrentBalance();
+                    if (t24AccountClient != null) {
+                        var live = t24AccountClient.getLiveBalance(a.getAccountNumber());
+                        if (live.isPresent()) {
+                            balance = live.get().currentBalance();
+                        }
+                    }
+                    return new com.bank.account.dto.UserProfileDto.AccountSummaryDto(
+                            a.getAccountId(),
+                            a.getAccountNumber(),
+                            a.getAccountType(),
+                            a.getCurrency(),
+                            balance,
+                            a.getStatus()
+                    );
+                }).collect(Collectors.toList());
+
+        return new com.bank.account.dto.UserProfileDto(
+                customer.getFirstName(),
+                customer.getFirstName() + " " + customer.getLastName(),
+                customer.getUsername(),
+                customer.getEmail(),
+                summaries
+        );
+    }
+
     private AccountDto mapToDto(Account a) {
+        BigDecimal balance = a.getCurrentBalance();
+        if (t24AccountClient != null) {
+            var live = t24AccountClient.getLiveBalance(a.getAccountNumber());
+            if (live.isPresent()) {
+                balance = live.get().currentBalance();
+            }
+        }
         return new AccountDto(a.getAccountId(), a.getCustomerId(), a.getAccountNumber(),
-                a.getAccountType(), a.getCurrency(), a.getCurrentBalance(), a.getStatus(), a.getCreatedDate());
+                a.getAccountType(), a.getCurrency(), balance, a.getStatus(), a.getCreatedDate());
     }
 }

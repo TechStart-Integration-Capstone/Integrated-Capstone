@@ -1,0 +1,3154 @@
+{
+  "info": {
+    "_postman_id": "581fba36-b959-49db-928b-ffef673f6cbe",
+    "name": "PayPink 2.0 \u2014 Complete API Reference & Verification Suite",
+    "description": "Comprehensive Postman Collection covering all 11 microservices and every API endpoint documented in docs/API_REFERENCE.md.\n\nIncludes dynamic token extraction, customer vs. admin authorization headers, idempotency keys, and automated assertion scripts.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "customer_username",
+      "value": "jdelacruz",
+      "type": "string"
+    },
+    {
+      "key": "customer_password",
+      "value": "password123",
+      "type": "string"
+    },
+    {
+      "key": "admin_username",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "admin_password",
+      "value": "Admin@PayPink2026!",
+      "type": "string"
+    },
+    {
+      "key": "customer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customer_id",
+      "value": "10",
+      "type": "string"
+    },
+    {
+      "key": "account_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "source_account_no",
+      "value": "001181233469",
+      "type": "string"
+    },
+    {
+      "key": "target_account_no",
+      "value": "001133218709",
+      "type": "string"
+    },
+    {
+      "key": "remittance_reference_no",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "loan_reference_no",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "loan_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "backfill_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication & Identity (auth-service :8081)",
+      "item": [
+        {
+          "name": "POST Customer Login (/api/v1/auth/banking/login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "login"
+              ]
+            },
+            "description": "Authenticates a retail banking customer and captures JWT into {{customer_token}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customer_username}}\",\n  \"password\": \"{{customer_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Customer JWT token received', function () {",
+                  "    pm.expect(jsonData.token).to.be.a('string');",
+                  "    pm.collectionVariables.set('customer_token', jsonData.token);",
+                  "    if (jsonData.customerId) pm.collectionVariables.set('customer_id', String(jsonData.customerId));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Admin Login (/api/v1/auth/login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Authenticates the administrator and stores admin JWT with ROLE_ADMIN into {{admin_token}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{admin_username}}\",\n  \"password\": \"{{admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Admin JWT token received with ROLE_ADMIN', function () {",
+                  "    pm.expect(jsonData.token).to.be.a('string');",
+                  "    pm.expect(jsonData.roles).to.include('ROLE_ADMIN');",
+                  "    pm.collectionVariables.set('admin_token', jsonData.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Customer Self-Registration (/api/v1/auth/banking/register)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "register"
+              ]
+            },
+            "description": "Registers a new customer profile.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"user_{{$randomInt}}\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Juan\",\n  \"lastName\": \"Dela Cruz\",\n  \"email\": \"user_{{$randomInt}}@paypink.ph\",\n  \"contactNo\": \"+639171234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created or 409 Conflict', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Legacy Profile (/api/v1/auth/banking/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "me"
+              ]
+            },
+            "description": "Legacy profile endpoint in auth-service (superseded by /api/v1/accounts/me)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Legacy Customer Transactions (/api/v1/auth/banking/transactions)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "transactions"
+              ]
+            },
+            "description": "Legacy transactions feed in auth-service."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Legacy PDF Report (/api/v1/auth/banking/reports/transactions.pdf)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/reports/transactions.pdf?accountId={{account_id}}&from=2026-10-01&to=2026-10-08",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "reports",
+                "transactions.pdf"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{account_id}}"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-10-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-10-08"
+                }
+              ]
+            },
+            "description": "Legacy PDF statement in auth-service."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Legacy Transfer [Deprecated 410 Gone] (/api/v1/auth/banking/transfers)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "transfers"
+              ]
+            },
+            "description": "Confirms direct SQL update transfers are permanently deprecated with HTTP 410 Gone.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountNumber\": \"001181233469\",\n  \"targetAccountNumber\": \"001133218709\",\n  \"amount\": 100.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 410 Gone (direct SQL bypass prevented)', function () {",
+                  "    pm.response.to.have.status(410);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET External Recipients (/api/v1/auth/banking/external/recipients)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/external/recipients",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "external",
+                "recipients"
+              ]
+            },
+            "description": "Returns predefined external recipient banks."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET External Transfers History (/api/v1/auth/banking/external/transfers)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/external/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "external",
+                "transfers"
+              ]
+            },
+            "description": "Returns external transfer history for current user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST External Transfer (/api/v1/auth/banking/external/transfers)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/banking/external/transfers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "banking",
+                "external",
+                "transfers"
+              ]
+            },
+            "description": "Initiates an external interbank transfer (under active development).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountNumber\": \"{{source_account_no}}\",\n  \"recipientBankCode\": \"BDO_UNIBANK\",\n  \"recipientAccountNumber\": \"10987654321\",\n  \"recipientName\": \"Maria Santos\",\n  \"amount\": 250.0,\n  \"channel\": \"INSTAPAY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Account & Customer Domain (account-service :8082)",
+      "item": [
+        {
+          "name": "GET Signed-in Customer Profile (/api/v1/accounts/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "me"
+              ]
+            },
+            "description": "Retrieves live user profile and balances for the caller identified by X-Auth-Customer-Id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains profile and accounts', function () {",
+                  "    pm.expect(jsonData.username).to.be.a('string');",
+                  "    pm.expect(jsonData.accounts).to.be.an('array');",
+                  "    if (jsonData.accounts.length > 0) {",
+                  "        pm.collectionVariables.set('account_id', String(jsonData.accounts[0].accountId));",
+                  "        pm.collectionVariables.set('source_account_no', jsonData.accounts[0].accountNumber);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Accounts (Scoped to Customer) (/api/v1/accounts)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts?page=0&size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Returns caller's accounts when authenticated as customer, or all accounts when caller is admin (supports ?page=&size= pagination)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Returns array of accounts for caller', function () { pm.expect(jsonData).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Account by ID (/api/v1/accounts/{accountId})",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/{{account_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{account_id}}"
+              ]
+            },
+            "description": "Returns balance and details for the specified account ID (enforces ownership)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains balance and status', function () {",
+                  "    pm.expect(jsonData.currentBalance).to.not.be.undefined;",
+                  "    pm.expect(jsonData.status).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Customer Profile by ID (/api/v1/accounts/customer/{customerId})",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/customer/{{customer_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "customer",
+                "{{customer_id}}"
+              ]
+            },
+            "description": "Returns customer details and linked accounts (enforces customer ownership)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET All Customers [Admin Only \ud83d\udc51] (/api/v1/accounts/customers)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/customers?page=0&size=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "customers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Admin-only endpoint listing all registered customers in the system (supports ?page=&size= pagination)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK for Admin', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Returns all customers list', function () { pm.expect(jsonData).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Update Account Status [Admin Only \ud83d\udc51] (/api/v1/accounts/{accountId}/status)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/{{account_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{account_id}}",
+                "status"
+              ]
+            },
+            "description": "Sets account status (ACTIVE, FROZEN, CLOSED) \u2014 requires ROLE_ADMIN.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Reset Account Balance [Admin Only \ud83d\udc51] (/api/v1/accounts/{accountId}/reset-balance)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/{{account_id}}/reset-balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{account_id}}",
+                "reset-balance"
+              ]
+            },
+            "description": "Admin utility to reset test account balances for stress demonstrations.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetBalance\": 10000.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Recipient Lookup (/api/v1/accounts/recipients/lookup)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/recipients/lookup?accountNumber={{target_account_no}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "recipients",
+                "lookup"
+              ],
+              "query": [
+                {
+                  "key": "accountNumber",
+                  "value": "{{target_account_no}}"
+                }
+              ]
+            },
+            "description": "Looks up recipient account number before initiating a transfer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Recipient confirmed', function () { pm.expect(jsonData.fullName).to.be.a('string'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Recipient Directory (/api/v1/accounts/recipients)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/recipients",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "recipients"
+              ]
+            },
+            "description": "Returns favorite and recent recipients directory."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Save Favorite Recipient (/api/v1/accounts/favorites)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/favorites",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "favorites"
+              ]
+            },
+            "description": "Adds target account to customer's favorites list.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"{{target_account_no}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE Remove Favorite Recipient (/api/v1/accounts/favorites/{accountNumber})",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/accounts/favorites/{{target_account_no}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "favorites",
+                "{{target_account_no}}"
+              ]
+            },
+            "description": "Removes target account from favorites."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 204 No Content', function () { pm.response.to.have.status(204); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Remittance Saga Engine (transaction-service :8083)",
+      "item": [
+        {
+          "name": "GET Remittance Health (Public) (/api/v1/remittance/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "health"
+              ]
+            },
+            "description": "Public health check for the Remittance saga orchestrator."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Liveness UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Execute Distributed Remittance Saga (/api/v1/remittance/transfer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "transfer"
+              ]
+            },
+            "description": "Executes the full 4-step distributed transfer saga (Idempotency -> Fraud scoring -> T24 hold -> Ledger posting).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"{{source_account_no}}\",\n  \"targetAccountId\": \"{{target_account_no}}\",\n  \"amount\": 100.0,\n  \"description\": \"Postman Remittance Verification\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 202 Accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.referenceNo) {",
+                  "    pm.collectionVariables.set('remittance_reference_no', jsonData.referenceNo);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Remittance Status (/api/v1/remittance/{referenceNo}/status)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/{{remittance_reference_no}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "{{remittance_reference_no}}",
+                "status"
+              ]
+            },
+            "description": "Checks final settlement status for a remittance reference."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Cancel Remittance [Legacy 409] (/api/v1/remittance/{ref}/cancel)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/{{remittance_reference_no}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "{{remittance_reference_no}}",
+                "cancel"
+              ]
+            },
+            "description": "Confirms cancellation is rejected once transfer is dispatched to T24 Core."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 409 Conflict (window closed) or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([409, 400]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Send Now Remittance (/api/v1/remittance/{ref}/send-now)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/remittance/{{remittance_reference_no}}/send-now",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "remittance",
+                "{{remittance_reference_no}}",
+                "send-now"
+              ]
+            },
+            "description": "Flushes transfer immediately to core banking."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 409', function () { pm.expect(pm.response.code).to.be.oneOf([200, 409]); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. CQRS Transaction History & Statements (transaction-service :8083)",
+      "item": [
+        {
+          "name": "GET Customer Activity Feed (/api/v1/transactions/activity)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions/activity",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "activity"
+              ]
+            },
+            "description": "Retrieves customer transaction activity feed indexed by the CQRS read-store."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Activity list returned', function () { pm.expect(jsonData).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Download PDF Statement (/api/v1/transactions/reports/transactions.pdf)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions/reports/transactions.pdf?accountId={{account_id}}&from=2026-10-01&to=2026-10-08",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "reports",
+                "transactions.pdf"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{account_id}}"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-10-01"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-10-08"
+                }
+              ]
+            },
+            "description": "Generates and streams downloadable PDF bank statement."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Content-Type is application/pdf', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Operations Desk & Admin Mutations (transaction-service :8083)",
+      "item": [
+        {
+          "name": "GET Today Ledger Transactions [Admin Only \ud83d\udc51] (/api/v1/transactions/admin/today)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transactions/admin/today",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "admin",
+                "today"
+              ]
+            },
+            "description": "Operations Desk live transaction monitor feed (Asia/Manila business date)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Ledger movement rows returned', function () { pm.expect(jsonData).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Direct Ledger Mutate [Admin Only \ud83d\udc51] (/api/v1/ledger/mutate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ledger/mutate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "mutate"
+              ]
+            },
+            "description": "Direct ledger mutation with pessimistic row locking \u2014 restricted to ROLE_ADMIN.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"amount\": 50.0,\n  \"type\": \"CREDIT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Mutation successful', function () { pm.expect(jsonData.success).to.be.true; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Concurrency Double-Spend Test [Admin Only \ud83d\udc51] (/api/v1/stress/double-spend-test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/stress/double-spend-test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stress",
+                "double-spend-test"
+              ]
+            },
+            "description": "Spawns 10 concurrent debit threads against \u20b160.00 account balance to prove double-spend prevention."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Only one debit wins', function () { pm.expect(jsonData.successfulDebits).to.eql(1); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Telemetry Engine Stats [Admin Only \ud83d\udc51] (/api/v1/telemetry/stats)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/telemetry/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "telemetry",
+                "stats"
+              ]
+            },
+            "description": "Engine metrics, TPS rates, latency percentiles, and database pool statistics."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Interest End-of-Day (EOD) [Admin Only \ud83d\udc51] (transaction-service :8083)",
+      "item": [
+        {
+          "name": "GET Interest Period Overview (/api/v1/interest/eod/overview)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/interest/eod/overview?periodEnd=2026-10-31",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interest",
+                "eod",
+                "overview"
+              ],
+              "query": [
+                {
+                  "key": "periodEnd",
+                  "value": "2026-10-31"
+                }
+              ]
+            },
+            "description": "Status overview for the monthly interest accrual and posting cycle."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Missing Interest Accrual Days (/api/v1/interest/eod/missing)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/interest/eod/missing?periodEnd=2026-10-31",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interest",
+                "eod",
+                "missing"
+              ],
+              "query": [
+                {
+                  "key": "periodEnd",
+                  "value": "2026-10-31"
+                }
+              ]
+            },
+            "description": "Returns list of dates missing EOD interest accruals."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Accrue Daily Interest (/api/v1/interest/eod/accrue)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/interest/eod/accrue?businessDate=2026-10-07",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interest",
+                "eod",
+                "accrue"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-10-07"
+                }
+              ]
+            },
+            "description": "Runs daily interest accrual calculation and stores snapshot in PostgreSQL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 409', function () { pm.expect(pm.response.code).to.be.oneOf([200, 409]); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Propose Missing Day Backfill (/api/v1/interest/eod/resolve)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/interest/eod/resolve?businessDate=2026-10-06",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interest",
+                "eod",
+                "resolve"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-10-06"
+                }
+              ]
+            },
+            "description": "Creates an administrative proposal to backfill missed accruals.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Nightly maintenance simulated outage backfill\",\n  \"useFallbackRates\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 409 Conflict', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) pm.collectionVariables.set('backfill_id', jsonData.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Review Backfill Proposal (/api/v1/interest/eod/backfills/{id})",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/interest/eod/backfills/{{backfill_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interest",
+                "eod",
+                "backfills",
+                "{{backfill_id}}"
+              ]
+            },
+            "description": "Retrieves backfill proposal details for four-eyes approval."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 404', function () { pm.expect(pm.response.code).to.be.oneOf([200, 404]); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Approve Backfill Proposal (/api/v1/interest/eod/backfills/{id}/approve)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/interest/eod/backfills/{{backfill_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interest",
+                "eod",
+                "backfills",
+                "{{backfill_id}}",
+                "approve"
+              ]
+            },
+            "description": "Executes approved backfill and records approver audit identity.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"approved\": true,\n  \"notes\": \"Approved for month-end reconciliation\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 404', function () { pm.expect(pm.response.code).to.be.oneOf([200, 404]); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Post Month-End Interest (/api/v1/interest/eod/post)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/interest/eod/post?businessDate=2026-10-31",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "interest",
+                "eod",
+                "post"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-10-31"
+                }
+              ]
+            },
+            "description": "Posts accrued monthly interest as credit journal movements into customer savings accounts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 409', function () { pm.expect(pm.response.code).to.be.oneOf([200, 409]); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. T24 Core Banking System of Record (t24-adapter :8090)",
+      "item": [
+        {
+          "name": "GET T24 Adapter Health (Public) (/api/v1/t24/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "health"
+              ]
+            },
+            "description": "Public liveness check for T24 Core Banking Adapter."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('T24 status UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Authoritative Core Balance [Admin Only \ud83d\udc51] (/api/v1/t24/accounts/{acc}/balance)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/accounts/{{source_account_no}}/balance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "accounts",
+                "{{source_account_no}}",
+                "balance"
+              ]
+            },
+            "description": "Direct SoR live balance inquiry from T24 Core engine."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Authoritative balances returned', function () {",
+                  "    pm.expect(jsonData.currentBalance).to.not.be.undefined;",
+                  "    pm.expect(jsonData.availableBalance).to.not.be.undefined;",
+                  "    pm.expect(jsonData.heldBalance).to.not.be.undefined;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Place Atomic Core Hold [Admin Only \ud83d\udc51] (/api/v1/t24/holds/lock)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/holds/lock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "holds",
+                "lock"
+              ]
+            },
+            "description": "Places an atomic hold on funds in t24.LOCKED_AMOUNT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"HOLD-TEST-{{$timestamp}}\",\n  \"accountNumber\": \"{{source_account_no}}\",\n  \"amount\": 200.0,\n  \"currency\": \"PHP\",\n  \"holdDurationSeconds\": 60\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Hold placed in t24.LOCKED_AMOUNT', function () { pm.expect(jsonData.holdStatus).to.eql('ACTIVE'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Release Core Hold [Admin Only \ud83d\udc51] (/api/v1/t24/holds/release)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/holds/release",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "holds",
+                "release"
+              ]
+            },
+            "description": "Releases locked hold back to available balance.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"HOLD-TEST-{{$timestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Post Double-Entry Journal [Admin Only \ud83d\udc51] (/api/v1/t24/transfer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/t24/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "t24",
+                "transfer"
+              ]
+            },
+            "description": "Executes double-entry posting in t24.POSTING_JOURNAL.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNo\": \"TX-T24-{{$timestamp}}\",\n  \"debitAccountNo\": \"{{source_account_no}}\",\n  \"creditAccountNo\": \"{{target_account_no}}\",\n  \"amount\": 150.0,\n  \"currency\": \"PHP\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Status is POSTED', function () { pm.expect(jsonData.status).to.eql('POSTED'); });",
+                  "pm.test('FT Reference received', function () { pm.expect(jsonData.ftReference).to.be.a('string'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Loan Products & Credit Lifecycle (loan-service :8091)",
+      "item": [
+        {
+          "name": "GET Loan Eligibility & Borrowing Capacity (/api/v1/loans/eligibility)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/eligibility",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "eligibility"
+              ]
+            },
+            "description": "Checks customer credit limit, active loans, and remaining borrowing capacity."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Credit limit returned', function () { pm.expect(jsonData.creditLimit).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Apply for Personal Loan (/api/v1/loans/applications)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications"
+              ]
+            },
+            "description": "Applies for a personal loan and receives credit evaluation decision.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"requestedAmount\": 50000.0,\n  \"requestedTerm\": 12,\n  \"monthlyIncome\": 45000.0,\n  \"purpose\": \"Home Improvement\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created or 200 OK', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.referenceNo) {",
+                  "    pm.collectionVariables.set('loan_reference_no', jsonData.referenceNo);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Accept Loan Offer & Disburse (/api/v1/loans/applications/{ref}/accept)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications/{{loan_reference_no}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications",
+                "{{loan_reference_no}}",
+                "accept"
+              ]
+            },
+            "description": "Accepts approved loan offer and triggers disbursement transfer into customer account."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created or 409 Conflict', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.loanId) {",
+                  "    pm.collectionVariables.set('loan_id', String(jsonData.loanId));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Admin Reset Application Status [Admin Only \ud83d\udc51] (/api/v1/loans/applications/{ref}/reset)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/applications/{{loan_reference_no}}/reset",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "applications",
+                "{{loan_reference_no}}",
+                "reset"
+              ]
+            },
+            "description": "Admin recovery route to reset failed application back to DECIDED for customer acceptance."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 409 Conflict', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Customer Active Loans (/api/v1/loans)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans"
+              ]
+            },
+            "description": "Returns all active and historical loans for authenticated customer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Loans array returned', function () { pm.expect(jsonData).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Loan Amortization Schedule (/api/v1/loans/{loanId}/schedule)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/{{loan_id}}/schedule",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "{{loan_id}}",
+                "schedule"
+              ]
+            },
+            "description": "Returns monthly payment breakdown (principal, interest, balance) for a loan."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Schedule rows returned', function () { pm.expect(jsonData.rows).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Repay Loan Installment (/api/v1/loans/{loanId}/repayments)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/{{loan_id}}/repayments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "{{loan_id}}",
+                "repayments"
+              ]
+            },
+            "description": "Repays scheduled monthly installment via internal core transfer.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 4500.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created or 200 OK', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Run Loan EOD Overdue Pass [Admin Only \ud83d\udc51] (/api/v1/loans/eod/run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/loans/eod/run?businessDate=2026-11-06",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "loans",
+                "eod",
+                "run"
+              ],
+              "query": [
+                {
+                  "key": "businessDate",
+                  "value": "2026-11-06"
+                }
+              ]
+            },
+            "description": "Runs end-of-day overdue penalty assessments and auto-debit collection."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Fraud & Risk Engine (risk-engine :8000)",
+      "item": [
+        {
+          "name": "GET Risk Engine Health (Public) (/api/v1/risk/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "health"
+              ]
+            },
+            "description": "Public liveness and active models verification."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Scorers active', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Evaluate Transaction Fraud Score [Admin Only \ud83d\udc51] (/api/v1/risk/score)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/risk/score",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "risk",
+                "score"
+              ]
+            },
+            "description": "Two-layer real-time fraud scoring combining deterministic business rules and Isolation Forest ML.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"{{source_account_no}}\",\n  \"targetAccountId\": \"{{target_account_no}}\",\n  \"amount\": 2500.0,\n  \"accountAgeHours\": 720.0,\n  \"recentTxCount\": 2,\n  \"amountVsAvgRatio\": 1.1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Fraud decision rendered', function () {",
+                  "    pm.expect(jsonData.decision).to.be.oneOf(['APPROVE', 'REVIEW', 'REJECT']);",
+                  "    pm.expect(jsonData.score).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Supporting Services & Observability",
+      "item": [
+        {
+          "name": "POST Trigger Reconciliation Sweep [Admin Only \ud83d\udc51] (/api/v1/reconciliation/run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reconciliation/run",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reconciliation",
+                "run"
+              ]
+            },
+            "description": "Triggers outbox vs. T24 posting journal reconciliation sweep."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Reconciliation Logs [Admin Only \ud83d\udc51] (/api/v1/reconciliation/logs)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reconciliation/logs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reconciliation",
+                "logs"
+              ]
+            },
+            "description": "Returns results and discrepancies from recent sweeps."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Immutable Risk Audit Log [Admin Only \ud83d\udc51] (/api/v1/audit/risk-decisions)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit/risk-decisions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit",
+                "risk-decisions"
+              ]
+            },
+            "description": "Retrieves immutable audit records for fraud decisions stored in PostgreSQL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Audit decisions list returned', function () { pm.expect(jsonData.content || jsonData).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Risk Decision Stats [Admin Only \ud83d\udc51] (/api/v1/audit/risk-decisions/stats)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit/risk-decisions/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit",
+                "risk-decisions",
+                "stats"
+              ]
+            },
+            "description": "Returns aggregated decision counts (APPROVE, REVIEW, REJECT) over 24h and 7d."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Analytics Real-Time Summary [Admin Only \ud83d\udc51] (/api/v1/analytics/summary)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "summary"
+              ]
+            },
+            "description": "Aggregated transaction volumes, velocities, and throughput rates from Kafka streams."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Analytics Accounts Breakdown [Admin Only \ud83d\udc51] (/api/v1/analytics/accounts)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "accounts"
+              ]
+            },
+            "description": "Per-account debit and credit metrics."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Analytics Recent Live Feed [Admin Only \ud83d\udc51] (/api/v1/analytics/recent)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/analytics/recent",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "recent"
+              ]
+            },
+            "description": "Last 50 streamed events from Kafka in-memory circular buffer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Gateway Actuator Health (Public) (/actuator/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/actuator/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Spring Boot Actuator health endpoint for API Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Health UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Gateway Actuator Prometheus (Public) (/actuator/prometheus)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/actuator/prometheus",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "actuator",
+                "prometheus"
+              ]
+            },
+            "description": "Prometheus metric scrape endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Centralized Swagger UI Dashboard (Public) (/swagger-ui.html)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/swagger-ui.html",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "swagger-ui.html"
+              ]
+            },
+            "description": "Centralized OpenAPI 3.0 / Swagger UI dashboard aggregating all PayPink 2.0 microservice APIs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK or 302 Redirect', function () { pm.expect(pm.response.code).to.be.oneOf([200, 302]); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Aggregated OpenAPI Spec - Auth Service (Public) (/v3/api-docs/auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/api-docs/auth",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs",
+                "auth"
+              ]
+            },
+            "description": "Returns raw OpenAPI 3.0 JSON specification for auth-service proxied through the Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains OpenAPI specification', function () { pm.expect(jsonData.openapi).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Aggregated OpenAPI Spec - Account Service (Public) (/v3/api-docs/account)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/api-docs/account",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs",
+                "account"
+              ]
+            },
+            "description": "Returns raw OpenAPI 3.0 JSON specification for account-service proxied through the Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains OpenAPI specification', function () { pm.expect(jsonData.openapi).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Aggregated OpenAPI Spec - Transaction Service (Public) (/v3/api-docs/transaction)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/api-docs/transaction",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs",
+                "transaction"
+              ]
+            },
+            "description": "Returns raw OpenAPI 3.0 JSON specification for transaction-service proxied through the Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains OpenAPI specification', function () { pm.expect(jsonData.openapi).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Aggregated OpenAPI Spec - Loan Service (Public) (/v3/api-docs/loan)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/api-docs/loan",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs",
+                "loan"
+              ]
+            },
+            "description": "Returns raw OpenAPI 3.0 JSON specification for loan-service proxied through the Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains OpenAPI specification', function () { pm.expect(jsonData.openapi).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Aggregated OpenAPI Spec - T24 Core Adapter (Public) (/v3/api-docs/t24)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/api-docs/t24",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs",
+                "t24"
+              ]
+            },
+            "description": "Returns raw OpenAPI 3.0 JSON specification for t24-adapter proxied through the Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains OpenAPI specification', function () { pm.expect(jsonData.openapi).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Aggregated OpenAPI Spec - Risk Engine (Public) (/v3/api-docs/risk)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v3/api-docs/risk",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v3",
+                "api-docs",
+                "risk"
+              ]
+            },
+            "description": "Returns raw OpenAPI 3.0 JSON specification for risk-engine proxied through the Gateway."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Contains OpenAPI specification', function () { pm.expect(jsonData.openapi).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

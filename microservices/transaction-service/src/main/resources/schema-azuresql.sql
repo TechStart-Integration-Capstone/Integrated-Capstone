@@ -34,6 +34,7 @@ CREATE TABLE dbo.CUSTOMER (
     email            NVARCHAR(150) NOT NULL UNIQUE,
     contact_no       NVARCHAR(30)  NOT NULL,
     status           NVARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
+    roles            NVARCHAR(255) NOT NULL CONSTRAINT DF_CUSTOMER_ROLES DEFAULT 'ROLE_CUSTOMER,ROLE_RETAIL_USER',
     created_date     DATETIME2     NOT NULL DEFAULT GETUTCDATE(),
     -- Phase 6 Loans: hardcoded credit score + monthly income for affordability
     credit_score         INT           NOT NULL CONSTRAINT DF_CUSTOMER_CS DEFAULT 650
@@ -171,6 +172,7 @@ CREATE TABLE dbo.LOAN_APPLICATION (
     monthly_installment DECIMAL(18,4) NULL,
     decline_reason      NVARCHAR(50)  NULL,
     status              NVARCHAR(15)  NOT NULL,          -- DECIDED | DISBURSING | ACCEPTED | FAILED | EXPIRED
+    retry_count         INT           NOT NULL CONSTRAINT DF_LOAN_APP_RETRY DEFAULT 0,
     expires_at          DATETIME2     NOT NULL,          -- created + 7 days
     created_date        DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
 );

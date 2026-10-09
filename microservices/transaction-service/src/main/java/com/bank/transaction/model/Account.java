@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "ACCOUNT")
+@Table(name = "ACCOUNT", schema = "t24")
 public class Account {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "account_id") private Long accountId;
     @Column(name = "customer_id") private Long customerId;

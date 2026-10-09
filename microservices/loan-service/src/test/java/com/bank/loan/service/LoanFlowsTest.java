@@ -177,8 +177,8 @@ class LoanFlowsTest {
         assertThat(response.decision()).isEqualTo("APPROVED");
         assertThat(response.creditScore()).isEqualTo(670);
         assertThat(response.band()).isEqualTo("NORMAL");
-        assertThat(response.offer().monthlyInstallment()).isEqualByComparingTo("9038.10");
-        assertThat(response.offer().annualRate()).isEqualByComparingTo("18.0");
+        assertThat(response.offer().monthlyInstallment()).isEqualByComparingTo("7719.27");
+        assertThat(response.offer().annualRate()).isEqualByComparingTo("7.0");
         assertThat(response.expiresAt()).isEqualTo(Instant.parse("2026-10-12T03:25:00Z"));
         assertThat(outboxTypes()).containsExactly("loan.application.decided");
         assertThat(outbox.get(0).getAggregateId()).isEqualTo("LAP-20261005-000001");
@@ -223,7 +223,7 @@ class LoanFlowsTest {
         assertThat(loan.outstandingPrincipal()).isEqualByComparingTo("250000.00");
         assertThat(loan.ftReference()).isEqualTo("FT26278ABC12");
         assertThat(loan.nextDue().dueDate()).isEqualTo(LocalDate.of(2026, 11, 5));
-        assertThat(loan.nextDue().amount()).isEqualByComparingTo("9038.10");
+        assertThat(loan.nextDue().amount()).isEqualByComparingTo("7719.27");
         assertThat(loans.values()).singleElement().satisfies(l -> {
             assertThat(l.getDisbursementTxnId()).isEqualTo(501L);
             assertThat(l.getMaturityDate()).isEqualTo(LocalDate.of(2029, 10, 5));
@@ -319,23 +319,80 @@ class LoanFlowsTest {
     }
 
     @Test
-    @DisplayName("Disbursement rejected → 422 disbursement-failed, application FAILED, never retried")
-    void rejectedDisbursement_marksFailed() {
+    @DisplayName("Disbursement rejected -> retries automatically up to 3 bank attempts then marks FAILED")
+    void rejectedDisbursement_retriesUpToMaxAttemptsThenMarksFailed() {
         ApplicationResponse app = applyNormal("apply-key-1");
         stubDisbursement(new TransferResult("REJECTED", null, null, "Core banking T24 rejected transfer"));
 
+        // Attempt 1: Customer accept fails with core-unavailable; status stays DISBURSING for bank recovery
         assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
                 .isInstanceOfSatisfying(LoanException.class, e -> {
-                    assertThat(e.getType()).isEqualTo("disbursement-failed");
-                    assertThat(e.getStatus().value()).isEqualTo(422);
+                    assertThat(e.getType()).isEqualTo("core-unavailable");
                 });
-        assertThat(applications.get(1L).getStatus()).isEqualTo("FAILED");
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DISBURSING");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(1);
         assertThat(loans).isEmpty();
 
+        // Attempt 2: Bank background recovery runs
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DISBURSING");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(2);
+
+        // Attempt 3: Bank background recovery runs -> reaches max attempts (3), marks FAILED
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("FAILED");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(3);
+
+        // Further recovery sweeps skip the FAILED application
         disbursementService.recoverDisbursements();
         assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-2", "corr"))
                 .isInstanceOfSatisfying(LoanException.class, e -> assertThat(e.getType()).isEqualTo("disbursement-failed"));
-        verify(orchestrator, times(1)).transfer(any(), any(), any(), any(), any(), any(), any());
+        verify(orchestrator, times(3)).transfer(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Disbursement rejected initially -> automatically succeeds on bank retry without admin intervention")
+    void rejectedDisbursement_recoversOnBankRetry() {
+        ApplicationResponse app = applyNormal("apply-key-auto-recovery");
+        // Attempt 1 fails
+        stubDisbursement(new TransferResult("REJECTED", null, null, "Transient lock contention"));
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
+                .isInstanceOf(LoanException.class);
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DISBURSING");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(1);
+
+        // Attempt 2 succeeds
+        stubDisbursement(new TransferResult("POSTED", 777L, "FT26278AUTO", null));
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("ACCEPTED");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(2);
+        assertThat(loans.values()).singleElement().satisfies(l -> {
+            assertThat(l.getDisbursementTxnId()).isEqualTo(777L);
+            assertThat(l.getFtReference()).isEqualTo("FT26278AUTO");
+        });
+    }
+
+    @Test
+    @DisplayName("Admin reset sets FAILED application back to DECIDED for customer acceptance")
+    void adminReset_reopensApplication() {
+        ApplicationResponse app = applyNormal("apply-key-reset");
+        stubDisbursement(new TransferResult("REJECTED", null, null, "Core banking T24 rejected transfer"));
+
+        // Exhaust all 3 attempts
+        assertThatThrownBy(() -> disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-1", "corr"))
+                .isInstanceOf(LoanException.class);
+        disbursementService.recoverDisbursements();
+        disbursementService.recoverDisbursements();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("FAILED");
+
+        disbursementService.adminResetApplication(app.referenceNo());
+        assertThat(applications.get(1L).getStatus()).isEqualTo("DECIDED");
+        assertThat(applications.get(1L).getRetryCount()).isEqualTo(0);
+
+        stubDisbursement(new TransferResult("POSTED", 999L, "FT26278RESET", null));
+        LoanSummary loan = disbursementService.accept(CUSTOMER, app.referenceNo(), "accept-key-after-reset", "corr2");
+        assertThat(loan).isNotNull();
+        assertThat(applications.get(1L).getStatus()).isEqualTo("ACCEPTED");
     }
 
     // ── Credit limit ────────────────────────────────────────────────────────
@@ -402,21 +459,21 @@ class LoanFlowsTest {
         LoanSummary loan = disbursedNormalLoan();
         stubRepayment(new TransferResult("POSTED", 601L, "FT26278PAY01", null));
 
-        var outcome = repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-1", bd("9038.10"), "corr");
+        var outcome = repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-1", bd("7719.27"), "corr");
 
-        verify(orchestrator).transfer(ACCOUNT_NO, "PH1000000LOAN", bd("9038.10"), "LOAN_REPAYMENT",
+        verify(orchestrator).transfer(ACCOUNT_NO, "PH1000000LOAN", bd("7719.27"), "LOAN_REPAYMENT",
                 "LOAN-REPAY-repay-key-1", "Repayment for loan LN-20261005-000002", "corr");
         LoanSchedule row1 = schedule.get(0);
         assertThat(row1.getStatus()).isEqualTo("PAID");
         assertThat(schedule.get(1).getStatus()).isEqualTo("PENDING");
-        // Row 1: interest 3,750.00 (250,000 × 1.5%), principal 5,288.10
-        assertThat(outcome.response().outstandingPrincipal()).isEqualByComparingTo("244711.90");
+        // Row 1: interest 1,458.33 (250,000 × 7% ÷ 12), principal 6,260.94
+        assertThat(outcome.response().outstandingPrincipal()).isEqualByComparingTo("243739.06");
         assertThat(outcome.response().referenceNo()).startsWith("LRP-20261005-");
         assertThat(outcome.response().loanStatus()).isEqualTo("ACTIVE");
         assertThat(outboxTypes()).endsWith("loan.repayment.posted");
 
         // Same Idempotency-Key again: replayed, money not moved again.
-        var replay = repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-1", bd("9038.10"), "corr");
+        var replay = repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-1", bd("7719.27"), "corr");
         assertThat(replay.replayed()).isTrue();
         assertThat(repayments).hasSize(1);
         verify(orchestrator, times(1)).transfer(eq(ACCOUNT_NO), any(), any(), eq("LOAN_REPAYMENT"), any(), any(), any());
@@ -429,7 +486,7 @@ class LoanFlowsTest {
         int eventsBefore = outbox.size();
         stubRepayment(new TransferResult("REJECTED", null, null, "INSUFFICIENT_FUNDS"));
 
-        assertThatThrownBy(() -> repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-1", bd("9038.10"), "corr"))
+        assertThatThrownBy(() -> repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-1", bd("7719.27"), "corr"))
                 .isInstanceOfSatisfying(LoanException.class, e -> {
                     assertThat(e.getType()).isEqualTo("insufficient-funds");
                     assertThat(e.getStatus().value()).isEqualTo(422);
@@ -470,14 +527,14 @@ class LoanFlowsTest {
         assertThat(schedule.get(1).getStatus()).isEqualTo("PENDING");
         Loan stored = loans.get(loan.loanId());
         assertThat(stored.getStatus()).isEqualTo("OVERDUE");
-        assertThat(stored.getPenaltyDue()).isEqualByComparingTo("180.76"); // 2% of 9,038.10
+        assertThat(stored.getPenaltyDue()).isEqualByComparingTo("154.39"); // 2% of 7,719.27
         assertThat(outboxTypes()).endsWith("loan.installment.overdue", "loan.autodebit.failed");
 
         int eventsAfterFirst = outbox.size();
         EodResult second = eodService.run(businessDate);
 
         assertThat(second.installmentsMarkedOverdue()).isZero();
-        assertThat(stored.getPenaltyDue()).isEqualByComparingTo("180.76");
+        assertThat(stored.getPenaltyDue()).isEqualByComparingTo("154.39");
         assertThat(outbox).hasSize(eventsAfterFirst);
 
         // An OVERDUE loan blocks new applications.
@@ -494,7 +551,7 @@ class LoanFlowsTest {
         eodService.run(LocalDate.of(2026, 11, 6));
         stubRepayment(new TransferResult("POSTED", 602L, "FT26278PAY02", null));
 
-        var outcome = repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-2", bd("9218.86"), null); // 180.76 + 9,038.10
+        var outcome = repaymentService.repay(CUSTOMER, loan.loanId(), "repay-key-2", bd("7873.66"), null); // 154.39 + 7,719.27
 
         assertThat(outcome.response().penaltyDue()).isEqualByComparingTo("0.00");
         assertThat(outcome.response().loanStatus()).isEqualTo("ACTIVE");
@@ -512,12 +569,12 @@ class LoanFlowsTest {
         EodResult result = eodService.run(LocalDate.of(2026, 11, 5)); // first due date
 
         assertThat(result.autoDebitsPaid()).isEqualTo(1);
-        verify(orchestrator).transfer(ACCOUNT_NO, "PH1000000LOAN", bd("9038.10"), "LOAN_REPAYMENT",
+        verify(orchestrator).transfer(ACCOUNT_NO, "PH1000000LOAN", bd("7719.27"), "LOAN_REPAYMENT",
                 "LOAN-REPAY-AUTODEBIT-" + loan.loanId() + "-2026-11-05", "Repayment for loan " + loan.referenceNo(), "loan-eod-2026-11-05");
         assertThat(schedule.get(0).getStatus()).isEqualTo("PAID");
         assertThat(queryService.myLoans(CUSTOMER).get(0).lastAutoDebit()).satisfies(a -> {
             assertThat(a.status()).isEqualTo("PAID");
-            assertThat(a.amount()).isEqualByComparingTo("9038.10");
+            assertThat(a.amount()).isEqualByComparingTo("7719.27");
         });
 
         // Next night: nothing due, nothing overdue, no second debit.
@@ -548,7 +605,7 @@ class LoanFlowsTest {
 
         assertThat(nextDay.installmentsMarkedOverdue()).isEqualTo(1);
         assertThat(nextDay.autoDebitsPaid()).isEqualTo(1);
-        verify(orchestrator).transfer(eq(ACCOUNT_NO), eq("PH1000000LOAN"), eq(bd("9218.86")), eq("LOAN_REPAYMENT"),
+        verify(orchestrator).transfer(eq(ACCOUNT_NO), eq("PH1000000LOAN"), eq(bd("7873.66")), eq("LOAN_REPAYMENT"),
                 eq("LOAN-REPAY-AUTODEBIT-" + loan.loanId() + "-2026-11-06"), any(), any());
         Loan stored = loans.get(loan.loanId());
         assertThat(stored.getStatus()).isEqualTo("ACTIVE");

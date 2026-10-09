@@ -1,4 +1,4 @@
-﻿services:
+services:
   # ==========================================
   # Layer 4: Datastores & In-Memory Matrix
   # ==========================================
@@ -18,6 +18,10 @@
       - ./../microservices/transaction-service/src/main/resources/schema-azuresql.sql:/mssql-server-setup-scripts.d/01_schema.sql:ro
       - ./../microservices/loan-service/src/main/resources/db/phase6_loans.sql:/mssql-server-setup-scripts.d/02_loans.sql:ro
       - ./../scripts/seed_demo_azure_sql.sql:/mssql-server-setup-scripts.d/03_seed.sql:ro
+      - ./../scripts/migrate_phase1_schema_split.sql:/mssql-server-setup-scripts.d/04_schema_split.sql:ro
+      - ./../scripts/migrate_phase2_t24_core.sql:/mssql-server-setup-scripts.d/05_t24_core.sql:ro
+      - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/06_interest.sql:ro
+      - ./../scripts/migrate_phase10_rbac_roles.sql:/mssql-server-setup-scripts.d/07_rbac_roles.sql:ro
     healthcheck:
       test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1" ]
       interval: 10s
@@ -38,7 +42,10 @@
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./../microservices/audit-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./../backend/notification-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/02_notification.sql
+      - ./../microservices/notification-service/src/main/resources/schema-postgres.sql:/docker-entrypoint-initdb.d/02_notification.sql
+      - ./../scripts/migrate_interest_postgres.sql:/docker-entrypoint-initdb.d/03_interest.sql
+      - ./../scripts/migrate_interest_recovery_postgres.sql:/docker-entrypoint-initdb.d/04_interest_recovery.sql
+      - ./../scripts/migrate_interest_approval_postgres.sql:/docker-entrypoint-initdb.d/05_interest_approval.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db" ]
       interval: 10s
@@ -85,7 +92,7 @@
       ZOOKEEPER_TICK_TIME: 2000
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_log:/var/lib/zookeeper/log
+      - zookeeper_log:/var/lib/zookeeper/log   
     networks:
       - ledger-net
 
@@ -226,14 +233,14 @@
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - IDEMPOTENCY_TTL_HOURS=24
-      - INTEREST_EOD_ENABLED=${INTEREST_EOD_ENABLED:-false}
-      - INTEREST_START_DATE=${INTEREST_START_DATE:-}
+      - INTEREST_EOD_ENABLED=${INTEREST_EOD_ENABLED:-true}
+      - INTEREST_START_DATE=${INTEREST_START_DATE:-2026-10-01}
       - INTEREST_ZONE=${INTEREST_ZONE:-Asia/Manila}
       - INTEREST_EOD_CRON=${INTEREST_EOD_CRON:-59 59 23 * * *}
       - INTEREST_RECOVERY_CRON=${INTEREST_RECOVERY_CRON:-0 15 * * * *}
       - INTEREST_POSTGRES_URL=${INTEREST_POSTGRES_URL:-jdbc:postgresql://postgresql:5432/ledger_audit_db}
-      - INTEREST_POSTGRES_USERNAME=${INTEREST_POSTGRES_USERNAME:-}
-      - INTEREST_POSTGRES_PASSWORD=${INTEREST_POSTGRES_PASSWORD:-}
+      - INTEREST_POSTGRES_USERNAME=${INTEREST_POSTGRES_USERNAME:-audit_user}
+      - INTEREST_POSTGRES_PASSWORD=${INTEREST_POSTGRES_PASSWORD:-AuditSecretPassword123}
     volumes:
       - ./../microservices/transaction-service/target/transaction-service.jar:/app/app.jar
     networks:
@@ -390,9 +397,15 @@
       context: ../microservices/t24-adapter
       dockerfile: Dockerfile
     container_name: t24-adapter
-    # No host port â€” internal only, called by Remittance Orchestrator via http://t24-adapter:8090
+    # No host port — internal only, called by Remittance Orchestrator via http://t24-adapter:8090
+    depends_on:
+      azure-sql:
+        condition: service_healthy
     environment:
       - T24_SIMULATOR_URL=http://localhost:8090/ofs/process
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+      - SPRING_DATASOURCE_USERNAME=sa
+      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - OTEL_SERVICE_NAME=t24-adapter
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     volumes:
@@ -420,6 +433,7 @@
       - SPRING_DATASOURCE_USERNAME=sa
       - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
       - ORCHESTRATOR_URL=http://transaction-service:8083
+      - LOAN_SCHEMA_MIGRATION_ENABLED=false
     volumes:
       - ./../microservices/loan-service/target/loan-service.jar:/app/app.jar
     healthcheck:
