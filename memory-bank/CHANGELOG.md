@@ -1,6 +1,12 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — Microservice Readiness Probing & Postman Assertion Alignment:
+  - **CI Temporary Stack Health Probes (`.github/workflows/pipeline.yml`):**
+    - Upgraded Stage 2 readiness probe: instead of only checking the lightweight API Gateway actuator, the pipeline now probes all downstream services via their OpenAPI `/v3/api-docs` endpoints (`auth`, `account`, `transaction`, `loan`, `t24`, `risk`) through the Gateway. This prevents race conditions where Newman hits downstream containers while Spring Boot and Tomcat are still initializing.
+  - **Postman Collection Assertion Parity (`scripts/generate_postman_collection.py` & `postman/PayPink_2.0_API_Reference_Collection.json`):**
+    - Updated `GET /api/v1/risk/health` test assertion to accept both `'UP'` and `'ok'` for `status`, matching FastAPI's Docker and Actuator-compatible response. Regenerated collection. — [dom]
+
 - 2026-10-09 — Fix In-Memory Concurrency Test Race Condition (`transaction-service`):
   - **`LedgerMutationServiceTest.java`:** Synchronized `service.mutateBalance` calls across the 10 concurrent executor threads on the `shared` account instance in `concurrency_pessimisticLock_preventsOverdraft`. In a mock unit test lacking a live database engine with `UPDLOCK, ROWLOCK`, this eliminates in-memory thread races and accurately simulates database-level pessimistic serialization, guaranteeing exactly 1 success and 9 overdraft rejections deterministically on multi-core CI runners. All 107 tests pass. — [dom]
 

@@ -190,16 +190,50 @@ jobs:
           docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env \
             up -d --build $CI_APPS
 
-      - name: Wait for the gateway
+      - name: Wait for gateway and downstream microservices readiness
         run: |
+          echo "Waiting for API Gateway actuator..."
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1; then
-              echo "Gateway is up"; exit 0
+              echo "Gateway is up"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Gateway health probe timed out after 300s"
+              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs api-gateway --tail=50
+              exit 1
             fi
             sleep 5
           done
-          echo "Gateway health probe timed out after 300s; proceeding to inspect logs."
-          exit 1
+
+          echo "Waiting for all downstream microservices to be ready via API Gateway..."
+          ENDPOINTS=(
+            "http://localhost:8080/v3/api-docs/auth"
+            "http://localhost:8080/v3/api-docs/account"
+            "http://localhost:8080/v3/api-docs/transaction"
+            "http://localhost:8080/v3/api-docs/loan"
+            "http://localhost:8080/v3/api-docs/t24"
+            "http://localhost:8080/v3/api-docs/risk"
+          )
+          for ep in "${ENDPOINTS[@]}"; do
+            echo "Probing $ep..."
+            READY=false
+            for i in $(seq 1 50); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$ep" 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "$ep is ready (HTTP 200)"
+                READY=true
+                break
+              fi
+              sleep 3
+            done
+            if [ "$READY" != "true" ]; then
+              echo "Timeout waiting for $ep (last HTTP code: $HTTP_CODE)"
+              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs --tail=60
+              exit 1
+            fi
+          done
+          echo "All microservices and Swagger docs are fully initialized and ready for contract tests!"
 
       - name: API contract tests (Newman)
         run: |

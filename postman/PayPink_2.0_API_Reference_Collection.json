@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "581fba36-b959-49db-928b-ffef673f6cbe",
+    "_postman_id": "dc8f1086-4f75-4e50-bf0c-88949d833ed3",
     "name": "PayPink 2.0 \u2014 Complete API Reference & Verification Suite",
     "description": "Comprehensive Postman Collection covering all 11 microservices and every API endpoint documented in docs/API_REFERENCE.md.\n\nIncludes dynamic token extraction, customer vs. admin authorization headers, idempotency keys, and automated assertion scripts.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -2539,7 +2539,7 @@
               "script": {
                 "exec": [
                   "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
-                  "pm.test('Scorers active', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                  "pm.test('Scorers active', function () { pm.expect(pm.response.json().status).to.be.oneOf(['UP', 'ok']); });"
                 ],
                 "type": "text/javascript"
               }

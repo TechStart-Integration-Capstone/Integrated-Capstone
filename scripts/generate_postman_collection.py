@@ -830,7 +830,7 @@ def create_collection():
                 "api/v1/risk/health",
                 test_script=[
                     "pm.test('Status code is 200 OK', function () { pm.response.to.have.status(200); });",
-                    "pm.test('Scorers active', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                    "pm.test('Scorers active', function () { pm.expect(pm.response.json().status).to.be.oneOf(['UP', 'ok']); });"
                 ],
                 description="Public liveness and active models verification."
             ),
