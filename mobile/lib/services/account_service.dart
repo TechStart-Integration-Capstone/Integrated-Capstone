@@ -628,7 +628,11 @@ class AccountService {
 
   /// GET /api/v1/loans — the customer's active and overdue loans. Returns an empty list on failure
   /// so deposit accounts still load; a loan is never invented.
-  static Future<List<BankAccount>> fetchLoans() async {
+  static Future<List<BankAccount>> fetchLoans() async => await fetchLoansOrNull() ?? [];
+
+  /// Like [fetchLoans], but returns null when loans could not be loaded, so callers can
+  /// tell "no loans" from "couldn't reach the bank" and keep what they already show.
+  static Future<List<BankAccount>?> fetchLoansOrNull() async {
     try {
       final resp = await _api.get('/loans');
       if (resp.statusCode == 200) {
@@ -650,7 +654,7 @@ class AccountService {
     } catch (e) {
       debugPrint('[AccountService] fetchLoans error: $e');
     }
-    return [];
+    return null;
   }
 
   /// GET /api/v1/loans/{loanId}/schedule. Returns null if the schedule cannot be loaded.
