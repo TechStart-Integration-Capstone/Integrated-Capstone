@@ -2,6 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (Corrected Azure FQDN to paypink.westus2.cloudapp.azure.com:8080/api/v1, enabled GoogleFonts runtime fetching, and tuned nginx caching to avoid stale mobile app browser caching)_
 _Last Updated: 2026-10-09 (Updated last card in digital deck with luxury Pinkish Beige palette - Desert Rose / Champagne Blush Nude into gradient black)_
 _Last Updated: 2026-10-09 (Removed Ledger Balance from Account Details modal, customized 3rd card with distinct Electric Fuchsia & Magenta Pink palette)_
 _Last Updated: 2026-10-09 (Mobile card styling & half-gradient black, bottom logo removal, favorites UI redesign matching PayPink theme with inline error messaging)_

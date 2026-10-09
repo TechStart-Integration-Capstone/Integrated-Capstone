@@ -1,4 +1,9 @@
 # Changelog
+- 2026-10-09 — Azure Gateway FQDN & Font Runtime Fetching Fixes:
+  - **Azure FQDN Correction (`api_config.dart`, `mobile/Dockerfile`):** Corrected backend gateway host from non-existent `paypink-levi-westus2.westus2.cloudapp.azure.com` to authoritative cloud host `paypink.westus2.cloudapp.azure.com:8080/api/v1`.
+  - **Browser Cache Prevention (`mobile/nginx.conf`):** Added no-cache headers for `index.html` and service workers so browser clients immediately reflect new Flutter builds upon reload.
+  - **Google Fonts Runtime Fetching (`mobile/lib/main.dart`):** Set `GoogleFonts.config.allowRuntimeFetching = true` preventing fatal `GoogleFonts.config.allowRuntimeFetching is false but font PlusJakartaSans-SemiBold was not found in application assets` exception on Flutter Web. — [levi & Antigravity]
+
 - 2026-10-09 — Fix Mobile Docker Build & Resolve Merge Syntax Error:
   - **Syntax Error Fix (`account_service.dart`):** Resolved broken merge syntax error in `fetchProfile()` that caused `flutter build web` compilation failure in CI/CD pipeline.
   - **Docker Build Optimization (`mobile/Dockerfile`, `mobile/.dockerignore`):** Added `mobile/.dockerignore` to prevent copying host `.dart_tool/` and `build/` artifacts into the container; added `--no-wasm-dry-run --no-tree-shake-icons` to `flutter build web` command to prevent OOM termination on the CI/CD runner. Verified with `dart analyze` (0 errors, 0 warnings). — [levi & Antigravity]

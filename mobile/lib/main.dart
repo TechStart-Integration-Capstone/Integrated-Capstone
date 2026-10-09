@@ -36,7 +36,7 @@ class DevHttpOverrides extends HttpOverrides {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
+  GoogleFonts.config.allowRuntimeFetching = true;
   await di.initServiceLocator();
   if (!kIsWeb) {
     HttpOverrides.global = DevHttpOverrides();
