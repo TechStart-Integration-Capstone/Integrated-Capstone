@@ -6,6 +6,10 @@ class ApiConfig {
   /// - Android Emulator default: http://10.0.2.2:8080/api/v1
   /// - iOS / Web / Desktop default: http://localhost:8080/api/v1
   static String get baseUrl {
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isNotEmpty) {
+      return envUrl;
+    }
     if (kIsWeb) {
       return 'http://localhost:8080/api/v1';
     }

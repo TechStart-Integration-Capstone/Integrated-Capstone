@@ -1,6 +1,10 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — Cloud Deployment Health & Mobile Cloud Connectivity:
+  - **Mobile Cloud Configuration (`mobile`):** Added `String.fromEnvironment('API_BASE_URL')` check to [`ApiConfig.baseUrl`](file:///mobile/lib/services/api_config.dart), enabling local Flutter apps (desktop, Chrome, mobile) to target the cloud API Gateway via `--dart-define=API_BASE_URL=http://paypink-levi-westus2.westus2.cloudapp.azure.com:8080/api/v1` without breaking local emulator defaults.
+  - **Cloud Infrastructure & Stack Verification (`vm-paypink`):** Disabled daily auto-shutdown policy on Azure VM; restored Kafka after stale broker ephemeral registration; verified all 26 core operational containers running and healthy. Confirmed Web Banking SPA accessible at `http://paypink-levi-westus2.westus2.cloudapp.azure.com/bank/` and Azure SQL `master` active with all retail banking tables. — [levi]
+
 - 2026-10-08 — Comprehensive Endpoint-Level OpenAPI / Swagger Documentation:
   - **Account Service (`account-service`):**
     - Annotated [`AccountController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/AccountController.java) and [`BeneficiaryController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/BeneficiaryController.java) with `@Tag`, `@Operation`, `@ApiResponses`, and `@Parameter` descriptions and examples for profile (`/me`), accounts list/pagination (`/`), account details (`/{accountId}`), customer lookup (`/customer/{customerId}`), status update (`/status`), balance reset (`/reset-balance`), recipient directory/lookup (`/recipients`), and favorites (`/favorites`). Tests: 20/20 passed.
