@@ -31,54 +31,86 @@ class PayPinkTheme {
   static const Color glassBorder = Color(0xD9FFFFFF);
   static const Color glassBorderSubtle = Color(0x66FFFFFF);
 
-  // Dark Mode Tokens (Luminous Midnight Navy & Soft Rose Palette)
-  static const Color darkBg = Color(0xFF1B243B); // Rich Midnight Navy (Visibly vibrant blue, not black)
-  static const Color darkPaper = Color(0xFF232D4B); // Elevated Navy Paper
-  static const Color darkCard = Color(0xFF2C395E); // Floating Card Navy with distinct elevation
-  static const Color darkInk = Color(0xFFFFFFFF); // Pure Luminous White (Maximum Readability)
-  static const Color darkMuted = Color(0xFFB5C5E6); // Soft Cerulean Mist (Crisp, High-Legibility Secondary Text)
-  static const Color darkLine = Color(0xFF384770); // Distinct Navy Divider Line
-  static const Color darkGlassBorder = Color(0x66FF85B3); // Frosted Rose-Pink Hairline Border
-  static const Color darkGlassCardBg = Color(0xE6243054); // Deep Frosted Midnight Glass
+  // Dark Mode Tokens (Luminous Obsidian Navy & Soft Rose Palette - Matching Design Inspiration)
+  static const Color darkBg = Color(0xFF0B0E17); // Deep Obsidian Midnight Navy
+  static const Color darkPaper = Color(0xFF121622); // Deep Frosted Glass Card Paper
+  static const Color darkCard = Color(0xFF151A29); // Floating Elevated Navy Card
+  static const Color darkInk = Color(0xFFFFFFFF); // Pure Luminous White (Maximum Contrast & Readability)
+  static const Color darkMuted = Color(0xFF9DA4B5); // High Legibility Soft Slate Gray
+  static const Color darkLine = Color(0xFF222A3B); // Subtle Dark Hairline Divider
+  static const Color darkGlassBorder = Color(0x383F4C68); // Translucent Dark Slate Hairline Border
+  static const Color darkGlassCardBg = Color(0xF0121623); // Frosted Obsidian Glass Card Background
+
+  // Ambient Background Gradients
+  static const LinearGradient lightBgGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFFFF0F5), // Lavender blush / soft rose petal hint
+      Color(0xFFFFF7F9), // Subtle warm creamy rose
+      Color(0xFFFBF2F6), // Delicate touch of luxury pink
+    ],
+    stops: [0.0, 0.45, 1.0],
+  );
+
+  static const LinearGradient darkBgGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFF0F1422), // Luminous obsidian slate
+      Color(0xFF0B0E17), // Deep midnight obsidian navy
+    ],
+  );
+
+  static const LinearGradient cardPinkGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [pink, wine],
+  );
+
+  static String get fontFamily =>
+      GoogleFonts.plusJakartaSans().fontFamily ?? 'Plus Jakarta Sans';
 
   static ThemeData get lightTheme => ThemeData(
-        fontFamily: 'DM Sans',
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(),
         brightness: Brightness.light,
-        scaffoldBackgroundColor: paper,
+        scaffoldBackgroundColor: const Color(0xFFFFF5F8),
         colorScheme: ColorScheme.fromSeed(
           seedColor: wine,
           brightness: Brightness.light,
-          surface: paper,
+          surface: const Color(0xFFFFF5F8),
         ),
         useMaterial3: true,
       );
 
   static ThemeData get darkTheme => ThemeData(
-        fontFamily: 'DM Sans',
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(ThemeData.dark().textTheme),
         brightness: Brightness.dark,
         scaffoldBackgroundColor: darkBg,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF3B82F6),
+          seedColor: wine,
           brightness: Brightness.dark,
           surface: darkBg,
         ),
         useMaterial3: true,
       );
 
-  // Typography with GoogleFonts fallback
+  // Typography with Google Fonts Plus Jakarta Sans
   static TextStyle display({
     double fontSize = 16,
     FontWeight fontWeight = FontWeight.w700,
     Color color = ink,
     double letterSpacing = -0.5,
     double? height,
+    FontStyle? fontStyle,
   }) {
-    return GoogleFonts.manrope(
+    return GoogleFonts.plusJakartaSans(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
       letterSpacing: letterSpacing,
       height: height,
+      fontStyle: fontStyle,
     );
   }
 
@@ -89,7 +121,7 @@ class PayPinkTheme {
     double? height,
     TextDecoration? decoration,
   }) {
-    return GoogleFonts.dmSans(
+    return GoogleFonts.plusJakartaSans(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
@@ -102,11 +134,13 @@ class PayPinkTheme {
     double fontSize = 11,
     FontWeight fontWeight = FontWeight.w500,
     Color color = ink,
+    double? letterSpacing,
   }) {
     return GoogleFonts.jetBrainsMono(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
+      letterSpacing: letterSpacing,
     );
   }
 
@@ -137,15 +171,15 @@ class PayPinkTheme {
   static BoxDecoration wineHeroDecoration({double radius = 24}) {
     return BoxDecoration(
       gradient: const LinearGradient(
-        colors: [Color(0xFF7A204C), Color(0xFF551633), Color(0xFF380B20)],
+        colors: [Color(0xFF5B162F), Color(0xFF3D0E1F), Color(0xFF280814)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.2),
+      border: Border.all(color: const Color(0xFF7A2444).withValues(alpha: 0.5), width: 1.2),
       boxShadow: [
         BoxShadow(
-          color: wineDark.withValues(alpha: 0.45),
+          color: Colors.black.withValues(alpha: 0.45),
           blurRadius: 28,
           offset: const Offset(0, 14),
         ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../theme/paypink_theme.dart';
+import '../screens/pin_auth_screen.dart';
 
 class PayPinkBottomSheets {
   static void showAccountDetails(
@@ -10,7 +12,7 @@ class PayPinkBottomSheets {
     required double balance,
     required String type,
     required String status,
-    required String ledgerId,
+    String? ledgerId,
   }) {
     showModalBottomSheet(
       context: context,
@@ -26,7 +28,11 @@ class PayPinkBottomSheets {
             const _DetailRow(label: 'Amount on Hold / Reserved', value: '₱0.00 (None)', valueColor: PayPinkTheme.green),
             const _DetailRow(label: 'Interest Accrual Rate', value: '1.50% p.a.'),
             const _DetailRow(label: 'Interest Posting', value: 'Monthly (Oct 31, 2026)'),
-            const _DetailRow(label: 'Holder', value: 'Trixie Samson'),
+            _DetailRow(
+              label: 'Account Holder',
+              value: name.isNotEmpty ? name : 'PayPink Client',
+              isBold: true,
+            ),
             _DetailRow(label: 'Account Type', value: type, isMono: true),
             _DetailRow(
               label: 'Status',
@@ -34,7 +40,6 @@ class PayPinkBottomSheets {
               valueColor: PayPinkTheme.green,
               isBold: true,
             ),
-            _DetailRow(label: 'Ledger Identifier', value: ledgerId, isMono: true),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -409,7 +414,15 @@ class PayPinkBottomSheets {
     required bool isCredit,
     required String ofscore,
     required String auditHash,
+    String? account,
+    String? counterparty,
+    String? status,
+    bool canReverse = false,
+    int reversalMinutesRemaining = 0,
+    VoidCallback? onReverse,
   }) {
+    final isReversed = status?.toUpperCase() == 'REVERSED' || status == 'Refunded';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -425,26 +438,138 @@ class PayPinkBottomSheets {
                 style: PayPinkTheme.display(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: isCredit ? PayPinkTheme.green : PayPinkTheme.ink,
-                ),
+                  color: isReversed
+                      ? PayPinkTheme.muted
+                      : (isCredit ? PayPinkTheme.green : PayPinkTheme.ink),
+                ).copyWith(decoration: isReversed ? TextDecoration.lineThrough : null),
               ),
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: PayPinkTheme.greenBg,
+                  color: isReversed
+                      ? PayPinkTheme.amberBg
+                      : (isCredit ? PayPinkTheme.greenBg : PayPinkTheme.pinkSubtle),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Completed',
+                  isReversed
+                      ? 'Reversed & Refunded'
+                      : (status ?? 'Completed'),
                   style: PayPinkTheme.body(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: PayPinkTheme.green,
+                    color: isReversed
+                        ? PayPinkTheme.amber
+                        : (isCredit ? PayPinkTheme.green : PayPinkTheme.wine),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
+
+              // 15-Minute Reversal Banner & Action
+              if (canReverse) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: PayPinkTheme.amberBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: PayPinkTheme.amber.withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.timer_outlined, size: 16, color: PayPinkTheme.amber),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '15-Minute Reversal Active ($reversalMinutesRemaining mins left)',
+                              style: PayPinkTheme.body(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: PayPinkTheme.amber,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            onReverse?.call();
+                          },
+                          icon: const Icon(Icons.undo_rounded, size: 16),
+                          label: Text(
+                            'Reverse Transfer & Refund (Instant)',
+                            style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: PayPinkTheme.wine,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ] else if (!isCredit && !isReversed) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: PayPinkTheme.pinkSubtle,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: PayPinkTheme.pink.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Request Reversal / Dispute',
+                              style: PayPinkTheme.display(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '15-min instant window closed. Open a support dispute investigation.',
+                              style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: PayPinkTheme.wine,
+                              content: Text('Reversal ticket #REV-${refId.replaceAll(RegExp(r"\D"), "")} filed with PayPink 24/7 Support.'),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.support_agent_rounded, size: 15, color: PayPinkTheme.wine),
+                        label: Text(
+                          'Request',
+                          style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
 
               // Real-Time Transaction Monitoring / Lifecycle Stepper
               Container(
@@ -459,41 +584,76 @@ class PayPinkBottomSheets {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'REAL-TIME TRANSACTION LIFECYCLE',
+                      'TRANSACTION STATUS',
                       style: PayPinkTheme.mono(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
                     ),
                     const SizedBox(height: 10),
-                    _buildLifecycleStep(1, 'Initiated', 'Client submit with JWT & Idempotency key', isDone: true),
-                    _buildLifecycleStep(2, 'Validated & Authenticated', 'JSR-380 digit check & Redis deduplication', isDone: true),
-                    _buildLifecycleStep(3, 'Fraud & Limit Check', 'Python asyncio risk screening (Score: 0.12 SAFE)', isDone: true),
-                    _buildLifecycleStep(4, 'Funds Check & Hold', 'Azure SQL atomic held_balance reserve', isDone: true),
-                    _buildLifecycleStep(5, 'Authorized & Posted', 'Temenos T24 OFSCore settlement confirmed', isDone: true),
-                    _buildLifecycleStep(6, 'Ledger Update & Reconciled', 'Dual-store sync committed to PostgreSQL audit', isDone: true, isLast: true),
+                    _buildLifecycleStep(1, 'Request Submitted', 'Payment request processed securely', isDone: true),
+                    _buildLifecycleStep(2, 'Security Cleared', 'Fraud check and MPIN authorization verified', isDone: true),
+                    _buildLifecycleStep(3, 'Funds Transferred', 'Clearing and routing approved', isDone: true),
+                    _buildLifecycleStep(
+                      4,
+                      isReversed ? 'Reversed & Refunded' : 'Settled & Completed',
+                      isReversed ? 'Funds credited back to source account' : 'Ledger balances updated in real-time',
+                      isDone: true,
+                      isLast: true,
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
 
               _DetailRow(label: 'Reference ID', value: refId, isMono: true),
-              _DetailRow(label: 'Date', value: date),
-              _DetailRow(label: 'Temenos OFSCore Record', value: ofscore, isMono: true, isSmall: true),
-              _DetailRow(label: 'PostgreSQL Immutable Hash', value: auditHash, isMono: true, isSmall: true),
+              _DetailRow(label: 'Date & Time', value: date),
+              _DetailRow(label: 'Description', value: name),
+              if (account != null && account.isNotEmpty)
+                _DetailRow(label: 'Funding Account', value: account),
+              if (counterparty != null && counterparty.isNotEmpty)
+                _DetailRow(label: 'Recipient / Target', value: counterparty, isBold: true),
+              const _DetailRow(label: 'Transfer Fee', value: '₱0.00 (Free)', valueColor: PayPinkTheme.green),
+              _DetailRow(
+                label: 'Status',
+                value: isReversed ? 'Reversed & Refunded' : 'Settled & Verified',
+                valueColor: isReversed ? PayPinkTheme.amber : PayPinkTheme.green,
+                isBold: true,
+              ),
+
               const SizedBox(height: 18),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        Navigator.pop(ctx);
-                        _showReversalDialog(context, refId: refId, amount: amount);
+                        final receiptText = '''
+========================================
+         PAYPINK OFFICIAL RECEIPT
+========================================
+Status: ${isReversed ? 'REVERSED / REFUNDED' : 'COMPLETED'}
+Reference ID: $refId
+Date: $date
+Description: $name
+${account != null ? 'From: $account\n' : ''}${counterparty != null ? 'To: $counterparty\n' : ''}Amount: ${isCredit ? '+' : '-'}₱${amount.toStringAsFixed(2)}
+Fee: ₱0.00
+Status: ${isReversed ? 'Reversed' : 'Settled & Verified'}
+========================================
+Thank you for banking with PayPink!
+''';
+                        Clipboard.setData(ClipboardData(text: receiptText));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: PayPinkTheme.wine,
+                            content: Text('Receipt copied to clipboard for sharing & records'),
+                          ),
+                        );
                       },
-                      icon: const Icon(Icons.history_rounded, size: 16, color: PayPinkTheme.wine),
+                      icon: const Icon(Icons.share_rounded, size: 16, color: PayPinkTheme.wine),
                       label: Text(
-                        'Request Reversal',
+                        'Share Receipt',
                         style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
                       ),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: PayPinkTheme.pink),
+                        backgroundColor: PayPinkTheme.pinkSubtle,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
@@ -517,92 +677,6 @@ class PayPinkBottomSheets {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  static void _showReversalDialog(BuildContext context, {required String refId, required double amount}) {
-    String selectedReason = 'Wrong Account Number / Typo';
-    final reasonController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              const Icon(Icons.undo_rounded, color: PayPinkTheme.wine, size: 22),
-              const SizedBox(width: 8),
-              Text('Request Reversal', style: PayPinkTheme.display(fontSize: 16)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Initiate reversal workflow for ₱${amount.toStringAsFixed(2)} (Ref: $refId). This creates an audit claim in the Dead Letter & Reversal Queue.',
-                style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted),
-              ),
-              const SizedBox(height: 14),
-              Text('Reason for reversal', style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                initialValue: selectedReason,
-                items: const [
-                  DropdownMenuItem(value: 'Wrong Account Number / Typo', child: Text('Wrong Account Number / Typo')),
-                  DropdownMenuItem(value: 'Duplicate Debit', child: Text('Duplicate Debit')),
-                  DropdownMenuItem(value: 'Merchant Non-Delivery', child: Text('Merchant Non-Delivery')),
-                  DropdownMenuItem(value: 'Unauthorized Transaction', child: Text('Unauthorized Transaction')),
-                ],
-                onChanged: (val) {
-                  if (val != null) setDialogState(() => selectedReason = val);
-                },
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: PayPinkTheme.paper,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: PayPinkTheme.line)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: reasonController,
-                maxLines: 2,
-                decoration: InputDecoration(
-                  hintText: 'Additional details or ticket notes (optional)...',
-                  hintStyle: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted),
-                  filled: true,
-                  fillColor: PayPinkTheme.paper,
-                  contentPadding: const EdgeInsets.all(10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: PayPinkTheme.line)),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text('Cancel', style: PayPinkTheme.body(color: PayPinkTheme.muted, fontWeight: FontWeight.w600)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogCtx);
-                final shortId = refId.length > 8 ? refId.substring(0, 8) : refId;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: PayPinkTheme.wine,
-                    content: Text('Reversal claim REV-$shortId registered. Sent to DLQ & Ops Review.'),
-                    duration: const Duration(seconds: 4),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: PayPinkTheme.wine),
-              child: const Text('Submit Request', style: TextStyle(color: Colors.white)),
-            ),
-          ],
         ),
       ),
     );
@@ -781,10 +855,11 @@ class PayPinkBottomSheets {
   /// Hardware KeyStore & Customer 360 Security Health Inspector
   static void showHardwareVault(
     BuildContext context, {
-    String hardwareKeyId = 'secp256r1-keychain-hardware-tsamson',
+    String? customerName,
+    String hardwareKeyId = 'secp256r1-keychain-hardware-device',
     String circuitStatus = 'CLOSED (Healthy)',
     String gatewayRoute = '127.0.0.1:8080 (Reverse Proxy)',
-    String jwtToken = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0c2Ftc29uIiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxNzkxMDEwMDAwfQ',
+    String jwtToken = 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiQ1VTVE9NRVIiLCJleHAiOjE3OTEwMTAwMDB9',
     VoidCallback? onLogout,
   }) {
     showModalBottomSheet(
@@ -811,7 +886,7 @@ class PayPinkBottomSheets {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Trixie Samson · KYC Level 3 Verified',
+                        '${customerName?.isNotEmpty == true ? customerName : 'PayPink Client'} · KYC Level 3 Verified',
                         style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
                       ),
                       Text(
@@ -825,19 +900,64 @@ class PayPinkBottomSheets {
             ),
             const SizedBox(height: 14),
             Text(
-              'Capstone 2 Mobile Layer: Credentials and JWT session keys secured with native OS hardware encryption layers (iOS Keychain / Android KeyStore).',
-              style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted, height: 1.4),
+              'Your PayPink account is secured with end-to-end encryption, 6-digit MPIN authentication, and automated fraud monitoring.',
+              style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted, height: 1.4),
             ),
             const SizedBox(height: 14),
-            _DetailRow(label: 'Hardware Key ID', value: hardwareKeyId, isMono: true, isSmall: true),
-            _DetailRow(
-              label: 'Circuit Breaker State',
-              value: circuitStatus,
-              valueColor: circuitStatus.contains('OPEN') ? PayPinkTheme.red : PayPinkTheme.green,
-              isBold: true,
+            const _DetailRow(label: 'Account Tier', value: 'Level 3 Fully Verified', valueColor: PayPinkTheme.green, isBold: true),
+            const _DetailRow(label: 'Authentication Mode', value: 'PayPink 6-Digit MPIN'),
+            const _DetailRow(label: 'Daily Outgoing Limit', value: '₱50,000.00'),
+            const _DetailRow(label: 'Hardware Security', value: 'Active (Device KeyStore)'),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PinAuthScreen(mode: PinScreenMode.setup),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.dialpad_rounded, size: 18, color: PayPinkTheme.wine),
+                label: Text(
+                  'Setup / Change 6-Digit MPIN',
+                  style: PayPinkTheme.body(fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: PayPinkTheme.pink, width: 1.2),
+                  backgroundColor: PayPinkTheme.pinkSubtle,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
             ),
-            _DetailRow(label: 'Edge Gateway Route', value: gatewayRoute, isMono: true),
-            _DetailRow(label: 'Encrypted JWT Token', value: jwtToken, isMono: true, isSmall: true),
+            if (kDebugMode) ...[
+              const SizedBox(height: 10),
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text(
+                    'Developer Diagnostics (Debug Build Only)',
+                    style: PayPinkTheme.mono(fontSize: 10, color: PayPinkTheme.muted),
+                  ),
+                  children: [
+                    _DetailRow(label: 'Hardware Key ID', value: hardwareKeyId, isMono: true, isSmall: true),
+                    _DetailRow(
+                      label: 'Circuit Breaker State',
+                      value: circuitStatus,
+                      valueColor: circuitStatus.contains('OPEN') ? PayPinkTheme.red : PayPinkTheme.green,
+                      isBold: true,
+                    ),
+                    _DetailRow(label: 'Edge Gateway Route', value: gatewayRoute, isMono: true),
+                    _DetailRow(label: 'Encrypted JWT Token', value: jwtToken, isMono: true, isSmall: true),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
@@ -995,7 +1115,11 @@ class PayPinkBottomSheets {
     );
   }
 
-  static void showRequestQr(BuildContext context) {
+  static void showRequestQr(
+    BuildContext context, {
+    String? customerName,
+    String? accountNumber,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1037,11 +1161,11 @@ class PayPinkBottomSheets {
             ),
             const SizedBox(height: 16),
             Text(
-              'Trixie Samson · Everyday account',
+              '${customerName?.isNotEmpty == true ? customerName : 'PayPink Client'} · Everyday account',
               style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.bold),
             ),
             Text(
-              '001 1 5046 8001',
+              accountNumber?.isNotEmpty == true ? accountNumber! : '001 1 5046 8001',
               style: PayPinkTheme.mono(fontSize: 11, color: PayPinkTheme.muted),
             ),
             const SizedBox(height: 20),
@@ -1090,15 +1214,19 @@ class _SheetContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       padding: const EdgeInsets.only(top: 10, left: 20, right: 20, bottom: 28),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: isDark ? PayPinkTheme.darkPaper : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: const [
           BoxShadow(
             color: Color(0x33000000),
             blurRadius: 30,
@@ -1113,7 +1241,7 @@ class _SheetContainer extends StatelessWidget {
             width: 38,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.shade300,
+              color: isDark ? PayPinkTheme.darkLine : Colors.grey.shade300,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1123,13 +1251,13 @@ class _SheetContainer extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: PayPinkTheme.display(fontSize: 17, fontWeight: FontWeight.w700),
+                style: PayPinkTheme.display(fontSize: 17, fontWeight: FontWeight.w700, color: textInk),
               ),
               if (trailing != null)
                 trailing!
               else
                 IconButton(
-                  icon: const Icon(Icons.close, size: 20, color: PayPinkTheme.muted),
+                  icon: Icon(Icons.close, size: 20, color: textMuted),
                   onPressed: () => Navigator.pop(context),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -1163,6 +1291,10 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -1171,7 +1303,7 @@ class _DetailRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.muted),
+            style: PayPinkTheme.body(fontSize: 12, color: textMuted),
           ),
           const SizedBox(width: 14),
           Flexible(
@@ -1182,12 +1314,12 @@ class _DetailRow extends StatelessWidget {
                   ? PayPinkTheme.mono(
                       fontSize: isSmall ? 9.5 : 12,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-                      color: valueColor ?? PayPinkTheme.ink,
+                      color: valueColor ?? textInk,
                     )
                   : PayPinkTheme.body(
                       fontSize: isSmall ? 10.5 : 12.5,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-                      color: valueColor ?? PayPinkTheme.ink,
+                      color: valueColor ?? textInk,
                     ),
             ),
           ),

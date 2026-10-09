@@ -3,6 +3,7 @@
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
 _Last Updated: 2026-10-09 (CI/CD pipeline Stage 2 test stack lifecycle overhaul, explicit Azure SQL and PostgreSQL migrations in CI & Prod, Newman API contract testing alignment, and transaction-service concurrency unit test fix by [dom])_  
+_Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
 
 ---
 
