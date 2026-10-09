@@ -28,18 +28,11 @@ class NotificationKafkaConsumerTest {
 
     @Mock private NotificationRepository notificationRepository;
     @Mock private NotificationDispatcher dispatcher;
-    @InjectMocks private NotificationKafkaConsumer consumer;
+    private NotificationKafkaConsumer consumer;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private void injectObjectMapper() {
-        try {
-            var f = NotificationKafkaConsumer.class.getDeclaredField("objectMapper");
-            f.setAccessible(true); f.set(consumer, objectMapper);
-        } catch (Exception e) { throw new RuntimeException(e); }
-    }
-
-    @BeforeEach void setUp() { injectObjectMapper(); }
+    @BeforeEach void setUp() { consumer = new NotificationKafkaConsumer(notificationRepository, dispatcher, objectMapper); }
 
     private String txEvent(long customerId, long accountId, String op, String amount, String ref) {
         return String.format("{\"customerId\":%d,\"accountId\":%d,\"operation\":\"%s\",\"amount\":\"%s\",\"referenceNo\":\"%s\",\"currency\":\"PHP\"}",
@@ -191,4 +184,15 @@ class NotificationKafkaConsumerTest {
         verify(notificationRepository).save(cap.capture());
         assertThat(cap.getValue().getMessage()).contains("TX-PH-UNIQUE-99");
     }
+    @Test void savingsAllocationUsesReservationCopy() {
+        when(dispatcher.dispatch(anyLong(),anyString(),anyString())).thenReturn(true);
+        consumer.consume("{\"eventType\":\"savings.allocated\",\"customerId\":1,\"accountId\":11,\"referenceNo\":\"sv-1\",\"amount\":500}");
+        verify(dispatcher).dispatch(eq(1L),contains("reserved for your savings goals"),eq("sv-1"));
+    }
+    @Test void savingsCompletionUsesIndividualOwnershipCopy() {
+        when(dispatcher.dispatch(anyLong(),anyString(),anyString())).thenReturn(true);
+        consumer.consume("{\"eventType\":\"savings.circle_completed\",\"customerId\":1,\"accountId\":11,\"referenceNo\":\"sv-2\"}");
+        verify(dispatcher).dispatch(eq(1L),contains("Each member keeps their own savings"),eq("sv-2"));
+    }
+
 }

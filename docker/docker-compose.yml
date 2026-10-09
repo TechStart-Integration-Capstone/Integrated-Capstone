@@ -23,7 +23,11 @@ services:
       - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/06_interest.sql:ro
       - ./../scripts/migrate_phase10_rbac_roles.sql:/mssql-server-setup-scripts.d/07_rbac_roles.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'PayPink2.0_StrongPass!' -C -Q 'SELECT 1 FROM dbo.ACCOUNT' || exit 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -114,7 +118,11 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
-      test: [ "CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "kafka-topics --bootstrap-server localhost:9092 --list || exit 1",
+        ]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -177,9 +185,9 @@ services:
         condition: service_healthy
     # No host port â€” internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
       - SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.microsoft.sqlserver.jdbc.SQLServerDriver
       - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.SQLServerDialect
@@ -201,9 +209,10 @@ services:
         condition: service_healthy
     # No host port â€” internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
+      - APP_SAVINGS_ENABLED=${SAVINGS_ENABLED}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     volumes:
@@ -226,9 +235,9 @@ services:
         condition: service_healthy
     # No host port â€” internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -312,15 +321,9 @@ services:
     ports:
       - "8086:8086"
     environment:
-      - SPRING_DATASOURCE_AZURE_SQL_JDBC_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
-      - SPRING_DATASOURCE_AZURE_SQL_USERNAME=${AZURE_SQL_USERNAME:-sa}
-      - SPRING_DATASOURCE_AZURE_SQL_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
-      - ORACLE_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
-      - ORACLE_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
-      - ORACLE_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
+      - ORACLE_DATASOURCE_URL=${AZURE_SQL_URL}
+      - ORACLE_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - ORACLE_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
@@ -342,9 +345,9 @@ services:
         condition: service_healthy
     # No host port â€” internal only
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - OUTBOX_POLL_INTERVAL_MS=5000
       - OUTBOX_RETRY_INTERVAL_MS=30000
@@ -387,7 +390,13 @@ services:
     depends_on:
       - otel-collector
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -409,9 +418,9 @@ services:
         condition: service_healthy
     environment:
       - T24_SIMULATOR_URL=http://localhost:8090/ofs/process
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - OTEL_SERVICE_NAME=t24-adapter
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     volumes:
@@ -435,15 +444,19 @@ services:
     # No host port â€” internal only, accessed via api-gateway:8080 (/api/v1/loans/**)
     # Money moves only through transaction-service's /internal/remittance/transfer (not routed by the gateway).
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - ORCHESTRATOR_URL=http://transaction-service:8083
-      - LOAN_SCHEMA_MIGRATION_ENABLED=false
+      - LOAN_SCHEMA_MIGRATION_ENABLED=true
     volumes:
       - ./../microservices/loan-service/target/loan-service.jar:/app/app.jar
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -483,17 +496,17 @@ services:
   # ==========================================
   # Layer 1: Mobile App (Flutter Web on Nginx)
   # ==========================================
-  mobile-app:
-    build:
-      context: ../mobile
-      dockerfile: Dockerfile
-    container_name: mobile-app
-    depends_on:
-      - api-gateway
-    ports:
-      - "3002:80"
-    networks:
-      - ledger-net
+  #mobile-app:
+  #  build:
+  #    context: ../mobile
+  #    dockerfile: Dockerfile
+  #  container_name: mobile-app
+  #  depends_on:
+  #    - api-gateway
+  #  ports:
+  #    - "3002:80"
+  #  networks:
+  #    - ledger-net
 
   # ==========================================
   # Layer 6: Observability & Telemetry

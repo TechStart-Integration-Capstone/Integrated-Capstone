@@ -1,8 +1,10 @@
 # PayPink 2.0 — Project Context
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
-_Active Working Branch: feature/mobile-web-design-alignment (mobile UI aligned with the customer web app; not yet merged to main)_  
+_Active Working Branch: main_  
 _Last Updated: 2026-10-09 (Mobile UI aligned with the customer web app: DM Sans/Manrope fonts bundled, flat web-style tokens and cards, login/register rebuilt to mirror the frontend/bank auth panel, web-style bottom tab bar; 17/17 tests pass by [gillianneysha])_  
+_Last Updated: 2026-10-09 (Resolved Web Crypto Null check operator crash in SecureTokenStorage on plain HTTP via browser localStorage fallback, enabling seamless session persistence and login on http://paypink.westus2.cloudapp.azure.com:3002)_
+_Last Updated: 2026-10-09 (Aligned Mobile Web to dynamic reverse proxy origin ${Uri.base.origin}/api/v1 via container Nginx on port 3002, matching Web Banking architecture and eliminating cross-port CORS blocks)_
 _Last Updated: 2026-10-09 (Mobile real-time loan origination & instant state refresh implemented: merged fetchLoans() into fetchProfile() UserProfile.accounts, and wired onRefreshData to trigger _loadLiveDatabaseData(bypassCache: true) immediately upon loan acceptance; 17/17 tests pass clean by [dom])_  
 _Last Updated: 2026-10-09 (Corrected Azure FQDN to paypink.westus2.cloudapp.azure.com:8080/api/v1, enabled GoogleFonts runtime fetching, and tuned nginx caching to avoid stale mobile app browser caching)_
 _Last Updated: 2026-10-09 (Self-contained offline fonts bundled in mobile/assets/fonts/ and registered in pubspec.yaml; resolved blank white screen crash on http://localhost:3002 Docker release; 17/17 tests pass by [dom])_  
@@ -346,25 +348,68 @@ All planned phases complete through Phase 10 with CI/CD passing on Java 17 Temur
   - **MOB-104:** Replaced static date strings with dynamic runtime dates across `main.dart` and `remittance_screen.dart`.
   - **MOB-105:** Integrated live backend endpoints for favorites (`GET`, `POST`, `DELETE` on `/api/v1/accounts/favorites`), client-side 12-digit numeric validation (`^\d{12}$`), and server-side lookup verification (`/api/v1/accounts/recipients/lookup`), blocking transfers and favorite additions until both validations pass.
 
+=======
+_Last Updated: 2026-10-09 (Savings recovery worker proxy fix validated; 28 account-service tests pass, [dom])_
+
+---
+
+### Admin UI simplification (2026-10-08)
+
+- Admin presentation now uses concise navigation and single page headings, neutral slate surfaces, restrained rose accents and compact cards. Removed promotional banners and repeated technical copy; system configuration is expandable under System performance. Operational controls, validation guidance and simulation identification remain. Report cards stack on mobile.
+- Local frontend change only; backend, API contracts and deployment unchanged. JavaScript syntax and 11 transaction-monitor tests pass; browser visual validation not performed.
+
 
 ## Active Initiative: T24 Core Banking & DDD Domain Refactoring
+
+### Savings milestones (2026-10-09)
+
+- Bank and offline preview share savings-milestones.js, showing PHP 10K, 100K, 500K, 1M, 2M and later million milestones. Progress targets the next unreached amount, and reached tiles reflect current personal savings. Larger totals show current/next million milestones without an unbounded list. Existing first-1K recognition and completed-goal count remain. Syntax, existing offline/mocked bank browser checks (including mobile overflow), and whitespace checks pass. Frontend-only change; rebuild the frontend image on the other machine to deploy. No migration or deployment performed.
+
+### Savings rollout debugging (2026-10-09)
+
+- The backend guide now explicitly requires Java compilation before Docker image rebuilding because service Dockerfiles copy prebuilt JARs. It documents the worker proxy fix and preserves existing pending intents; no new migration is needed.
+
+- User reports applying schema-split, core and Savings migrations to Azure paypink and rebuilding/running on another machine. After correcting local/Azure configuration and rebuilding Java JARs, the live Savings UI works but a contribution remains pending. These deployment reports are user-provided, not independently verified from this machine.
+- Supplied logs show SavingsWorker crashing on service.jdbc because SavingsService is a transactional Spring proxy. Worker now constructor-injects its own JdbcTemplate and SavingsCoreClient instead of accessing proxy fields. Service dependencies are private. All 28 account-service tests pass, including three new Spring/H2 tests for worker recovery, due schedules and circle completion through the transactional service proxy. Whitespace checks pass. Existing durable intents/retry keys are preserved. Fix still needs syncing, JAR rebuilding and container recreation on the user's other machine. No database changes or local stack startup performed.
+
+### Savings backend implementation (2026-10-08)
+
+- Final validation passes: 25 account-service tests (including streak/response regression), real bank shell browser checks with mocked authenticated HTTP, offline preview interactions/no-network checks, mobile layout and JavaScript syntax checks. Prior unchanged-module checks passed 38 core, 10 outbox and 18 notification tests (91 backend tests total across these runs). Live mobile screenshot reviewed. Whitespace checks pass.
+- Logout clears customer page/dialog state; uncertain contributions retain an exact username-scoped retry record for safe recovery. Definitive creation validation errors retain the form, while uncertain creation refreshes the list before any manual new attempt. The guide gives manual SQL migration, Compose enable/build and two-customer acceptance steps. No full stack started, migration applied, real database changed or deployment performed.
+
+- Bank Savings connects through authenticated savings-live.js, with goal creation, circle invitations/acceptance, own contributions/releases, schedules, Smart Split, privacy, target approval and activity. API overview supplies own customer ID and consecutive successful scheduled-attempt counts; badges reflect current progress rather than a permanent award ledger. Offline preview remains on savings.js. No fake balances or members are used in the bank entry point.
+
+- Added unapplied scripts/migrate_savings.sql: five application tables for goals, schedules, circles, memberships and durable operation activity; two T24 tables for non-expiring reservations and their journal. Creating a goal starts at zero; actual reservations remain a separate operation.
+- account-service exposes /api/v1/accounts/savings through the existing gateway route. Own active PHP SAVINGS/SAVINGS_ACCOUNT accounts are required for goals, circle creation and invitation acceptance. Invitations target active registered PayPink usernames; member consent controls individual amount visibility. Admin target proposals require the affected member's approval.
+- t24-adapter internal savings APIs serialize on the same account lock as transfers, enforce core available funds and goal/release limits, run risk checks, and atomically persist held-balance changes, reservation journal and outbox. Smart Split supports multiple goals on one account. Request intents and exact core-command retries recover timeouts without duplicate reservations.
+- Optional schedules use Asia/Manila business dates, skip repeated catch-up contributions, and recheck schedule settings under the customer lock. Circle completion emits once-only notifications to accepted members. outbox-publisher routes savings events to savings.events; notification-service uses reservation/completion copy. Core reservation journal supplies monetary audit history.
+- Default OFF: Compose SAVINGS_ENABLED maps to account-service APP_SAVINGS_ENABLED. No migration applied, real database changed, Docker stack started or deployment performed. Public customer identity still relies on the existing gateway/private-network boundary. Rollout and API examples are in docs/savings-backend.md.
+- Backend tests use H2/mocks and bounded-memory JVMs. SQL Server migration, real gateway/core/risk calls, schedule execution and Kafka delivery still require the documented manual acceptance test on the other machine. Frontend API wiring is complete.
+
+### Savings UI prototype (2026-10-08)
+
+- Standalone preview uses savings.js with four sample personal goals, three PinkCircles, three-step creation, Smart Split, add/release, editing and session activity. Preview allocations only adjust sample funds. Bank Savings uses savings-live.js with backend data; both entry points share savings.css.
+- Compact overview cards use reduced padding, smaller total typography and badge medals. My Savings / PinkCircles navigation sits below the overview. Personal savings shows a dynamic goal count with in-progress/completed counts, matching the circle summary. Compact layout reviewed in a desktop screenshot; existing offline browser and mobile checks pass.
+- Rose total card switches between personal savings (initial PHP 23,500) and own contributions across circles (initial PHP 10,700). Removed shared UI concept banner and spendable/reserved/account overview breakdown, plus standalone topbar Demo preview label.
+- Restored collectible First PHP 1K, Emergency Era (PHP 100K emergency cushion), Consistency Queen (four consecutive scheduled contributions) and Million Club badges, earned/locked states and detail dialogs. Streaks and milestones remain separate. Existing interest tiers unchanged; proposed 5% is illustrative and inactive.
+- Local frontend only; backend, schemas, mobile and deployment unchanged. Current offline browser checks pass for totals and their updates, badges, banner removal, creation validation, mobile layouts, keyboard dismissal, no preview API calls and real bank navigation/logout. Desktop screenshot reviewed; corrected new badge icon encoding.
 
 The PayPink system is being refactored from a shared-database monolithic ledger into a Domain-Driven Design (DDD) banking architecture. In this design, Temenos T24 (simulated by `t24-adapter`) acts as the stateful System of Record (SoR) and authoritative double-entry book of record.
 
 ### Refactoring Roadmap (Phases 0 through 9)
 
-| Phase | Title | Scope and Deliverables | Status |
-|:---:|---|---|:---:|
-| **Phase 0** | Perimeter Lockdown & Bypass Elimination | Enforced ROLE_ADMIN on admin/stress routes in API Gateway; added defense-in-depth in account-service; deprecated direct transfer bypass in auth-service (410 GONE). | Done (Commit `43f3025`) |
-| **Phase 1** | Azure SQL Schema Split | Separated database into `t24` (core) and `app` (application) schemas with backward-compatible `dbo.*` synonyms. Qualified JPA `@Table(schema = "...")` across all microservices. | Done (Commit `a8d6213`) |
-| **Phase 2** | Stateful T24 Core Banking Engine | Added `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables. Implemented `T24HoldService` (atomic lock/release) and `T24PostingService` (double-entry posting journal). | Done (Commit `3cd7129`) |
-| **Phase 3** | Remittance Saga Hold Integration & Cutover | Integrated `T24HoldClient` with circuit breaker into `RemittanceLedgerService`. Replaced local SQL balance lock updates with T24 Core hold API calls. | Done (Commit `3b3f9e2`) |
-| **Phase 4** | Transaction History & CQRS Read-Model | Built CQRS read-store in `transaction-service`: `TransactionActivityService`, PDF statement generation (`TransactionStatementReportService`), and Operations Desk admin monitor. Added gateway routes. | Done (Commit `801b044`) |
-| **Phase 5** | Account Service Consolidation | Move `/me`, recipient lookup, recipients directory, and banking favorites/beneficiaries into `account-service`. Route live balance inquiries to T24 Core. | Done (Commit `9982ba3`) |
-| **Phase 6** | Auth Slimming & Loan Service Alignment | Slim `auth-service` perimeter via gateway route cutover for recipients, favorites, and admin monitor; loan disbursements & repayments routed via T24 Core posting saga. | Done (Commit `9d29e3e`) |
-| **Phase 7** | EOD Service Alignment | Align Interest EOD and Loan EOD to use qualified `t24.*` and `app.*` schemas with T24 Core EOD job logs (`t24.EOD_JOB_RUN`) and posting events. | Done (Commit `2f9e31e`) |
-| **Phase 8** | Events, Audit & Reconciliation Re-point | Verify and relate outbox events with T24 Core double-entry posting journals across `audit-service`, `reconciliation-service`, `notification-service`, and `analytics-service`. | Done (Commit `9590d5f`) |
-| **Phase 9** | Frontend Polish, Synonym Cleanup & Final Verification | Final end-to-end verification across Web SPA and frozen Mobile contracts; created synonym retirement script `scripts/retire_phase9_synonyms.sql`; verified 100% test pass rate across all microservices. | Done |
+|    Phase    | Title                                                 | Scope and Deliverables                                                                                                                                                                                   |         Status          |
+| :---------: | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------------: |
+| **Phase 0** | Perimeter Lockdown & Bypass Elimination               | Enforced ROLE_ADMIN on admin/stress routes in API Gateway; added defense-in-depth in account-service; deprecated direct transfer bypass in auth-service (410 GONE).                                      | Done (Commit `43f3025`) |
+| **Phase 1** | Azure SQL Schema Split                                | Separated database into `t24` (core) and `app` (application) schemas with backward-compatible `dbo.*` synonyms. Qualified JPA `@Table(schema = "...")` across all microservices.                         | Done (Commit `a8d6213`) |
+| **Phase 2** | Stateful T24 Core Banking Engine                      | Added `t24.LOCKED_AMOUNT` and `t24.POSTING_JOURNAL` tables. Implemented `T24HoldService` (atomic lock/release) and `T24PostingService` (double-entry posting journal).                                   | Done (Commit `3cd7129`) |
+| **Phase 3** | Remittance Saga Hold Integration & Cutover            | Integrated `T24HoldClient` with circuit breaker into `RemittanceLedgerService`. Replaced local SQL balance lock updates with T24 Core hold API calls.                                                    | Done (Commit `3b3f9e2`) |
+| **Phase 4** | Transaction History & CQRS Read-Model                 | Built CQRS read-store in `transaction-service`: `TransactionActivityService`, PDF statement generation (`TransactionStatementReportService`), and Operations Desk admin monitor. Added gateway routes.   | Done (Commit `801b044`) |
+| **Phase 5** | Account Service Consolidation                         | Move `/me`, recipient lookup, recipients directory, and banking favorites/beneficiaries into `account-service`. Route live balance inquiries to T24 Core.                                                | Done (Commit `9982ba3`) |
+| **Phase 6** | Auth Slimming & Loan Service Alignment                | Slim `auth-service` perimeter via gateway route cutover for recipients, favorites, and admin monitor; loan disbursements & repayments routed via T24 Core posting saga.                                  | Done (Commit `9d29e3e`) |
+| **Phase 7** | EOD Service Alignment                                 | Align Interest EOD and Loan EOD to use qualified `t24.*` and `app.*` schemas with T24 Core EOD job logs (`t24.EOD_JOB_RUN`) and posting events.                                                          | Done (Commit `2f9e31e`) |
+| **Phase 8** | Events, Audit & Reconciliation Re-point               | Verify and relate outbox events with T24 Core double-entry posting journals across `audit-service`, `reconciliation-service`, `notification-service`, and `analytics-service`.                           | Done (Commit `9590d5f`) |
+| **Phase 9** | Frontend Polish, Synonym Cleanup & Final Verification | Final end-to-end verification across Web SPA and frozen Mobile contracts; created synonym retirement script `scripts/retire_phase9_synonyms.sql`; verified 100% test pass rate across all microservices. |          Done           |
 
 ---
 
@@ -383,20 +428,20 @@ PayPink 2.0 operates as an event-driven, domain-partitioned microservices bankin
 
 ## Active Microservices Directory
 
-| Service | Host Port | Responsibility & Primary Domain | Database Schema |
-|---|:---:|---|---|
-| `api-gateway` | 8080 | Sole external entry point. JWT validation, role checking, rate limiting, and reverse proxy. | Redis (token bucket) |
-| `auth-service` | 8081 | Authentication, user registration, JWT generation, password hashing. | `app.CUSTOMER` |
-| `account-service` | 8082 | Customer accounts, balance inquiry, account lifecycle status. | `t24.ACCOUNT`, `app.CUSTOMER` |
-| `transaction-service` | 8083 | Remittance Orchestrator (4-step saga), CQRS Activity & PDF statements, Admin Monitor, and Interest EOD. | `app.REMITTANCE`, `t24.LEDGER_TRANSACTION`, `app.OUTBOX_EVENT` |
-| `t24-adapter` | 8090 | Core Banking Engine (T24). Authoritative account balances, locked amounts (holds), double-entry posting journal. | `t24.ACCOUNT`, `t24.LOCKED_AMOUNT`, `t24.POSTING_JOURNAL` |
-| `risk-engine` | 8000 | Python 3.11 FastAPI. Two-layer fraud scoring: Rules engine + Isolation Forest ML. | Stateless |
-| `loan-service` | 8091 | Loan product applications, credit evaluation, and repayments. | `t24.LOAN`, `t24.LOAN_SCHEDULE`, `t24.LOAN_REPAYMENT` |
-| `audit-service` | 8085 | Kafka consumer logging immutable risk decision audit records. | PostgreSQL (`RISK_DECISION`) |
-| `notification-service` | 8084 | Kafka consumer for SMS/Email/Push transaction notification dispatch. | PostgreSQL |
-| `reconciliation-service` | 8086 | Discrepancy detector between application outbox and ledger transactions. | Azure SQL + PostgreSQL |
-| `outbox-publisher` | 8087 | Poller worker that pushes `OUTBOX_EVENT` rows onto Kafka topics. | Azure SQL + Kafka |
-| `analytics-service` | 8088 | Real-time transaction volume and velocity metrics streamer. | Kafka (in-memory) |
+| Service                  | Host Port | Responsibility & Primary Domain                                                                                  | Database Schema                                                |
+| ------------------------ | :-------: | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `api-gateway`            |   8080    | Sole external entry point. JWT validation, role checking, rate limiting, and reverse proxy.                      | Redis (token bucket)                                           |
+| `auth-service`           |   8081    | Authentication, user registration, JWT generation, password hashing.                                             | `app.CUSTOMER`                                                 |
+| `account-service`        |   8082    | Customer accounts, balance inquiry, account lifecycle status.                                                    | `t24.ACCOUNT`, `app.CUSTOMER`                                  |
+| `transaction-service`    |   8083    | Remittance Orchestrator (4-step saga), CQRS Activity & PDF statements, Admin Monitor, and Interest EOD.          | `app.REMITTANCE`, `t24.LEDGER_TRANSACTION`, `app.OUTBOX_EVENT` |
+| `t24-adapter`            |   8090    | Core Banking Engine (T24). Authoritative account balances, locked amounts (holds), double-entry posting journal. | `t24.ACCOUNT`, `t24.LOCKED_AMOUNT`, `t24.POSTING_JOURNAL`      |
+| `risk-engine`            |   8000    | Python 3.11 FastAPI. Two-layer fraud scoring: Rules engine + Isolation Forest ML.                                | Stateless                                                      |
+| `loan-service`           |   8091    | Loan product applications, credit evaluation, and repayments.                                                    | `t24.LOAN`, `t24.LOAN_SCHEDULE`, `t24.LOAN_REPAYMENT`          |
+| `audit-service`          |   8085    | Kafka consumer logging immutable risk decision audit records.                                                    | PostgreSQL (`RISK_DECISION`)                                   |
+| `notification-service`   |   8084    | Kafka consumer for SMS/Email/Push transaction notification dispatch.                                             | PostgreSQL                                                     |
+| `reconciliation-service` |   8086    | Discrepancy detector between application outbox and ledger transactions.                                         | Azure SQL + PostgreSQL                                         |
+| `outbox-publisher`       |   8087    | Poller worker that pushes `OUTBOX_EVENT` rows onto Kafka topics.                                                 | Azure SQL + Kafka                                              |
+| `analytics-service`      |   8088    | Real-time transaction volume and velocity metrics streamer.                                                      | Kafka (in-memory)                                              |
 
 ---
 

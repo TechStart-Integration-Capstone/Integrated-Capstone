@@ -1,11 +1,11 @@
 :root {
     --primary-rose: #651c3e; --primary-rose-hover: #47142c; --deep-blush: #843658; --raspberry: #651c3e;
-    --bg-main: #faf9f6; --bg-card-subtle: #f5eaf0; --bg-card-highlight: #faf7f8;
-    --border-rose-light: #ece8e7; --border-rose-medium: #c69baa; --border-subtle: #ece8e7;
-    --text-primary: #29242a; --text-secondary: #595159; --text-muted: #807a80; --text-rose: #651c3e;
+    --bg-main: #f6f7f9; --bg-card-subtle: #f5eaf0; --bg-card-highlight: #faf7f8;
+    --border-rose-light: #e2e8f0; --border-rose-medium: #c69baa; --border-subtle: #e2e8f0;
+    --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #64748b; --text-rose: #651c3e;
     --status-success: #25745c; --status-success-bg: #edf5f1;
     --font-heading: 'Manrope', sans-serif; --font-body: 'DM Sans', sans-serif;
-    --shadow-sm: none; --shadow-md: 0 5px 20px #29242a04; --shadow-glow: none;
+    --shadow-sm: none; --shadow-md: 0 5px 20px #0f172a04; --shadow-glow: none;
 }
 button, input, select { font-family: inherit; }
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
@@ -23,7 +23,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .tab-item.active i { width: 5px; height: 5px; background: currentColor; border-radius: 50%; margin-left: auto; }
 .tab-item:hover { background: #faf5f7; }
 .admin-sidebar-footer { margin-top: auto; padding-top: 30px; }
-.admin-workspace-note { padding: 20px 16px; border: 1px solid var(--border-subtle); background: #faf9f6; border-radius: 12px; font-size: 12px; line-height: 1.8; }
+.admin-workspace-note { padding: 20px 16px; border: 1px solid var(--border-subtle); background: #f6f7f9; border-radius: 12px; font-size: 12px; line-height: 1.8; }
 .admin-workspace-note p { color: var(--text-muted); margin-top: 8px; }
 .admin-workspace-note > span { display: block; margin-top: 14px; color: var(--primary-rose); font-size: 10px; }
 .admin-bank-link { display: flex; justify-content: space-between; padding: 24px 12px 0; color: var(--primary-rose); text-decoration: none; font-size: 12px; }
@@ -31,7 +31,7 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .admin-breadcrumb { color: var(--text-muted); font-size: 12px; display: flex; gap: 17px; }
 .admin-breadcrumb strong { font-weight: 500; color: var(--text-secondary); }
 .user-profile-widget { gap: 20px; }
-.btn-token-badge { background: #faf9f6; color: var(--primary-rose); border-color: var(--border-subtle); font-family: var(--font-body); font-size: 11px; }
+.btn-token-badge { background: #f6f7f9; color: var(--primary-rose); border-color: var(--border-subtle); font-family: var(--font-body); font-size: 11px; }
 .avatar-circle { background: #f5eaf0; color: var(--primary-rose); border: 0; box-shadow: none; }
 .user-name { font-size: 12px; }.user-branch { font-size: 10px; }
 .main-body { margin: 0 0 0 246px; max-width: none; padding: 38px; }
@@ -56,14 +56,14 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .card-header { flex-wrap: wrap; gap: 12px; }.card-title { font-size: 15px; letter-spacing: -.35px; }
 .badge-chip { color: var(--text-muted); background: #f5f3ef; font-size: 9px; font-weight: 500; }
 .accounts-carousel { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.account-card { background: #faf9f6; border: 1px solid var(--border-subtle); padding: 20px; box-shadow: none; }
+.account-card { background: #f6f7f9; border: 1px solid var(--border-subtle); padding: 20px; box-shadow: none; }
 .account-card.selected { background: #f8eff3; border: 1px solid #b8879d; box-shadow: none; }
 .account-card:hover { transform: none; border-color: #b8879d; }
 .account-card-type { color: var(--primary-rose); font-size: 12px; }.account-card-num { font-size: 10px; overflow-wrap: anywhere; }.account-card-bal { color: var(--text-primary); font-size: 25px; letter-spacing: -.7px; }.account-card-curr { font-size: 9px; color: var(--text-muted); }
 .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }.form-group, .input-currency-wrapper { min-width: 0; }.form-control { width: 100%; min-width: 0; max-width: 100%; }
 .form-group label { font-size: 11px; font-weight: 600; }.form-control { background: white; border-color: #e4dde1; min-height: 44px; font-size: 12px; }.form-control:focus { border-color: #a96788; box-shadow: 0 0 0 3px #651c3e0a; }
 .btn-primary { background: var(--primary-rose); border-radius: 9px; box-shadow: none; }.btn-primary:hover { background: var(--primary-rose-hover); transform: none; box-shadow: none; }
-.rail-badge { font-size: 9px; }.log-stream-box { background: #faf9f6; border-color: var(--border-subtle); }.log-entry { overflow-wrap: anywhere; background: #faf7f8; color: var(--text-secondary); }.log-action { color: var(--primary-rose); }.log-time { color: var(--text-muted); }
+.rail-badge { font-size: 9px; }.log-stream-box { background: #f6f7f9; border-color: var(--border-subtle); }.log-entry { overflow-wrap: anywhere; background: #faf7f8; color: var(--text-secondary); }.log-action { color: var(--primary-rose); }.log-time { color: var(--text-muted); }
 .panel-hero { background: #f5eaf0; border-color: var(--border-subtle); }.hero-title { color: var(--primary-rose); }.hero-desc { color: var(--text-secondary); }
 .lifecycle-container { max-width: 100%; }.json-code { max-width: 100%; overflow-x: auto; }.modal-card { max-height: 90vh; overflow-y: auto; }.modal-body, .receipt-ref { overflow-wrap: anywhere; }
 @media (min-width: 1700px) { .main-body { padding: 44px 55px; }.top-nav { padding: 0 55px; } }
@@ -84,3 +84,22 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
     .card-header { align-items: flex-start; }.hero-title { font-size: 21px; }.admin-page-heading h1 { font-size: 25px; }.section-card { padding: 17px; }.tx-row { flex-wrap: wrap; gap: 8px; }.btn-token-badge { padding: 6px 8px; }.tab-item { white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Compact banking administration. */
+.top-nav { height: 72px; }
+.admin-sidebar > .admin-eyebrow { margin-top: 36px; letter-spacing: 1.2px; }
+.admin-page-heading { margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--border-subtle); }
+.admin-page-heading h1 { margin: 0; font-size: 26px; letter-spacing: -.6px; }
+.admin-environment { display: block; margin: 0 12px; font-size: 11px; color: var(--text-muted); }
+.admin-bank-link { padding-top: 16px; }
+.section-card, .account-card, .sla-card { border-radius: 8px; }
+.tab-item { border-radius: 6px; color: var(--text-secondary); }
+.account-card-bal, .sla-metric { font-variant-numeric: tabular-nums; }
+.sla-card { background: white; border: 1px solid var(--border-subtle); box-shadow: none; }
+.admin-report-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.admin-system-details { border-top: 1px solid var(--border-subtle); padding: 18px 0; margin-top: 24px; color: var(--text-secondary); font-size: 12px; }
+.admin-system-details summary { cursor: pointer; font-weight: 600; }
+.admin-system-details .admin-architecture { padding: 16px 0 0; }
+#tab-dashboard .card-header > .badge-chip { display: none; }
+@media (max-width: 800px) { .top-nav { height: auto; }.admin-report-grid { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { #tab-reports .sla-metrics-grid { grid-template-columns: 1fr !important; } }
