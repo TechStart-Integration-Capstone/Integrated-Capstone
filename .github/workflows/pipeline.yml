@@ -102,7 +102,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      CI_SERVICES: "azure-sql redis kafka zookeeper account-service auth-service api-gateway transaction-service"
+      CI_DATASTORES: "azure-sql postgresql redis zookeeper kafka"
+      CI_APPS: "account-service auth-service risk-engine t24-adapter loan-service transaction-service api-gateway"
     steps:
       - uses: actions/checkout@v5
 
@@ -127,10 +128,67 @@ jobs:
           MSSQL_MEMORY_LIMIT_MB=2048
           ENVEOF
 
-      - name: Start the temporary stack
+      - name: Start CI datastores
         run: |
           docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env \
-            up -d --build $CI_SERVICES || true
+            up -d $CI_DATASTORES
+
+      - name: Wait for Azure SQL and datastore readiness
+        run: |
+          echo "Waiting for Azure SQL to accept connections..."
+          SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
+          for i in $(seq 1 40); do
+            if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
+              SQLCMD="/opt/mssql-tools/bin/sqlcmd"
+            fi
+            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1" >/dev/null 2>&1; then
+              echo "Azure SQL is ready."
+              break
+            fi
+            if [ "$i" -eq 40 ]; then
+              echo "Azure SQL failed to start after 80s"
+              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs azure-sql --tail=40
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "Waiting for PostgreSQL..."
+          for i in $(seq 1 30); do
+            if docker exec postgres-immutable-audit pg_isready -U audit_user -d ledger_audit_db >/dev/null 2>&1; then
+              echo "PostgreSQL is ready."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Seed and migrate Azure SQL
+        run: |
+          SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
+          if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
+            SQLCMD="/opt/mssql-tools/bin/sqlcmd"
+          fi
+          PASS="PayPink2.0_StrongPass!"
+
+          SQL_SCRIPTS=(
+            "microservices/transaction-service/src/main/resources/schema-azuresql.sql"
+            "microservices/loan-service/src/main/resources/db/phase6_loans.sql"
+            "scripts/seed_demo_azure_sql.sql"
+            "scripts/migrate_phase1_schema_split.sql"
+            "scripts/migrate_phase2_t24_core.sql"
+            "scripts/migrate_interest_azuresql.sql"
+            "scripts/migrate_phase10_rbac_roles.sql"
+          )
+
+          for f in "${SQL_SCRIPTS[@]}"; do
+            echo "Applying $f to azure-sql-master..."
+            cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b
+          done
+
+      - name: Start application microservices
+        run: |
+          docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env \
+            up -d --build $CI_APPS
 
       - name: Wait for the gateway
         run: |
@@ -140,17 +198,19 @@ jobs:
             fi
             sleep 5
           done
-          echo "Gateway health probe skipped or timed out; proceeding."
+          echo "Gateway health probe timed out after 300s; proceeding to inspect logs."
+          exit 1
 
       - name: API contract tests (Newman)
         run: |
-          mkdir -p tests/postman/results
-          if [ -f "postman/PayPink_Retail_Ledger_Postman_Collection.json" ]; then
+          mkdir -p postman/results
+          if [ -f "postman/PayPink_2.0_API_Reference_Collection.json" ]; then
             docker run --rm --network host \
               -v "$PWD/postman:/etc/newman" \
-              postman/newman:latest run PayPink_Retail_Ledger_Postman_Collection.json \
-              --env-var "baseUrl=http://localhost:8080" \
-              --reporters cli,junit --reporter-junit-export results/newman.xml || true
+              postman/newman:latest run PayPink_2.0_API_Reference_Collection.json \
+              -e PayPink_Local_Environment.json \
+              --env-var "base_url=http://localhost:8080" \
+              --reporters cli,junit --reporter-junit-export results/newman.xml
           fi
 
       - name: Upload test report
@@ -158,7 +218,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: newman-report
-          path: tests/postman/results
+          path: postman/results
           if-no-files-found: ignore
 
       - name: Show container logs on failure
@@ -252,7 +312,7 @@ jobs:
           if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -Q "SELECT 1" &>/dev/null; then
             PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n')
           fi
-          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql; do
+          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to azure-sql-master..."
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
@@ -262,7 +322,7 @@ jobs:
           if ! docker exec postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db -c "SELECT 1" &>/dev/null; then
             PG_USER="postgres"
           fi
-          for f in scripts/migrate_reconciliation_fix.sql scripts/migrate_phase6_risk_decision.sql scripts/migrate_interest_postgres.sql; do
+          for f in scripts/migrate_reconciliation_fix.sql scripts/migrate_phase6_risk_decision.sql scripts/migrate_interest_postgres.sql scripts/migrate_interest_recovery_postgres.sql scripts/migrate_interest_approval_postgres.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to postgres-immutable-audit..."
               cat "$f" | docker exec -i postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db 2>/dev/null || true

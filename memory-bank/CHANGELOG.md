@@ -1,6 +1,22 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — CI/CD Pipeline & Newman Contract Test Runner Overhaul:
+  - **CI Temporary Stack Orchestration (`.github/workflows/pipeline.yml`):**
+    - Split Stage 2 container startup into a 2-phase lifecycle (`CI_DATASTORES` then `CI_APPS`) to eliminate race conditions.
+    - Added `postgresql` to `CI_DATASTORES` alongside `azure-sql`, `redis`, `zookeeper`, `kafka`.
+    - Added health polling for Azure SQL and PostgreSQL before starting application microservices.
+    - Added explicit `sqlcmd` execution in Stage 2 applying all core DDL, loan tables, demo seed, schema splits, T24 core tables, interest accrual, and Phase 10 RBAC roles (`migrate_phase10_rbac_roles.sql`) to `azure-sql-master`.
+    - Added `risk-engine`, `t24-adapter`, and `loan-service` to `CI_APPS` alongside `account-service`, `auth-service`, `transaction-service`, and `api-gateway`.
+  - **Newman Contract Test Runner Fixes:**
+    - Switched target collection from legacy `PayPink_Retail_Ledger_Postman_Collection.json` to updated `PayPink_2.0_API_Reference_Collection.json`.
+    - Bound environment file `PayPink_Local_Environment.json` and corrected base URL variable flag to `--env-var "base_url=http://localhost:8080"` matching snake_case Postman variable references.
+    - Removed `|| true` swallow flag so contract regressions fail the build.
+    - Aligned JUnit XML report output and artifact upload path to `postman/results/newman.xml`.
+  - **Stage 3 Production Deployment Migrations:**
+    - Added `scripts/migrate_phase10_rbac_roles.sql` to Azure SQL additive migrations loop.
+    - Added `scripts/migrate_interest_recovery_postgres.sql` and `scripts/migrate_interest_approval_postgres.sql` to PostgreSQL migrations loop. — [dom]
+
 - 2026-10-08 — Comprehensive Endpoint-Level OpenAPI / Swagger Documentation:
   - **Account Service (`account-service`):**
     - Annotated [`AccountController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/AccountController.java) and [`BeneficiaryController.java`](file:///microservices/account-service/src/main/java/com/bank/account/controller/BeneficiaryController.java) with `@Tag`, `@Operation`, `@ApiResponses`, and `@Parameter` descriptions and examples for profile (`/me`), accounts list/pagination (`/`), account details (`/{accountId}`), customer lookup (`/customer/{customerId}`), status update (`/status`), balance reset (`/reset-balance`), recipient directory/lookup (`/recipients`), and favorites (`/favorites`). Tests: 20/20 passed.

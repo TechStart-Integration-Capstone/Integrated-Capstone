@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (Comprehensive endpoint-level OpenAPI Swagger documentation across all microservices, centralized Gateway Swagger UI, automated 3-attempt bank loan retry & admin retry removal, RFC-7807 problem details platform standardisation, database-driven RBAC migration, gateway CORS allow-list, list pagination, and API reference alignment by [dom])_  
+_Last Updated: 2026-10-09 (CI/CD pipeline Stage 2 test stack lifecycle overhaul, explicit Azure SQL and PostgreSQL migrations in CI & Prod, and Newman API contract testing alignment by [dom])_  
 
 ---
 
