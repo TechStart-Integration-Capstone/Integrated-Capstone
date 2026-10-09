@@ -1,4 +1,15 @@
 # Changelog
+- 2026-10-09 — Local Mobile Testing Connectivity & Local Mode Fallback in `auth_service.dart`: Added graceful local fallback in `AuthService.login` for local development testing when Windows corporate firewall blocks Docker host port forwarding, enabling seamless UI authentication and feature testing while keeping all Clean Architecture Dio/BLoC modules intact for cloud cutover. — [Antigravity]
+
+- 2026-10-08 — Disabled GoogleFonts Runtime HTTP Fetching in `main.dart`: Set `GoogleFonts.config.allowRuntimeFetching = false` at app startup to prevent `fonts.gstatic.com` network load exceptions (`ClientException: Failed to fetch`), fixing the blank screen crash on Web/Chrome platforms. — [Antigravity]
+
+- 2026-10-08 — Flutter Web Startup Guard Fix in `main.dart`: Wrapped `HttpOverrides.global` initialization with a `!kIsWeb` check to prevent `dart:io` `UnsupportedError` on Chrome/Web platforms, fixing the white blank screen error during Flutter Web application startup. — [Antigravity]
+
+- 2026-10-08 — Local Testing Connectivity & Preflight OPTIONS Gateway Fix: Added HTTP OPTIONS preflight request bypass in `JwtAuthFilter.java` (`api-gateway`) returning HTTP 200 OK without JWT auth for browser preflights; verified Flutter mobile `ApiConfig.baseUrl` platform detection (`http://10.0.2.2:8080/api/v1` on Android Emulator and `http://localhost:8080/api/v1` on Chrome Web/Desktop); restarted `api-gateway` Docker container. — [Antigravity]
+
+- 2026-10-08 — Local Testing Docker Compose Database Fallbacks & Android Manifest Fix: Added default local Azure SQL fallback environment variables (`SPRING_DATASOURCE_URL`, `USERNAME`, `PASSWORD`) in `docker/docker-compose.yml` for `auth-service`, `account-service`, `transaction-service`, `reconciliation-service`, and `outbox-publisher`; restarted microservices cluster; updated `mobile/android/app/src/main/AndroidManifest.xml` with `INTERNET` permission and `android:usesCleartextTraffic="true"`. — [Antigravity]
+
+- 2026-10-08 — Clean Architecture & BLoC Enterprise Mobile Refactoring: Added enterprise Flutter packages (`flutter_bloc`, `dio`, `get_it`, `encrypt`, `shimmer`) to `pubspec.yaml`; created 4-layer architecture structure (`core/network/dio_client.dart` with SSL Pinning & AES-256 E2EE, `core/security/secure_token_storage.dart`, `core/widgets/shimmer_skeleton.dart`, `core/widgets/state_matrix_container.dart`); built Clean Architecture domain/data/presentation modules for `auth`, `accounts`, `remittance`, and `transactions`; wired `GetIt` service locator container (`injection_container.dart`) and top-level `MultiBlocProvider` in `main.dart`. — [Antigravity]
 Newest first. One line per change: date, what changed, who.
 
 - 2026-10-09 — Azure Cloud SQL Hosted Database Alignment & Funds Transfer Resolution:
@@ -13,6 +24,7 @@ Newest first. One line per change: date, what changed, who.
   - **Cloud Infrastructure & Stack Verification (`vm-paypink`):** Disabled daily auto-shutdown policy on Azure VM; restored Kafka after stale broker ephemeral registration; verified all 26 core operational containers running and healthy. Confirmed Web Banking SPA accessible at `http://paypink-levi-westus2.westus2.cloudapp.azure.com/bank/` and Azure SQL `master` active with all retail banking tables. — [levi]
 - 2026-10-09 — Fix ReconciliationLog compilation error from PR #30 merge: removed duplicate field and javadoc declarations in ReconciliationLog.java; verified reconciliation-service compilation and 8/8 tests passed. — [dom]
 - 2026-10-06 — Dynamic Mobile Transfer & Activity History Binding: passed live user accounts (`_userProfile?.accounts`) to `RemittanceScreen` in `mobile/lib/main.dart`; updated `RemittanceService` and `RemittanceScreen` to submit and transfer using dynamic account numbers instead of hardcoded 5046/8504 mocks; updated `AccountService.fetchTransactions()` to query live database transactions from Azure SQL via `/auth/admin/transactions/today` & `/auth/banking/transactions`. — [Antigravity]
+
 - 2026-10-06 — Dynamic Mobile Dashboard & Accounts Binding: updated `mobile/lib/screens/dashboard_screen.dart` to dynamically render live database accounts (`widget.accounts`) fetched from Azure SQL instead of static hardcoded cards. — [Antigravity]
 - 2026-10-06 — Enforced project memory workflow in root `AGENTS.md`: read `memory-bank/CONTEXT.md` before code and update CONTEXT/CHANGELOG after every change, including migrations and deployments. Updated context to reflect actual local runtime rather than pending activation. — [Codex; uncommitted]
 

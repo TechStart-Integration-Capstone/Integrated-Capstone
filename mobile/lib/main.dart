@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'theme/paypink_theme.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/accounts_screen.dart';
@@ -15,6 +17,13 @@ import 'services/secure_token_storage.dart';
 import 'widgets/bottom_sheets.dart';
 import 'widgets/profile_sheet.dart';
 import 'widgets/paypink_logo.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:paypink_mobile/src/core/di/injection_container.dart' as di;
+import 'package:paypink_mobile/src/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:paypink_mobile/src/features/accounts/presentation/bloc/accounts_bloc.dart';
+import 'package:paypink_mobile/src/features/remittance/presentation/bloc/remittance_bloc.dart';
+import 'package:paypink_mobile/src/features/transactions/presentation/bloc/transactions_bloc.dart';
+
 
 class DevHttpOverrides extends HttpOverrides {
   @override
@@ -24,17 +33,33 @@ class DevHttpOverrides extends HttpOverrides {
   }
 }
 
-void main() {
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  HttpOverrides.global = DevHttpOverrides();
+  GoogleFonts.config.allowRuntimeFetching = false;
+  await di.initServiceLocator();
+  if (!kIsWeb) {
+    HttpOverrides.global = DevHttpOverrides();
+  }
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
     ),
   );
-  runApp(const PayPinkMobileApp());
+  runApp(
+    MultiBlocProvider(
+      providers: [
+        BlocProvider<AuthBloc>(create: (_) => di.sl<AuthBloc>()),
+        BlocProvider<AccountsBloc>(create: (_) => di.sl<AccountsBloc>()..add(FetchAccountsEvent())),
+        BlocProvider<RemittanceBloc>(create: (_) => di.sl<RemittanceBloc>()),
+        BlocProvider<TransactionsBloc>(create: (_) => di.sl<TransactionsBloc>()..add(FetchTransactionsEvent())),
+      ],
+      child: const PayPinkMobileApp(),
+    ),
+  );
 }
+
 
 class PayPinkMobileApp extends StatefulWidget {
   final bool initialAuthenticated;
