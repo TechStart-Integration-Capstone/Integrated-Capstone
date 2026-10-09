@@ -863,38 +863,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                PayPinkSpendingChart(isDark: isDark),
-                const SizedBox(height: 12),
-                const Divider(color: PayPinkTheme.line, height: 1),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          const Icon(Icons.security_rounded, size: 13, color: PayPinkTheme.green),
-                          const SizedBox(width: 5),
-                          Flexible(
-                            child: Text(
-                              'Risk Score: 0.12 (Safe)',
-                              style: PayPinkTheme.mono(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Security \u2192',
-                      style: PayPinkTheme.body(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.wine,
-                      ),
-                    ),
-                  ],
+                PayPinkSpendingChart(
+                  isDark: isDark,
+                  transactions: widget.transactions,
                 ),
               ],
             ),

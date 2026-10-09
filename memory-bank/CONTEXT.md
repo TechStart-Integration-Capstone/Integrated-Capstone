@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-09 (Restored Local Dev Fallback Mode for Development & Firewall Testing, Comprehensive OpenAPI Swagger documentation, Phase 10 RBAC hardening)_
+_Last Updated: 2026-10-09 (Cleaned up Remittance confirmation modal & receipt UI: removed Risk Screening, Screenshot Ready pill, Settlement row, and 15-Minute Grace banner in Flutter app)_
 _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
 
 ---

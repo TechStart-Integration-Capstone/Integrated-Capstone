@@ -585,8 +585,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   ],
                   Divider(color: textLine, height: 16),
                   _confirmRow('Fee', '₱0.00 (Free)', valColor: PayPinkTheme.green, isDark: isDark),
-                  Divider(color: textLine, height: 16),
-                  _confirmRow('Risk Screening', 'Cleared (${_riskScore.toStringAsFixed(2)})', valColor: PayPinkTheme.green, isDark: isDark),
                 ],
               ),
             ),
@@ -686,28 +684,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Camera / Screenshot hint pill
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: PayPinkTheme.pink.withValues(alpha: 0.5)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.camera_alt_rounded, size: 12, color: PayPinkTheme.wine),
-                        const SizedBox(width: 5),
-                        Text(
-                          'SCREENSHOT READY RECEIPT',
-                          style: PayPinkTheme.mono(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
                   // Brand Header
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -798,37 +774,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                         _receiptRow('To Recipient', toAcc, isDark: isDark, isBold: true),
                         Divider(color: textLine, height: 14),
                         _receiptRow('Service Fee', '₱0.00 (Waived)', valColor: PayPinkTheme.green, isDark: isDark),
-                        Divider(color: textLine, height: 14),
-                        _receiptRow('Settlement', 'Cleared & Verified', valColor: PayPinkTheme.green, isBold: true, isDark: isDark),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // 15-Minute Reversal Grace Period Banner
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2B2211) : PayPinkTheme.amberBg,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: PayPinkTheme.amber.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.timer_outlined, size: 14, color: PayPinkTheme.amber),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '15-Minute Grace: Can be reversed directly in Activity tab.',
-                            style: PayPinkTheme.body(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.amber.shade200 : PayPinkTheme.amber,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -853,8 +798,6 @@ Date: $formattedDate
 From: $fromAcc
 To: $toAcc
 Transfer Fee: ₱0.00
-Settlement: Cleared & Verified
-15-Min Reversal: Active in Activity
 ========================================
 Thank you for banking with PayPink!
 ''';
@@ -862,7 +805,7 @@ Thank you for banking with PayPink!
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 backgroundColor: PayPinkTheme.wine,
-                                content: Text('Receipt details copied! Take a screenshot for photo proof.'),
+                                content: Text('Receipt details copied to clipboard.'),
                               ),
                             );
                           },

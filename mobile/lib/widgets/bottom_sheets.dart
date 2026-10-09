@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import '../theme/paypink_theme.dart';
 import '../screens/pin_auth_screen.dart';
 
@@ -440,8 +439,8 @@ class PayPinkBottomSheets {
     required String date,
     required double amount,
     required bool isCredit,
-    required String ofscore,
-    required String auditHash,
+    String? ofscore,
+    String? auditHash,
     String? account,
     String? counterparty,
     String? status,
@@ -962,30 +961,6 @@ Thank you for banking with PayPink!
                 ),
               ),
             ),
-            if (kDebugMode) ...[
-              const SizedBox(height: 10),
-              Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: Text(
-                    'Developer Diagnostics (Debug Build Only)',
-                    style: PayPinkTheme.mono(fontSize: 10, color: PayPinkTheme.muted),
-                  ),
-                  children: [
-                    _DetailRow(label: 'Hardware Key ID', value: hardwareKeyId, isMono: true, isSmall: true),
-                    _DetailRow(
-                      label: 'Circuit Breaker State',
-                      value: circuitStatus,
-                      valueColor: circuitStatus.contains('OPEN') ? PayPinkTheme.red : PayPinkTheme.green,
-                      isBold: true,
-                    ),
-                    _DetailRow(label: 'Edge Gateway Route', value: gatewayRoute, isMono: true),
-                    _DetailRow(label: 'Encrypted JWT Token', value: jwtToken, isMono: true, isSmall: true),
-                  ],
-                ),
-              ),
-            ],
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
@@ -1027,8 +1002,17 @@ Thank you for banking with PayPink!
   }
 
   static void showReportModal(BuildContext context) {
+    final now = DateTime.now();
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final currentMonthStr = 'Current Month (${monthNames[now.month - 1]} ${now.year})';
+    final prevMonthDate = DateTime(now.year, now.month - 1, 1);
+    final prevMonthStr = 'Previous Month (${monthNames[prevMonthDate.month - 1]} ${prevMonthDate.year})';
+
     String selectedAccount = 'Everyday account · •••• 5046';
-    String selectedPeriod = 'Current Month (October 2026)';
+    String selectedPeriod = currentMonthStr;
 
     showModalBottomSheet(
       context: context,
@@ -1092,16 +1076,20 @@ Thank you for banking with PayPink!
                   child: DropdownButton<String>(
                     value: selectedPeriod,
                     isExpanded: true,
-                    items: const [
+                    items: [
                       DropdownMenuItem(
-                        value: 'Current Month (October 2026)',
-                        child: Text('Current Month (October 2026)'),
+                        value: currentMonthStr,
+                        child: Text(currentMonthStr),
                       ),
                       DropdownMenuItem(
+                        value: prevMonthStr,
+                        child: Text(prevMonthStr),
+                      ),
+                      const DropdownMenuItem(
                         value: 'Last 30 Days',
                         child: Text('Last 30 Days'),
                       ),
-                      DropdownMenuItem(
+                      const DropdownMenuItem(
                         value: 'Custom Range',
                         child: Text('Custom Range'),
                       ),
@@ -1306,7 +1294,6 @@ class _DetailRow extends StatelessWidget {
   final Color? valueColor;
   final bool isBold;
   final bool isMono;
-  final bool isSmall;
 
   const _DetailRow({
     required this.label,
@@ -1314,7 +1301,6 @@ class _DetailRow extends StatelessWidget {
     this.valueColor,
     this.isBold = false,
     this.isMono = false,
-    this.isSmall = false,
   });
 
   @override
@@ -1340,12 +1326,12 @@ class _DetailRow extends StatelessWidget {
               textAlign: TextAlign.end,
               style: isMono
                   ? PayPinkTheme.mono(
-                      fontSize: isSmall ? 9.5 : 12,
+                      fontSize: 12,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
                       color: valueColor ?? textInk,
                     )
                   : PayPinkTheme.body(
-                      fontSize: isSmall ? 10.5 : 12.5,
+                      fontSize: 12.5,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
                       color: valueColor ?? textInk,
                     ),
