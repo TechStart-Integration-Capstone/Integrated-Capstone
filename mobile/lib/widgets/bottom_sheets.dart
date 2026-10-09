@@ -725,115 +725,142 @@ Thank you for banking with PayPink!
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setSheetState) => _SheetContainer(
-          title: 'In-App Notifications',
-          trailing: TextButton(
-            onPressed: () {
-              onMarkAllRead();
-              setSheetState(() {});
-            },
-            child: Text(
-              'Mark all read',
-              style: PayPinkTheme.body(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: PayPinkTheme.wine,
-              ),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (notifications.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 30),
-                  child: Text(
-                    'No notifications at this time.',
-                    style: PayPinkTheme.body(color: PayPinkTheme.muted, fontSize: 13),
-                  ),
-                )
-              else
-                ...notifications.map((n) {
-                  final unread = n['unread'] == true;
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: unread ? PayPinkTheme.pinkSubtle : Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: unread ? PayPinkTheme.pink : PayPinkTheme.line,
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: unread ? PayPinkTheme.wine : Colors.grey.shade200,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.notifications_rounded,
-                            color: unread ? Colors.white : PayPinkTheme.muted,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                n['title'] ?? '',
-                                style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                n['message'] ?? '',
-                                style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                n['time'] ?? '',
-                                style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.muted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            onDismiss(n['id']);
-                            setSheetState(() {});
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(4.0),
-                            child: Icon(Icons.close, size: 16, color: PayPinkTheme.muted),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: PayPinkTheme.wine,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: const Text('Close Notifications'),
+        builder: (context, setSheetState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+          final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
+          return _SheetContainer(
+            title: 'In-App Notifications',
+            trailing: TextButton(
+              onPressed: () {
+                onMarkAllRead();
+                setSheetState(() {});
+              },
+              child: Text(
+                'Mark all read',
+                style: PayPinkTheme.body(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (notifications.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 30),
+                      child: Center(
+                        child: Text(
+                          'No notifications at this time.',
+                          style: PayPinkTheme.body(color: textMuted, fontSize: 13),
+                        ),
+                      ),
+                    )
+                  else
+                    ...notifications.map((n) {
+                      final unread = n['unread'] == true;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? (unread ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.darkCard)
+                              : (unread ? PayPinkTheme.pinkSubtle : Colors.white),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark
+                                ? (unread ? PayPinkTheme.pink : PayPinkTheme.darkLine)
+                                : (unread ? PayPinkTheme.pink : PayPinkTheme.line),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: unread
+                                    ? PayPinkTheme.wine
+                                    : (isDark ? Colors.white12 : Colors.grey.shade200),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.notifications_rounded,
+                                color: unread ? Colors.white : textMuted,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    n['title'] ?? '',
+                                    style: PayPinkTheme.display(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: textInk,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    n['message'] ?? '',
+                                    style: PayPinkTheme.body(
+                                      fontSize: 11,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    n['time'] ?? '',
+                                    style: PayPinkTheme.body(
+                                      fontSize: 10,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                onDismiss(n['id']);
+                                setSheetState(() {});
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(Icons.close, size: 16, color: textMuted),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: PayPinkTheme.wine,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Close Notifications'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -7,6 +7,8 @@ import 'package:paypink_mobile/services/account_service.dart';
 import 'package:paypink_mobile/screens/transactions_screen.dart';
 import 'package:paypink_mobile/widgets/dynamic_card_deck.dart';
 import 'package:paypink_mobile/widgets/paypink_logo.dart';
+import 'package:paypink_mobile/widgets/bottom_sheets.dart';
+import 'package:paypink_mobile/widgets/profile_sheet.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -253,5 +255,81 @@ void main() {
     // Verify only the server transaction is shown (single item rendered, no duplicate)
     expect(find.text('Transfer to Checking Account'), findsOneWidget);
     expect(find.text('-₱10.00'), findsOneWidget);
+  });
+
+  testWidgets('ProfileSheet toggles theme mode immediately in modal and parent', (WidgetTester tester) async {
+    bool themeToggled = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.light(),
+        darkTheme: ThemeData.dark(),
+        themeMode: ThemeMode.light,
+        home: Scaffold(
+          body: ProfileSheet(
+            currentUser: 'Aly Rosales',
+            isDarkMode: false,
+            onToggleTheme: () {
+              themeToggled = true;
+            },
+            onLogout: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Light Mode Active'), findsOneWidget);
+
+    // Toggle switch
+    final switchFinder = find.byType(Switch);
+    expect(switchFinder, findsOneWidget);
+    await tester.ensureVisible(switchFinder);
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
+
+    expect(themeToggled, isTrue);
+    expect(find.text('Dark Mode Active'), findsOneWidget);
+  });
+
+  testWidgets('PayPinkBottomSheets.showNotificationsDrawer renders many notifications without overflow', (WidgetTester tester) async {
+    final notifs = List.generate(
+      15,
+      (i) => {
+        'id': 'notif-$i',
+        'title': 'Money received #$i',
+        'message': '₱1,000.00 from Sender #$i was credited to your account.',
+        'time': 'Oct 9, 2026 · 10:24 AM',
+        'unread': i % 2 == 0,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () {
+                PayPinkBottomSheets.showNotificationsDrawer(
+                  ctx,
+                  notifications: notifs,
+                  onMarkAllRead: () {},
+                  onDismiss: (_) {},
+                );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    // Verify modal is open and first notification is rendered with no RenderFlex overflow
+    expect(find.text('In-App Notifications'), findsOneWidget);
+    expect(find.text('Money received #0'), findsOneWidget);
+    expect(find.text('Close Notifications'), findsOneWidget);
   });
 }

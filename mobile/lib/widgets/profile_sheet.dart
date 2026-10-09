@@ -40,7 +40,7 @@ class ProfileSheet extends StatefulWidget {
       builder: (ctx) => ProfileSheet(
         userProfile: userProfile,
         currentUser: currentUser,
-        isDarkMode: isDarkMode,
+        isDarkMode: Theme.of(context).brightness == Brightness.dark,
         onToggleTheme: onToggleTheme,
         onLogout: onLogout,
         onUpdateProfile: onUpdateProfile,
@@ -58,10 +58,12 @@ class _ProfileSheetState extends State<ProfileSheet> {
   late TextEditingController _emailController;
   bool _isEditing = false;
   bool _isSaving = false;
+  late bool _isDark;
 
   @override
   void initState() {
     super.initState();
+    _isDark = widget.isDarkMode;
     final profile = widget.userProfile;
     final fallbackUser = widget.currentUser.isNotEmpty ? widget.currentUser : 'Customer';
     final initialName = profile != null && profile.fullName.isNotEmpty
@@ -75,6 +77,12 @@ class _ProfileSheetState extends State<ProfileSheet> {
 
     _nameController = TextEditingController(text: initialName);
     _emailController = TextEditingController(text: initialEmail);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _isDark = Theme.of(context).brightness == Brightness.dark;
   }
 
   @override
@@ -162,7 +170,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
           mode: PinScreenMode.setup,
           username: widget.currentUser,
           fullName: _nameController.text,
-          isDarkMode: widget.isDarkMode,
+          isDarkMode: _isDark,
           onAuthSuccess: () {
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
@@ -187,7 +195,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: widget.isDarkMode ? PayPinkTheme.darkCard : Colors.white,
+        backgroundColor: _isDark ? PayPinkTheme.darkCard : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
@@ -198,7 +206,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
               style: PayPinkTheme.display(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: widget.isDarkMode ? PayPinkTheme.darkInk : PayPinkTheme.ink,
+                color: _isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink,
               ),
             ),
           ],
@@ -207,7 +215,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
           'Are you sure you want to end your secure PayPink banking session?',
           style: PayPinkTheme.body(
             fontSize: 13,
-            color: widget.isDarkMode ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
+            color: _isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
           ),
         ),
         actions: [
@@ -217,7 +225,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
               'Cancel',
               style: PayPinkTheme.body(
                 fontWeight: FontWeight.w600,
-                color: widget.isDarkMode ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
+                color: _isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
               ),
             ),
           ),
@@ -241,7 +249,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = widget.isDarkMode;
+    final isDark = _isDark;
     final bg = isDark ? PayPinkTheme.darkPaper : Colors.white;
     final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
@@ -496,27 +504,30 @@ class _ProfileSheetState extends State<ProfileSheet> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
-                          shape: BoxShape.circle,
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.dialpad_rounded, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine, size: 20),
                         ),
-                        child: Icon(Icons.dialpad_rounded, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine, size: 20),
+                        title: Text(
+                          'Change 6-Digit MPIN',
+                          style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
+                        ),
+                        subtitle: Text(
+                          'Update the MPIN used for quick login and step-up transaction signoff.',
+                          style: PayPinkTheme.body(fontSize: 10, color: textMuted),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                        onTap: _handleChangePin,
                       ),
-                      title: Text(
-                        'Change 6-Digit MPIN',
-                        style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
-                      ),
-                      subtitle: Text(
-                        'Update the MPIN used for quick login and step-up transaction signoff.',
-                        style: PayPinkTheme.body(fontSize: 10, color: textMuted),
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-                      onTap: _handleChangePin,
                     ),
                   ],
                 ),
@@ -533,58 +544,69 @@ class _ProfileSheetState extends State<ProfileSheet> {
                 ),
                 child: Column(
                   children: [
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04),
-                          shape: BoxShape.circle,
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                            color: isDark ? const Color(0xFFFBBF24) : PayPinkTheme.wine,
+                            size: 19,
+                          ),
                         ),
-                        child: Icon(
-                          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                          color: isDark ? const Color(0xFFFBBF24) : PayPinkTheme.wine,
-                          size: 19,
+                        title: Text(
+                          isDark ? 'Dark Mode Active' : 'Light Mode Active',
+                          style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
                         ),
-                      ),
-                      title: Text(
-                        isDark ? 'Dark Mode Active' : 'Light Mode Active',
-                        style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
-                      ),
-                      subtitle: Text(
-                        'Switch theme between luxury dark and clean pearl light.',
-                        style: PayPinkTheme.body(fontSize: 10, color: textMuted),
-                      ),
-                      trailing: Switch(
-                        value: isDark,
-                        activeThumbColor: PayPinkTheme.pink,
-                        activeTrackColor: PayPinkTheme.wine,
-                        onChanged: (_) => widget.onToggleTheme(),
+                        subtitle: Text(
+                          'Switch theme between luxury dark and clean pearl light.',
+                          style: PayPinkTheme.body(fontSize: 10, color: textMuted),
+                        ),
+                        trailing: Switch(
+                          value: isDark,
+                          activeThumbColor: PayPinkTheme.pink,
+                          activeTrackColor: PayPinkTheme.wine,
+                          onChanged: (val) {
+                            setState(() {
+                              _isDark = val;
+                            });
+                            widget.onToggleTheme();
+                          },
+                        ),
                       ),
                     ),
                     Divider(color: textLine, height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: PayPinkTheme.red.withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: PayPinkTheme.red.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.logout_rounded, color: PayPinkTheme.red, size: 19),
                         ),
-                        child: const Icon(Icons.logout_rounded, color: PayPinkTheme.red, size: 19),
+                        title: Text(
+                          'End Session / Log Out',
+                          style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: PayPinkTheme.red),
+                        ),
+                        subtitle: Text(
+                          'Securely clear local encryption keys and sign out.',
+                          style: PayPinkTheme.body(fontSize: 10, color: textMuted),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                        onTap: _confirmLogout,
                       ),
-                      title: Text(
-                        'End Session / Log Out',
-                        style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: PayPinkTheme.red),
-                      ),
-                      subtitle: Text(
-                        'Securely clear local encryption keys and sign out.',
-                        style: PayPinkTheme.body(fontSize: 10, color: textMuted),
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-                      onTap: _confirmLogout,
                     ),
                   ],
                 ),
