@@ -45,6 +45,7 @@ public class CoreSavingsService {
    if(after.signum()<0 || (!release && after.compareTo(line.target())>0)) throw new ResponseStatusException(UNPROCESSABLE_ENTITY,"Amount exceeds saved funds or goal target");
    changes.put(goal,after); amount=amount.add(line.amount());
   }
+  accounts.protectReservations(account);
   if(!release && account.getAvailableBalance().compareTo(amount)<0) throw new ResponseStatusException(UNPROCESSABLE_ENTITY,"Insufficient available funds");
   if(release && account.getHeldBalance().compareTo(amount)<0) throw new ResponseStatusException(CONFLICT,"Reservation reconciliation required");
   BigDecimal score=risk.approve(account,amount,id), beforeHeld=account.getHeldBalance();
@@ -76,9 +77,10 @@ public class CoreSavingsService {
   var account=accounts.findByIdForUpdate(accountId).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
   var reserved=balances(accountId);
   BigDecimal savings=reserved.values().stream().reduce(BigDecimal.ZERO,BigDecimal::add);
+  BigDecimal effectiveHeld=account.getHeldBalance().max(accounts.recordedHolds(accountId)).max(savings);
   return Map.of("accountBalance",account.getCurrentBalance(),"reservedSavings",savings,
-   "otherHolds",account.getHeldBalance().subtract(savings).max(BigDecimal.ZERO),
-   "availableBalance",account.getAvailableBalance().max(BigDecimal.ZERO),
+   "otherHolds",effectiveHeld.subtract(savings).max(BigDecimal.ZERO),
+   "availableBalance",account.getCurrentBalance().subtract(effectiveHeld).max(BigDecimal.ZERO),
    "goalSavedAmount",reserved.getOrDefault(goalId,BigDecimal.ZERO));
  }
  @Transactional

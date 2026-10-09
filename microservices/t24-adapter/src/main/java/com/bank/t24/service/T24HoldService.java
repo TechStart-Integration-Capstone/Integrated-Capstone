@@ -79,6 +79,7 @@ public class T24HoldService {
         }
 
         // 4. Verify available funds
+        accountRepository.protectReservations(account);
         BigDecimal available = account.getAvailableBalance();
         if (available.compareTo(request.getAmount()) < 0) {
             log.warn("[t24-hold] Insufficient funds for account={} available={} requested={}",
@@ -153,6 +154,7 @@ public class T24HoldService {
         Account account = accountRepository.findByIdForUpdate(hold.getAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found with ID: " + hold.getAccountId()));
 
+        accountRepository.protectReservations(account);
         BigDecimal currentHeld = account.getHeldBalance();
         BigDecimal newHeld = currentHeld.subtract(hold.getAmount());
         if (newHeld.compareTo(BigDecimal.ZERO) < 0) {

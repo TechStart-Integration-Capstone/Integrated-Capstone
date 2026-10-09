@@ -311,6 +311,10 @@ reservations. Do not drop reservation tables or subtract held balances manually 
 roll back a deployment. Reconcile pending operations and release funds through the core.
 # Savings account breakdown
 
+The overview card uses `GET /api/v1/accounts/savings/balance-summary` for available and total balances across the signed-in customer's PHP accounts. It uses core snapshots rather than treating profile current balances as spendable. Savings must be enabled; failed summary reads display Unavailable, while the separate total remains visible. This endpoint requires the updated account-service and frontend in addition to the core changes below.
+
+Funding snapshots deduct the greater of the stored account held total and the sum of recorded savings reservations plus active transfer holds. This prevents a stale held total from overstating available funds and avoids subtracting savings twice. Under the account write lock, core savings mutations, transfer hold placement/release and posting also preserve this recorded reservation minimum. Existing `t24.SAVINGS_RESERVATION` and `t24.LOCKED_AMOUNT` tables must be present before deploying this core update; no new schema change is needed on an already migrated savings environment.
+
 `GET /api/v1/accounts/savings/accounts/{id}/breakdown` checks the authenticated customer's ownership of an active PHP savings account. It returns a locked core snapshot of total and available balances, personal/circle reservation totals, and only that owner's allocations. My accounts displays these in an account selector and collapsible View allocations panel. Other holds are not displayed in this panel; available balance still respects all actual core holds. Hide balances also masks allocation amounts.
 
 Core regression coverage verifies that a debit exceeding unreserved funds is rejected and succeeds after sufficient savings are released, without consuming remaining goal reservations. Deploy the account-service and t24-adapter JARs/images and frontend together; no new migration is required.

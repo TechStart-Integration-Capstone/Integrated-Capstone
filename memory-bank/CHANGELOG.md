@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-09 - Updated overview card to Available balance with the approved goals/PinkCircles/pending-transactions note and a separate Total balance footer. Added authenticated live balance summary across own PHP accounts, with no total-as-available fallback on failure. Validation: 14 savings service tests, browser checks, JavaScript syntax and git diff --check passed. Local only, account-service and frontend rebuild required. - [dom]
+
+- 2026-10-09 - Corrected savings funding snapshots to deduct recorded goal and active transfer reservations even when the stored held total is stale. Core allocation, posting and hold paths preserve a minimum held total under the account lock. Added screenshot-value regression and 24px gap before the privacy card, with a styled account selector. Validation: 42 core tests and savings browser checks passed; git diff --check passed. Local only; rebuild t24-adapter JAR/image and frontend for deployment. - [dom]
+
 - 2026-10-09 - Added owner-checked savings account breakdown API and My accounts panel with account selector, personal/circle totals, actual available balance and collapsible own allocations. Other holds omitted from panel per request; backend still respects actual holds. Corrected account-card total label. Validation passed: 13 savings app tests, 10 core savings tests, posting/hold suites, browser checks and git diff --check. Transfer regression proves reserved funds cannot be spent until released. Local only; no migration or deployment. - [dom]
 
 - 2026-10-09 - Renamed the bank section to Savings Hub in navigation, breadcrumbs, live heading and offline preview; refreshed script versions and updated the existing breadcrumb test. JavaScript syntax and savings browser checks passed. Local only; frontend rebuild required for deployment. - [dom]

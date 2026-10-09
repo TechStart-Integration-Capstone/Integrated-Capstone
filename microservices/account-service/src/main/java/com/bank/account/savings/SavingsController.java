@@ -10,6 +10,7 @@ import java.util.*;
 @ConditionalOnProperty(name="app.savings.enabled",havingValue="true")
 public class SavingsController {
  private final SavingsService service;
+ @GetMapping("/balance-summary") public Map<String,Object> balanceSummary(@RequestHeader("X-Auth-Customer-Id") Long customer){return service.balanceSummary(customer);}
  @GetMapping("/accounts/{id}/breakdown") public Map<String,Object> breakdown(@RequestHeader("X-Auth-Customer-Id") Long customer,@PathVariable Long id){return service.breakdown(customer,id);}
  private final SavingsOperations operations;
  public SavingsController(SavingsService service,SavingsOperations operations){this.service=service;this.operations=operations;}

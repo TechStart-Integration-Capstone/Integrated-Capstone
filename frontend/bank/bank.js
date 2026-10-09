@@ -146,6 +146,24 @@ function renderPage() {
     + (state.page === 'overview' ? overview() : state.page === 'accounts' ? accountsPage() : state.page === 'transfer' ? transferPage() : state.page === 'loans' ? loansPage() : activityPage())
     + `<footer class="page-footer"><span>© ${new Date().getFullYear()} PayPink. A little more everyday.</span><span>${icon('lock')} ${state.updated ? `Updated ${state.updated.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}` : 'Personal banking'} · Philippine peso accounts</span></footer>`;
   if(state.page==='accounts')loadSavingsBreakdown();
+  if(state.page==='overview')loadOverviewBalance();
+}
+
+async function loadOverviewBalance() {
+  const card=document.querySelector('#overview-balance'),session=state.session;
+  if(!card)return;
+  try {
+    const data=await api('/api/v1/accounts/savings/balance-summary');
+    if(!card.isConnected||session!==state.session)return;
+    card.querySelector('[data-overview-available]').innerHTML=balance(data.availableBalance);
+    card.querySelector('[data-overview-total]').innerHTML=balance(data.totalBalance);
+    card.querySelector('[data-overview-count]').textContent=`Across ${data.accountCount} ${data.accountCount===1?'account':'accounts'}.`;
+  } catch {
+    if(card.isConnected&&session===state.session){
+      card.querySelector('[data-overview-available]').textContent='Unavailable';
+      card.querySelector('.balance-subtitle').textContent='We couldn’t check available funds. Use Refresh to try again.';
+    }
+  }
 }
 
 async function loadSavingsBreakdown() {
@@ -181,9 +199,9 @@ function overview() {
   const outgoing = monthly.filter(tx => tx.operation === 'DEBIT').reduce((sum,tx) => sum + Number(tx.amount),0);
   return heading(`Hello, ${escapeHtml(state.profile.firstName)}<span class="muted">.</span>`, 'Your everyday, at a glance. It’s good to have you here.')
     + (typeof loanAlertsBanner === 'function' ? loanAlertsBanner() : '')
-    + `<div class="overview-grid"><section class="balance-card" aria-label="Total balance"><div class="balance-top"><span>Total available balance <button class="icon-btn" data-action="balance-visibility" aria-label="${state.hideBalances ? 'Show' : 'Hide'} balances" aria-pressed="${state.hideBalances}">${icon(state.hideBalances ? 'eye-off' : 'eye')}</button></span><span>PHP</span></div>
-      <div class="big-balance">${balance(total)}</div><div class="balance-subtitle">Across ${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}. All yours.</div>
-      <div class="balance-bottom"><span>${icon('shield')} Your money, in view.</span><button data-action="navigate" data-page="accounts">View accounts ${icon('arrow')}</button></div></section>
+    + `<div class="overview-grid"><section id="overview-balance" class="balance-card" aria-label="Available balance"><div class="balance-top"><span>Available balance <button class="icon-btn" data-action="balance-visibility" aria-label="${state.hideBalances ? 'Show' : 'Hide'} balances" aria-pressed="${state.hideBalances}">${icon(state.hideBalances ? 'eye-off' : 'eye')}</button></span><span>PHP</span></div>
+      <div class="big-balance" data-overview-available aria-live="polite">Loading?</div><div class="balance-subtitle">After reservations for goals, PinkCircles, and pending transactions.</div>
+      <div class="balance-bottom"><div class="overview-total"><span>Total balance</span><strong data-overview-total>${balance(total)}</strong><small data-overview-count>Across ${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}.</small></div><button data-action="navigate" data-page="accounts">View accounts ${icon('arrow')}</button></div></section>
       <section class="summary-card" aria-label="This month’s activity"><div class="summary-head"><h3>This month, so far</h3><span>${now.toLocaleDateString('en-PH',{month:'short',year:'numeric'})}</span></div>
         <div class="flow-row"><span class="circle-icon">${icon('down')}</span><div><small>Money in</small><strong>${balance(incoming)}</strong></div></div>
         <div class="flow-row"><span class="circle-icon">${icon('up')}</span><div><small>Money out</small><strong>${balance(outgoing)}</strong></div></div><p>Based on your latest 200 transactions.</p></section></div>

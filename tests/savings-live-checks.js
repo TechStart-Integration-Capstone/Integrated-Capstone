@@ -21,6 +21,7 @@
     if(mode==='unavailable')return reply({message:'Disabled'},404);
     if(mode==='defer' && method==='GET' && route==='')return new Promise(resolve=>{deferredRead=()=>resolve(reply({customerId:1,goals:[],personalTotal:999999,groupTotal:0}));});
     if(method==='GET'){
+      if(route==='/balance-summary')return reply({totalBalance:240671.85,availableBalance:204250,accountCount:3});
       if(route.endsWith('/breakdown'))return reply({accountBalance:20000,personalReserved:6000,circleReserved:5000,otherHolds:0,unlistedReservations:0,availableBalance:9000,allocations:[{name:'Emergency fund',kind:'PERSONAL',amount:6000},{name:'Our trip',kind:'PINK_CIRCLE',amount:5000}]});
       if(route.endsWith('/funding')){
         if(mode==='funding-fail'){mode='';return reply({message:'Unavailable'},503);}
@@ -117,10 +118,14 @@
   // A response arriving after logout must not restore previous customer data.
   mode='defer';click('refresh');await wait(()=>deferredRead);logout();deferredRead();await tick();check(!document.querySelector('#savings-live'),'Late API response cannot restore savings after logout');
   mode='';login();await wait(()=>document.querySelector('.sv-total-amount'));
+  state.page='overview';renderPage();await wait(()=>document.querySelector('[data-overview-available]')?.textContent.includes('204,250.00'));
+  check(document.querySelector('#overview-balance').textContent.includes('After reservations for goals, PinkCircles, and pending transactions.'),'Overview shows Available balance with reservation note');
+  check(document.querySelector('[data-overview-total]').textContent.includes('240,671.85'),'Overview keeps total balance separate from available funds');
   state.page='accounts';renderPage();await wait(()=>document.querySelector('.account-allocations'));
   const breakdown=document.querySelector('#account-savings-breakdown');
   check(breakdown.textContent.includes('20,000.00')&&breakdown.textContent.includes('9,000.00'),'Account breakdown separates total and available balances');
   check(!breakdown.textContent.includes('Other holds'),'Breakdown omits other holds');
+  check(document.querySelector('.account-explainer').getBoundingClientRect().top-breakdown.getBoundingClientRect().bottom>=23,'Breakdown has spacing before privacy card');
   breakdown.querySelector('summary').click();
   check(breakdown.querySelector('details').open&&breakdown.textContent.includes('Our trip · PinkCircle · your contribution'),'View allocations expands own personal and circle savings');
   state.hideBalances=true;renderPage();await wait(()=>document.querySelector('.account-allocations'));

@@ -12,6 +12,16 @@ import java.util.*;
 public class SavingsService {
  private final JdbcTemplate jdbc;
  private final SavingsCoreClient core;
+ public Map<String,Object> balanceSummary(Long customer) {
+  customer(customer);
+  var rows=jdbc.queryForList("SELECT account_id FROM t24.ACCOUNT WHERE customer_id=? AND currency='PHP'",customer);
+  BigDecimal total=BigDecimal.ZERO,available=BigDecimal.ZERO;
+  for(var row:rows){
+   var funds=core.breakdown(number(row,"account_id")).funds();
+   total=total.add(funds.get("accountBalance"));available=available.add(funds.get("availableBalance"));
+  }
+  return Map.of("totalBalance",total,"availableBalance",available,"accountCount",rows.size());
+ }
  public Map<String,Object> breakdown(Long customer,Long accountId) {
   customer(customer);account(customer,accountId);
   var rows=jdbc.queryForList("SELECT * FROM app.SAVINGS_GOAL WHERE customer_id=? AND account_id=? ORDER BY created_at,goal_id",customer,accountId);

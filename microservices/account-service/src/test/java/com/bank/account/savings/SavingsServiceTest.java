@@ -47,6 +47,15 @@ class SavingsServiceTest {
  }
  SavingsRequests.Goal goal(long account){return new SavingsRequests.Goal(account,"Christmas","HOLIDAY",new BigDecimal("10000.00"),LocalDate.now().plusMonths(6));}
  String create(){return service.createGoal(1L,goal(11)).get("goalId").toString();}
+ @Test void overviewSeparatesTotalFromAvailableAcrossOwnedAccounts() {
+  when(core.breakdown(11L)).thenReturn(new SavingsCoreClient.Breakdown(Map.of("accountBalance",new BigDecimal("20000"),"availableBalance",new BigDecimal("9000")),Map.of()));
+  when(core.breakdown(12L)).thenReturn(new SavingsCoreClient.Breakdown(Map.of("accountBalance",new BigDecimal("5000"),"availableBalance",new BigDecimal("4000")),Map.of()));
+  var result=service.balanceSummary(1L);
+  assertThat((BigDecimal)result.get("totalBalance")).isEqualByComparingTo("25000");
+  assertThat((BigDecimal)result.get("availableBalance")).isEqualByComparingTo("13000");
+  assertThat(result.get("accountCount")).isEqualTo(2);
+  verify(core,never()).breakdown(22L);
+ }
  @Test void accountBreakdownIsOwnerOnlyAndSeparatesOwnAllocations() {
   String personal=create(),circle=create();
   // A linked circle goal represents only this customer's reservation.
