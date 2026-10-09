@@ -9,6 +9,8 @@ import 'package:paypink_mobile/widgets/dynamic_card_deck.dart';
 import 'package:paypink_mobile/widgets/paypink_logo.dart';
 import 'package:paypink_mobile/widgets/bottom_sheets.dart';
 import 'package:paypink_mobile/widgets/profile_sheet.dart';
+import 'package:paypink_mobile/screens/remittance_screen.dart';
+import 'package:paypink_mobile/services/secure_token_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -331,5 +333,55 @@ void main() {
     expect(find.text('In-App Notifications'), findsOneWidget);
     expect(find.text('Money received #0'), findsOneWidget);
     expect(find.text('Close Notifications'), findsOneWidget);
+  });
+
+  test('SecureTokenStorage caches and retrieves favorites list across sessions', () async {
+    final sampleFavs = [
+      {'name': 'Aly Rosales', 'number': '001142169612', 'avatar': 'AR', 'bank': 'PayPink'},
+      {'name': 'Francis Marasigan', 'number': '001152494553', 'avatar': 'FM', 'bank': 'PayPink'},
+    ];
+
+    await SecureTokenStorage.saveFavoritesCache(sampleFavs);
+    final retrieved = await SecureTokenStorage.getFavoritesCache();
+
+    expect(retrieved.length, equals(2));
+    expect(retrieved.first['name'], equals('Aly Rosales'));
+    expect(retrieved.first['number'], equals('001142169612'));
+  });
+
+  testWidgets('RemittanceScreen loads and displays persistent favorites', (WidgetTester tester) async {
+    final sampleFavs = [
+      {'name': 'Aly Rosales', 'number': '001142169612', 'avatar': 'AR', 'bank': 'PayPink'},
+    ];
+    await SecureTokenStorage.saveFavoritesCache(sampleFavs);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RemittanceScreen(
+            onTransferSuccess: (_, __, ___, ____) {},
+            accounts: [
+              BankAccount(
+                accountId: 1,
+                accountNumber: '001181233469',
+                accountType: 'CHECKING_ACCOUNT',
+                currency: 'PHP',
+                currentBalance: 50000.0,
+                status: 'ACTIVE',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // Switch to 'Another PayPink' transfer tab where PayPink favorites are displayed
+    await tester.tap(find.text('Another PayPink'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Aly'), findsOneWidget);
   });
 }

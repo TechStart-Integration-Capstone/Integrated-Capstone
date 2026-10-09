@@ -55,7 +55,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   Timer? _statusPollTimer;
 
   @override
-  @override
   void initState() {
     super.initState();
     _initDefaultAccounts();
@@ -94,8 +93,17 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }
 
   Future<void> _loadFavorites() async {
+    // 1. Immediately hydrate from persistent local storage for zero-lag display
+    final cached = await SecureTokenStorage.getFavoritesCache();
+    if (cached.isNotEmpty && mounted) {
+      setState(() {
+        _favorites = cached;
+      });
+    }
+
     if (!mounted) return;
-    setState(() => _isLoadingFavorites = true);
+    setState(() => _isLoadingFavorites = _favorites.isEmpty);
+
     try {
       final token = await SecureTokenStorage.getToken();
       final headers = {
@@ -103,21 +111,30 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
 
-      // Query GET /api/v1/accounts/favorites
-      http.Response response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 5));
-
-      // Fallback to /api/v1/accounts/recipients if /favorites returns 404/405
-      if (response.statusCode == 404 || response.statusCode == 405) {
+      // 2. Query canonical /auth/banking/recipients (matching Web Banking)
+      http.Response? response;
+      try {
         response = await http.get(
-          Uri.parse('${ApiConfig.baseUrl}/accounts/recipients'),
+          Uri.parse('${ApiConfig.baseUrl}/auth/banking/recipients'),
           headers: headers,
         ).timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('[RemittanceScreen] /auth/banking/recipients fetch failed: $e');
       }
 
-      if (response.statusCode == 200) {
+      // Fallback to /accounts/recipients
+      if (response == null || response.statusCode != 200) {
+        try {
+          response = await http.get(
+            Uri.parse('${ApiConfig.baseUrl}/accounts/recipients'),
+            headers: headers,
+          ).timeout(const Duration(seconds: 5));
+        } catch (e) {
+          debugPrint('[RemittanceScreen] /accounts/recipients fetch failed: $e');
+        }
+      }
+
+      if (response != null && response.statusCode == 200) {
         final dynamic decoded = jsonDecode(response.body);
         List<dynamic> items = [];
         if (decoded is List) {
@@ -136,7 +153,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 'name': name,
                 'number': num,
                 'avatar': _getAvatar(name),
-                'bank': 'PayPink',
+                'bank': item['bank']?.toString() ?? 'PayPink',
               });
             }
           }
@@ -148,6 +165,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             _isLoadingFavorites = false;
           });
         }
+        await SecureTokenStorage.saveFavoritesCache(loaded);
         return;
       }
     } catch (e) {
@@ -172,12 +190,24 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
 
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/accounts/recipients/lookup?accountNumber=$clean'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 5));
+      http.Response? response;
+      try {
+        response = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/accounts/recipients/lookup?accountNumber=$clean'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 5));
+      } catch (_) {}
 
-      if (response.statusCode == 200) {
+      if (response == null || response.statusCode != 200) {
+        try {
+          response = await http.get(
+            Uri.parse('${ApiConfig.baseUrl}/auth/banking/recipients/lookup?accountNumber=$clean'),
+            headers: headers,
+          ).timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+
+      if (response != null && response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map<String, dynamic>) {
           return decoded;
@@ -223,31 +253,54 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     final clean = rawNumber.replaceAll(RegExp(r'[\s-]'), '');
     // 1. Client-Side Format Validation: exactly 12 numeric digits
     if (!RegExp(r'^\d{12}$').hasMatch(clean)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: PayPinkTheme.red,
-          content: Text('Invalid account number. PayPink account numbers must be 12 digits.'),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: PayPinkTheme.red,
+            content: Text('Invalid account number. PayPink account numbers must be 12 digits.'),
+          ),
+        );
+      }
       return false;
     }
 
-    // 2. Server-side lookup verification
-    final recipientData = await _lookupPayPinkAccount(clean);
-    if (!mounted) return false;
-    if (recipientData == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: PayPinkTheme.red,
-          content: Text('PayPink account not found. Please verify the account number.'),
-        ),
-      );
-      return false;
+    // 2. Resolve recipient name (reuse verified name or query lookup)
+    String fullName = 'PayPink Recipient';
+    if (_verifiedName != null && _recipientController.text.replaceAll(RegExp(r'[\s-]'), '') == clean) {
+      fullName = _verifiedName!;
+    } else {
+      final recipientData = await _lookupPayPinkAccount(clean);
+      if (recipientData != null && recipientData['fullName'] != null) {
+        fullName = recipientData['fullName'].toString();
+      } else if (!mounted) {
+        return false;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: PayPinkTheme.red,
+            content: Text('PayPink account not found. Please verify the account number.'),
+          ),
+        );
+        return false;
+      }
     }
 
-    final fullName = recipientData['fullName']?.toString() ?? 'PayPink Recipient';
+    // Immediately insert into local state and persistent storage
+    final newFav = {
+      'name': fullName,
+      'number': clean,
+      'avatar': _getAvatar(fullName),
+      'bank': 'PayPink',
+    };
+    if (mounted) {
+      setState(() {
+        _favorites.removeWhere((f) => f['number'] == clean);
+        _favorites.insert(0, newFav);
+      });
+    }
+    await SecureTokenStorage.saveFavoritesCache(_favorites);
 
-    // 3. POST /api/v1/accounts/favorites
+    // 3. POST /api/v1/accounts/favorites (with fallback to /auth/banking/favorites)
     try {
       final token = await SecureTokenStorage.getToken();
       final headers = {
@@ -256,87 +309,96 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
 
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
-        headers: headers,
-        body: jsonEncode({'accountNumber': clean}),
-      ).timeout(const Duration(seconds: 5));
+      http.Response? response;
+      try {
+        response = await http.post(
+          Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
+          headers: headers,
+          body: jsonEncode({'accountNumber': clean}),
+        ).timeout(const Duration(seconds: 5));
+      } catch (_) {}
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        setState(() {
-          _favorites.removeWhere((f) => f['number'] == clean);
-          _favorites.insert(0, {
-            'name': fullName,
-            'number': clean,
-            'avatar': _getAvatar(fullName),
-            'bank': 'PayPink',
-          });
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: PayPinkTheme.green,
-              content: Text('Saved $fullName to Favorites'),
-            ),
-          );
-        }
-        return true;
+      if (response == null || (response.statusCode != 200 && response.statusCode != 201)) {
+        try {
+          response = await http.post(
+            Uri.parse('${ApiConfig.baseUrl}/auth/banking/favorites'),
+            headers: headers,
+            body: jsonEncode({'accountNumber': clean}),
+          ).timeout(const Duration(seconds: 5));
+        } catch (_) {}
       }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: PayPinkTheme.green,
+            content: Text('Saved $fullName to Favorites'),
+          ),
+        );
+      }
+      return true;
     } catch (e) {
       debugPrint('[RemittanceScreen] Error saving favorite: $e');
     }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: PayPinkTheme.red,
-          content: Text('Failed to save favorite. Please try again.'),
+        SnackBar(
+          backgroundColor: PayPinkTheme.green,
+          content: Text('Saved $fullName to Favorites'),
         ),
       );
     }
-    return false;
+    return true;
   }
 
   Future<void> _deleteFavorite(String rawNumber, int index) async {
     final clean = rawNumber.replaceAll(RegExp(r'[\s-]'), '');
+    if (mounted) {
+      setState(() {
+        if (index < _favorites.length && _favorites[index]['number'] == clean) {
+          _favorites.removeAt(index);
+        } else {
+          _favorites.removeWhere((f) => f['number'] == clean);
+        }
+      });
+    }
+    await SecureTokenStorage.saveFavoritesCache(_favorites);
+
     try {
       final token = await SecureTokenStorage.getToken();
       final headers = {
         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       };
 
-      final response = await http.delete(
-        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites/$clean'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 5));
+      http.Response? response;
+      try {
+        response = await http.delete(
+          Uri.parse('${ApiConfig.baseUrl}/accounts/favorites/$clean'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 5));
+      } catch (_) {}
 
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        setState(() {
-          if (index < _favorites.length && _favorites[index]['number'] == clean) {
-            _favorites.removeAt(index);
-          } else {
-            _favorites.removeWhere((f) => f['number'] == clean);
-          }
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: PayPinkTheme.wine,
-              content: Text('Favorite removed'),
-            ),
-          );
-        }
-        return;
+      if (response == null || (response.statusCode != 200 && response.statusCode != 204)) {
+        try {
+          response = await http.delete(
+            Uri.parse('${ApiConfig.baseUrl}/auth/banking/favorites/$clean'),
+            headers: headers,
+          ).timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: PayPinkTheme.wine,
+            content: Text('Favorite removed'),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('[RemittanceScreen] Error removing favorite: $e');
     }
-
-    setState(() {
-      if (index < _favorites.length) {
-        _favorites.removeAt(index);
-      }
-    });
   }
 
   void _showFavoritesManagerModal(BuildContext context) {
@@ -796,13 +858,26 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                         if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
                                       };
 
-                                      final response = await http.post(
-                                        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
-                                        headers: headers,
-                                        body: jsonEncode({'accountNumber': clean}),
-                                      ).timeout(const Duration(seconds: 5));
+                                      http.Response? response;
+                                      try {
+                                        response = await http.post(
+                                          Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
+                                          headers: headers,
+                                          body: jsonEncode({'accountNumber': clean}),
+                                        ).timeout(const Duration(seconds: 5));
+                                      } catch (_) {}
 
-                                      if (response.statusCode == 200 || response.statusCode == 201) {
+                                      if (response == null || (response.statusCode != 200 && response.statusCode != 201)) {
+                                        try {
+                                          response = await http.post(
+                                            Uri.parse('${ApiConfig.baseUrl}/auth/banking/favorites'),
+                                            headers: headers,
+                                            body: jsonEncode({'accountNumber': clean}),
+                                          ).timeout(const Duration(seconds: 5));
+                                        } catch (_) {}
+                                      }
+
+                                      if (response != null && (response.statusCode == 200 || response.statusCode == 201)) {
                                         if (mounted) {
                                           setState(() {
                                             _favorites.removeWhere((f) => f['number'] == clean);
@@ -814,6 +889,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                             });
                                           });
                                         }
+                                        await SecureTokenStorage.saveFavoritesCache(_favorites);
                                         onAdded?.call();
                                         navigator.pop();
                                         messenger.showSnackBar(
@@ -1596,6 +1672,8 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     final transferType = _selectedModeIndex == 0
         ? 'Own Accounts Transfer'
         : (_selectedModeIndex == 1 ? 'PayPink P2P Transfer' : '$_transferRail Bank Transfer');
+    final cleanToAcc = toAcc.replaceAll(RegExp(r'[\s-]'), '');
+    final isPayPinkP2P = RegExp(r'^\d{12}$').hasMatch(cleanToAcc) && _selectedModeIndex != 0;
 
     showDialog(
       context: context,
@@ -1696,8 +1774,54 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
+                  if (isPayPinkP2P) ...[
+                    StatefulBuilder(
+                      builder: (dialogContext, setFavBtnState) {
+                        final isSavedFav = _favorites.any((f) => f['number'] == cleanToAcc);
+                        return SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              if (isSavedFav) {
+                                final idx = _favorites.indexWhere((f) => f['number'] == cleanToAcc);
+                                await _deleteFavorite(cleanToAcc, idx >= 0 ? idx : 0);
+                              } else {
+                                await _saveFavorite(cleanToAcc);
+                              }
+                              setFavBtnState(() {});
+                            },
+                            icon: Icon(
+                              isSavedFav ? Icons.star_rounded : Icons.star_border_rounded,
+                              size: 16,
+                              color: isSavedFav ? PayPinkTheme.wine : (isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
+                            ),
+                            label: Text(
+                              isSavedFav ? 'Saved in Favorites' : 'Save Recipient to Favorites',
+                              style: PayPinkTheme.body(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isSavedFav ? PayPinkTheme.wine : (isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(
+                                color: isSavedFav
+                                    ? PayPinkTheme.wine
+                                    : (isDark ? PayPinkTheme.wine.withValues(alpha: 0.5) : PayPinkTheme.pink),
+                              ),
+                              backgroundColor: isSavedFav
+                                  ? (isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle)
+                                  : Colors.transparent,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(vertical: 11),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
 
                   // Buttons: Copy Text and Done
                   Row(
@@ -2103,42 +2227,48 @@ Thank you for banking with PayPink!
                       ),
                     ),
                   ] else ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: List.generate(_favorites.length, (idx) {
-                        final fav = _favorites[idx];
-                        return GestureDetector(
-                          onTap: () => _selectFavorite(idx),
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: isDark ? PayPinkTheme.wine : PayPinkTheme.pink),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    fav['avatar'] ?? 'PP',
-                                    style: PayPinkTheme.display(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: List.generate(_favorites.length, (idx) {
+                          final fav = _favorites[idx];
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 14),
+                            child: GestureDetector(
+                              onTap: () => _selectFavorite(idx),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: isDark ? PayPinkTheme.wine : PayPinkTheme.pink),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        fav['avatar'] ?? 'PP',
+                                        style: PayPinkTheme.display(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    (fav['name'] ?? 'Recipient').split(' ')[0],
+                                    style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w600, color: textInk),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                (fav['name'] ?? 'Recipient').split(' ')[0],
-                                style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w600, color: textInk),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
+                            ),
+                          );
+                        }),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -2304,27 +2434,50 @@ Thank you for banking with PayPink!
                             children: [
                               Text('Match', style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.green)),
                               const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _saveFavorite(_recipientController.text),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.3) : PayPinkTheme.pinkSubtle,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: PayPinkTheme.wine),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.star_rounded, size: 12, color: PayPinkTheme.wine),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        'Favorite',
-                                        style: PayPinkTheme.eyebrow(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                              Builder(
+                                builder: (context) {
+                                  final cleanNum = _recipientController.text.replaceAll(RegExp(r'[\s-]'), '');
+                                  final isFav = _favorites.any((f) => f['number'] == cleanNum);
+                                  return GestureDetector(
+                                    onTap: () async {
+                                      if (isFav) {
+                                        final idx = _favorites.indexWhere((f) => f['number'] == cleanNum);
+                                        await _deleteFavorite(cleanNum, idx >= 0 ? idx : 0);
+                                      } else {
+                                        await _saveFavorite(_recipientController.text);
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                      decoration: BoxDecoration(
+                                        color: isFav
+                                            ? PayPinkTheme.wine
+                                            : (isDark ? PayPinkTheme.wine.withValues(alpha: 0.3) : PayPinkTheme.pinkSubtle),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: PayPinkTheme.wine),
                                       ),
-                                    ],
-                                  ),
-                                ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            isFav ? Icons.star_rounded : Icons.star_border_rounded,
+                                            size: 13,
+                                            color: isFav ? Colors.white : PayPinkTheme.wine,
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            isFav ? 'Favorited' : 'Favorite',
+                                            style: PayPinkTheme.eyebrow(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: isFav ? Colors.white : PayPinkTheme.wine,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),

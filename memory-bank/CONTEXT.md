@@ -2,6 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (Fixed Mobile Transfer Favorites persistence and receipt favoriting: canonical /auth/banking/recipients backend alignment, corrected Quick Favorites row conditional branch structure, zero-lag SecureTokenStorage per-user cache hydration, and interactive favorite action inside transfer receipt modal; 33/33 tests passing clean by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Fixed ProfileSheet night mode toggle modal synchronization via dynamic _isDark state and Material ListTile wrappers, and fixed In-App Notification drawer overflow via SingleChildScrollView with dark mode styling; 31/31 mobile tests passing clean by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Resolved double transfer activity and UTC timestamp mismatch in mobile app: defaulted preserveLocalTransactions to false, normalized Spring Boot/Azure SQL UTC timestamps with Z and .toLocal() for Asia/Manila parity, aligned own-account transfer titles to friendly format, added secondary deduplication pass in TransactionsScreen, and fixed BuildContext lints; 29/29 tests pass clean by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Fixed double transfer notifications and duplicate activity in transaction history: eliminated phantom credit legs on external/P2P transfers, preserved authoritative server refId, and enforced multi-layer deduplication across _loadLiveDatabaseData and TransactionsScreen; 20/20 mobile tests pass clean by [dom])_

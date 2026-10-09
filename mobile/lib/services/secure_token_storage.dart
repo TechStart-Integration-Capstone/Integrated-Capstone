@@ -163,6 +163,39 @@ class SecureTokenStorage {
     await _delete(_cachedBalanceKey);
   }
 
+  static const String _favoritesCacheKey = 'paypink_favorites_cache';
+
+  /// Saves cached favorites list for instant display across app lifecycle.
+  static Future<void> saveFavoritesCache(List<Map<String, String>> favorites) async {
+    try {
+      final user = (await getUsername()) ?? 'default';
+      await writeValue('${_favoritesCacheKey}_$user', jsonEncode(favorites));
+    } catch (_) {}
+  }
+
+  /// Retrieves cached favorites list.
+  static Future<List<Map<String, String>>> getFavoritesCache() async {
+    try {
+      final user = (await getUsername()) ?? 'default';
+      final raw = await readValue('${_favoritesCacheKey}_$user');
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final List<Map<String, String>> list = [];
+          for (final item in decoded) {
+            if (item is Map) {
+              list.add(Map<String, String>.from(
+                item.map((k, v) => MapEntry(k.toString(), v.toString())),
+              ));
+            }
+          }
+          return list;
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
   /// Wipes everything on the device, including the MPIN.
   static Future<void> clearVault() async {
     _memoryFallback.clear();
