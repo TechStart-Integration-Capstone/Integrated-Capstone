@@ -153,107 +153,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   String _searchQuery = '';
   String _filter = 'all'; // 'all', 'credit', 'debit', 'reversal', 'checking', 'savings', 'paypink', 'loan'
 
-  void _confirmReversal(BuildContext context, TransactionItem tx) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
-    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
-    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
-    final paperBg = isDark ? PayPinkTheme.darkCard : PayPinkTheme.paper;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: PayPinkTheme.wine.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.undo_rounded, color: PayPinkTheme.wine, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'Reverse Transfer',
-              style: PayPinkTheme.display(fontSize: 16, fontWeight: FontWeight.w800, color: textInk),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'You are within the 15-minute grace period to reverse this outgoing transfer.',
-              style: PayPinkTheme.body(fontSize: 12, color: textMuted),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: paperBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: textLine),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Amount to Refund', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
-                      Text('₱${tx.amount.toStringAsFixed(2)}', style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w800, color: PayPinkTheme.green)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Refund Destination', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
-                      Text(tx.account, style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: textInk)),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Time Remaining', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
-                      Text('${tx.reversalMinutesRemaining} mins left', style: PayPinkTheme.mono(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Reversing will immediately cancel the transaction and credit ₱${tx.amount.toStringAsFixed(2)} back to your account balance.',
-              style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.wine, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: PayPinkTheme.body(color: textMuted, fontWeight: FontWeight.w700)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.onReverseTransaction?.call(tx);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: PayPinkTheme.wine,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text('Confirm Reversal', style: PayPinkTheme.body(fontWeight: FontWeight.w700, color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -493,47 +393,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          if (tx.isReversible)
-                            InkWell(
-                              onTap: () => _confirmReversal(context, tx),
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.35) : PayPinkTheme.pinkSubtle,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: PayPinkTheme.wine, width: 0.8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.undo_rounded, size: 10, color: PayPinkTheme.wine),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Reverse (${tx.reversalMinutesRemaining}m)',
-                                      style: PayPinkTheme.mono(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: PayPinkTheme.wine,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          else
-                            Text(
-                              isReversed
-                                  ? '• Refunded'
-                                  : (isDlq ? '• Processing' : 'Completed'),
-                              style: PayPinkTheme.body(
-                                fontSize: 9.5,
-                                color: isReversed
-                                    ? PayPinkTheme.amber
-                                    : (isDlq ? PayPinkTheme.wine : textMuted),
-                                fontWeight: (isReversed || isDlq) ? FontWeight.w700 : FontWeight.normal,
-                              ),
+                          Text(
+                            isReversed
+                                ? '• Refunded'
+                                : (isDlq ? '• Processing' : 'Completed'),
+                            style: PayPinkTheme.body(
+                              fontSize: 9.5,
+                              color: isReversed
+                                  ? PayPinkTheme.amber
+                                  : (isDlq ? PayPinkTheme.wine : textMuted),
+                              fontWeight: (isReversed || isDlq) ? FontWeight.w700 : FontWeight.normal,
                             ),
+                          ),
                         ],
                       ),
                       onTap: () {
@@ -554,9 +425,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           account: tx.account,
                           counterparty: tx.counterparty ?? tx.recipientAccount,
                           status: tx.status,
-                          canReverse: tx.isReversible,
-                          reversalMinutesRemaining: tx.reversalMinutesRemaining,
-                          onReverse: () => _confirmReversal(context, tx),
+                          canReverse: false,
+                          reversalMinutesRemaining: 0,
+                          onReverse: null,
                         );
                       },
                     ),
