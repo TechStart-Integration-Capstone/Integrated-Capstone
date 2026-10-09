@@ -30,6 +30,7 @@ window.PayPinkSavingsLive = (() => {
   const form = (kind,body,label='Save',id='') => `<form data-sv-form="${kind}" data-id="${esc(id)}">${body}<p class="sv-form-error" role="alert" hidden></p><button type="submit" class="btn btn-primary">${label}</button></form>`;
   function redraw() { const root=document.querySelector('#savings-live'); if(root && context) root.outerHTML=render(); }
   function modal(title,body) {
+    fundingVersion++;
     let dialog=document.querySelector('#savings-live-dialog');
     if(!dialog) {
       dialog=document.createElement('dialog'); dialog.id='savings-live-dialog'; dialog.className='sv-dialog'; document.body.append(dialog);
@@ -41,7 +42,35 @@ window.PayPinkSavingsLive = (() => {
     dialog.innerHTML=`<button class="sv-dialog-close" data-sv="close" aria-label="Close dialog">×</button><h2 id="sv-live-title">${esc(title)}</h2>${body}`;
     if(!dialog.open)dialog.showModal();
   }
-  const close = () => {draft=null;document.querySelector('#savings-live-dialog')?.close();};
+  let fundingVersion=0;
+  const close = () => {fundingVersion++;draft=null;document.querySelector('#savings-live-dialog')?.close();};
+  async function contribution(g) {
+    const stamp=epoch;
+    modal(g.circle_id?'Add my contribution':'Set aside money','<p role="status">Checking your available savings funds…</p>');
+    const version=fundingVersion;
+    const dialog=document.querySelector('#savings-live-dialog');
+    try {
+      const funds=await request('/goals/'+g.goal_id+'/funding');
+      if(!active(stamp)||version!==fundingVersion||!dialog.open)return;
+      const a=context.profile().accounts.find(a=>String(a.accountId)===String(funds.accountId));
+      const max=Number(funds.maximumContribution);
+      const row=(label,value)=>`<div><dt>${label}</dt><dd>${money(value)}</dd></div>`;
+      modal(g.circle_id?'Add my contribution':'Set aside money',form('add',`<p>${esc(g.name)} · Saved: ${money(funds.goalSavedAmount)}</p><p>From: <strong>Savings account •••• ${esc(String(a?.accountNumber||'').slice(-4))}</strong></p><dl class="sv-funding">${row('Account balance',funds.accountBalance)}${row('Already set aside for goals & PinkCircles',funds.reservedSavings)}${Number(funds.otherHolds)>0?row('Other reserved funds',funds.otherHolds):''}${row('Available to set aside',funds.availableBalance)}${row(g.circle_id?'Remaining personal contribution target':'Remaining goal target',funds.remainingTarget)}${row('Maximum you can add',max)}</dl><p class="sv-modal-note">Your goals and circle contributions share the funds in this account. We check the available balance again when you confirm.</p>${max>0?`${amount('amount','Amount (₱)')}${btn('maximum','Add maximum')}`:`<p role="status">${Number(funds.remainingTarget)<=0?'You have reached this goal’s target.':'No funds are available to set aside. Add funds to this account or release an existing allocation.'}</p>`}`,'Confirm',g.goal_id));
+      const f=dialog.querySelector('form');f.dataset.maximum=String(max);
+      if(max>0){f.elements.amount.max=String(max);f.elements.amount.setAttribute('aria-describedby','sv-funding-error');f.querySelector('.sv-form-error').id='sv-funding-error';}
+      f.querySelector('[type="submit"]').disabled=max<=0;
+    } catch(error) {
+      if(active(stamp)&&version===fundingVersion&&dialog.open)modal('Available funds unavailable',`<p role="alert">We couldn’t check your available funds. Please try again before contributing.</p>${btn('funding-retry','Try again',g.goal_id)}`);
+    }
+  }
+  function validateContribution(f) {
+    const value=Number(f.elements.amount.value),max=Number(f.dataset.maximum);
+    const error=f.querySelector('.sv-form-error');
+    const exceeded=Number.isFinite(value)&&value>max;
+    error.textContent=exceeded?`You can add up to ${money(max)}, based on available funds and your remaining target.`:'';error.hidden=!exceeded;
+    f.querySelector('[type="submit"]').disabled=exceeded||!Number.isFinite(value)||value<=0;
+  }
+  document.addEventListener('input',event=>{const f=event.target.closest('[data-sv-form="add"][data-maximum]');if(f)validateContribution(f);});
   function badgeList() {
     const total=Number(data.personalTotal)+Number(data.groupTotal);
     return [
@@ -72,8 +101,8 @@ window.PayPinkSavingsLive = (() => {
     return `<section class="sv-summary"><span>Your PinkCircles</span><h2>${circles.filter(c=>c.membership_status==='ACTIVE').length} active circles</h2><p>Your personal contributions stay in your account.</p></section><div class="sv-goals">${circles.map(c=>`<button class="sv-card sv-circle-choice" data-sv="select" data-id="${esc(c.circle_id)}" aria-pressed="${selected===c.circle_id}"><div class="sv-card-top"><h2>${esc(c.name)}</h2><span>${c.membership_status==='INVITED'?'Invitation':`${c.members.filter(m=>m.status==='ACTIVE').length} members`}</span></div><p>${c.membership_status==='INVITED'?'You have been invited to save together.':`${money(c.savedAmount)} / ${money(c.target_amount)}`}</p>${c.membership_status==='ACTIVE'?bar(c.savedAmount,c.target_amount,c.name):''}</button>`).join('')||'<div class="sv-card"><p>No circles yet. Create one and invite another PayPink user.</p></div>'}</div>${accounts().length?btn('create','＋ Create PinkCircle','',true):''}${c?`<section class="sv-card sv-separate"><div class="sv-card-top"><h2>${esc(c.name)}</h2><span class="sv-soft-pill">Shared goal</span></div><p>Target: ${money(c.target_amount)} · ${date(c.target_date)}</p>${c.membership_status==='INVITED'?`<p>Join with your own savings account. Joining does not reserve money.</p>${accounts().length?btn('accept','Accept invitation',c.circle_id,true):'<p>An active PHP savings account is needed to join.</p>'}`:`<h3>Member contributions</h3>${c.members.map(m=>`<div class="sv-member"><div class="sv-card-top"><strong>${esc(m.first_name)} ${esc(m.last_name)}${m.goal_id?' (you)':''}</strong><span>${m.status==='INVITED'?'Invited':m.savedAmount===undefined?'Contribution hidden':`${money(m.savedAmount)} / ${money(m.target_amount)}`}</span></div>${m.status==='ACTIVE' && m.savedAmount!==undefined?bar(m.savedAmount,m.target_amount,'Member savings'):''}${admin&&m.status==='ACTIVE'?btn('target','Propose target',m.customer_id,true):''}</div>`).join('')}${g?goalActions(g):''}<div class="sv-actions">${own?btn('visibility','Progress privacy',c.circle_id,true):''}${admin?btn('invite','Invite PayPink user',c.circle_id,true):''}</div>${own?.proposed_target!=null?`<p>Proposed personal target: ${money(own.proposed_target)}</p>${btn('approve','Review target proposal',c.circle_id,true)}`:''}<div class="sv-privacy sv-separate"><div><strong>♧ Your money stays yours</strong><p>Each member controls their own savings and releases. Only progress is shared. Circle totals remain visible when individual amounts are hidden.</p></div></div>`}</section>`:''}`;
   }
   function render() {
-    const header=`<div class="sv-heading"><div><h1>PayPink Savings</h1><p>Your goals, your pace.</p></div>${btn('refresh',loading?'Loading…':'Refresh')}</div>`;
-    const body=loading&&!data?'<p role="status">Loading your savings…</p>':failure?`<section class="sv-card" role="alert"><h2>Savings is unavailable right now</h2><p>${esc(failure)}</p>${btn('refresh','Try again')}</section>`:data?`${notice?`<p class="notice" role="status">${esc(notice)}</p>`:''}${pending()?`<div class="notice" role="status"><p>A savings request is awaiting confirmation. Check its status before making another change.</p>${btn('check','Check pending request')}</div>`:''}${!accounts().length?'<p class="notice">You need an active PHP savings account to create a goal or join a PinkCircle.</p>':''}${overview()}<div class="sv-circle-tabs" role="group" aria-label="Savings views"><button data-sv="personal" aria-pressed="${tab==='personal'}">My Savings</button><button data-sv="circles" aria-pressed="${tab==='circles'}">PinkCircles</button></div>${tab==='personal'?personalView():circleView()}`:'<p>Loading your accounts…</p>';
+    const header=`<div class="sv-heading"><div><h1>PayPink Savings Hub</h1><p>Your goals, your pace.</p></div>${btn('refresh',loading?'Loading…':'Refresh')}</div>`;
+    const body=loading&&!data?'<p role="status">Loading your savings…</p>':failure?`<section class="sv-card" role="alert"><h2>Savings Hub is unavailable right now</h2><p>${esc(failure)}</p>${btn('refresh','Try again')}</section>`:data?`${notice?`<p class="notice" role="status">${esc(notice)}</p>`:''}${pending()?`<div class="notice" role="status"><p>A savings request is awaiting confirmation. Check its status before making another change.</p>${btn('check','Check pending request')}</div>`:''}${!accounts().length?'<p class="notice">You need an active PHP savings account to create a goal or join a PinkCircle.</p>':''}${overview()}<div class="sv-circle-tabs" role="group" aria-label="Savings views"><button data-sv="personal" aria-pressed="${tab==='personal'}">My Savings</button><button data-sv="circles" aria-pressed="${tab==='circles'}">PinkCircles</button></div>${tab==='personal'?personalView():circleView()}`:'<p>Loading your accounts…</p>';
     return `<div id="savings-live" class="savings-view" aria-busy="${loading||busy}">${header}${body}</div>`;
   }
   async function load() {
@@ -190,6 +219,7 @@ window.PayPinkSavingsLive = (() => {
     if(action==='select'){selected=id;return redraw();}
     if(action==='badge')return modal(b.dataset.name,`<p>${esc(b.dataset.description)}</p><p>Badges celebrate your progress and have no cash value.</p>`);
     if(action==='activity')return activity(id);
+    if(action==='maximum'){const f=b.closest('form');f.elements.amount.value=Number(f.dataset.maximum).toFixed(2);validateContribution(f);return;}
     if(action==='check'){
       const stamp=epoch;busy=true;redraw();try{await checkPending();}catch(error){if(active(stamp)){notice=error.message;await load();}}finally{if(active(stamp)){busy=false;redraw();}}return;
     }
@@ -199,7 +229,8 @@ window.PayPinkSavingsLive = (() => {
       if(draft.step===2){const values=new FormData(b.closest('form'));draft.initial=values.get('initial');draft.schedule={enabled:values.has('enabled'),amount:values.get('amount'),frequency:values.get('frequency'),nextDue:values.get('nextDue')};}
       return wizard(draft.step-1);
     }
-    if(action==='add'||action==='release')return modal(action==='add'?'Add money':'Release savings',form(action,`<p>${esc(g.name)} · Saved: ${money(g.savedAmount)}</p><p>${action==='add'?'This reserves funds in your own savings account.':'Released funds become available in your account.'}</p>${amount('amount','Amount (₱)')}`,'Confirm',id));
+    if(action==='add'||action==='funding-retry')return contribution(g);
+    if(action==='release')return modal('Release savings',form(action,`<p>${esc(g.name)} · Saved: ${money(g.savedAmount)}</p><p>Released funds become available in your account.</p>${amount('amount','Amount (₱)')}`,'Confirm',id));
     if(action==='edit')return modal('Edit savings goal',form('edit',`${input('name','Goal name',g.name,'text','maxlength="80" required')}${amount('target','Target amount (₱)',g.target_amount)}${input('targetDate','Target date',String(g.target_date).slice(0,10),'date',`min="${today()}" required`)}`,'Save changes',id));
     if(action==='schedule')return modal('Savings plan',form('schedule',scheduleFields(g.schedule?.[0]),'Save plan',id));
     if(action==='split')return modal('Smart Split',form('split',`${amount('budget','Savings budget (₱)')}<p>Choose goals linked to the same savings account.</p>${personal().map(g=>amount(g.goal_id,`${esc(g.name)} · account •••• ${esc(String(context.profile().accounts.find(a=>a.accountId===g.account_id)?.accountNumber||'').slice(-4))}`,0,'0')).join('')}`,'Confirm split'));
@@ -222,7 +253,8 @@ window.PayPinkSavingsLive = (() => {
       if(kind==='confirm'){await createGoal();return;}
       if(kind==='add'||kind==='release'){
         const g=goals().find(g=>g.goal_id===id),n=positive(get('amount'));
-        if(n>Number(kind==='release'?g.savedAmount:Number(g.target_amount)-Number(g.savedAmount)))throw new Error(kind==='release'?'The amount exceeds your reserved savings.':'The amount exceeds the remaining goal target.');
+        if(kind==='add'&&(!Number.isFinite(Number(f.dataset.maximum))||n>Number(f.dataset.maximum)))throw new Error('The amount exceeds what you can currently set aside. Reopen this dialog to refresh your available funds.');
+        if(kind==='release'&&n>Number(g.savedAmount))throw new Error('The amount exceeds your reserved savings.');
         notice=await operation({accountId:Number(g.account_id),type:kind==='release'?'RELEASE':'ALLOCATE',lines:[{goalId:id,amount:n}]});
       } else if(kind==='split'){
         const budget=positive(get('budget')),chosen=personal().map(g=>({g,n:positive(get(g.goal_id),true)})).filter(v=>v.n>0);

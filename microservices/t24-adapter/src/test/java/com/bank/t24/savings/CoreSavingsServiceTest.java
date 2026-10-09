@@ -20,10 +20,11 @@ import static org.mockito.Mockito.*;
 
 @DataJpaTest(properties="spring.jpa.show-sql=false")
 @AutoConfigureTestDatabase(replace=AutoConfigureTestDatabase.Replace.NONE)
-@Import({CoreSavingsService.class,ObjectMapper.class})
+ @Import({CoreSavingsService.class,ObjectMapper.class,com.bank.t24.service.T24PostingService.class})
 @Transactional(propagation=Propagation.NOT_SUPPORTED)
 class CoreSavingsServiceTest {
  @Autowired CoreSavingsService service;
+ @Autowired com.bank.t24.service.T24PostingService posting;
  @Autowired AccountRepository accounts;
  @Autowired JdbcTemplate jdbc;
  @MockBean SavingsRiskClient risk;
@@ -39,11 +40,40 @@ class CoreSavingsServiceTest {
  }
  SavingsCommand command(UUID id,String type,String amount) {return new SavingsCommand(id,10L,account,type,List.of(new SavingsCommand.Line(goal,new BigDecimal(amount),new BigDecimal("10000"))));}
  BigDecimal held(){return accounts.findById(account).orElseThrow().getHeldBalance();}
+ @Test void reservedGoalsCannotBeSpentUntilReleased() {
+  service.apply(command(UUID.randomUUID(),"ALLOCATE","3000.00"));
+  UUID circleGoal=UUID.randomUUID();
+  service.apply(new SavingsCommand(UUID.randomUUID(),10L,account,"ALLOCATE",List.of(new SavingsCommand.Line(circleGoal,new BigDecimal("2000"),new BigDecimal("10000")))));
+  var receiver=new Account();receiver.setAccountNumber("recv"+UUID.randomUUID().toString().substring(0,8));receiver.setCustomerId(11L);receiver.setAccountType("SAVINGS_ACCOUNT");receiver.setStatus("ACTIVE");receiver.setCurrency("PHP");receiver.setCurrentBalance(BigDecimal.ZERO);receiver.setHeldBalance(BigDecimal.ZERO);accounts.saveAndFlush(receiver);
+  String source=accounts.findById(account).orElseThrow().getAccountNumber();
+  var denied=posting.executeDoubleEntryPosting(UUID.randomUUID().toString(),source,receiver.getAccountNumber(),new BigDecimal("10000"),"PHP","test-ft");
+  assertThat(denied.success()).isFalse();assertThat(denied.errorMessage()).contains("Insufficient available");
+  var snapshot=service.breakdown(account);
+  assertThat((Map<?,?>)snapshot.get("reservations")).hasSize(2);
+  service.apply(new SavingsCommand(UUID.randomUUID(),10L,account,"RELEASE",List.of(new SavingsCommand.Line(circleGoal,new BigDecimal("2000"),new BigDecimal("10000")))));
+  var allowed=posting.executeDoubleEntryPosting(UUID.randomUUID().toString(),source,receiver.getAccountNumber(),new BigDecimal("10000"),"PHP","test-ft-2");
+  assertThat(allowed.success()).isTrue();
+  assertThat(held()).isEqualByComparingTo("4000");
+  assertThat(service.balances(account).get(goal.toString())).isEqualByComparingTo("3000");
+ }
  @Test void allocationReleaseAndRetryKeepAccountBalance() {
   UUID id=UUID.randomUUID();service.apply(command(id,"ALLOCATE","3000.00"));service.apply(command(id,"ALLOCATE","3000.00"));
   assertThat(held()).isEqualByComparingTo("4000");assertThat(accounts.findById(account).orElseThrow().getCurrentBalance()).isEqualByComparingTo("15000");
   service.apply(command(UUID.randomUUID(),"RELEASE","500.00"));assertThat(held()).isEqualByComparingTo("3500");assertThat(service.balances(account).get(goal.toString())).isEqualByComparingTo("2500");
   assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM app.OUTBOX_EVENT WHERE aggregate_id=?",Integer.class,id.toString())).isEqualTo(1);
+ }
+ @Test void fundingSubtractsAllGoalReservationsAndOtherHolds() {
+  service.apply(command(UUID.randomUUID(),"ALLOCATE","3000.00"));
+  UUID other=UUID.randomUUID();
+  service.apply(new SavingsCommand(UUID.randomUUID(),10L,account,"ALLOCATE",List.of(new SavingsCommand.Line(other,new BigDecimal("2000.00"),new BigDecimal("10000")))));
+  var funds=service.funding(account,goal.toString());
+  assertThat(funds.get("accountBalance")).isEqualByComparingTo("15000");
+  assertThat(funds.get("reservedSavings")).isEqualByComparingTo("5000");
+  assertThat(funds.get("otherHolds")).isEqualByComparingTo("1000");
+  assertThat(funds.get("availableBalance")).isEqualByComparingTo("9000");
+  assertThat(funds.get("goalSavedAmount")).isEqualByComparingTo("3000");
+  assertThatThrownBy(()->service.apply(new SavingsCommand(UUID.randomUUID(),10L,account,"ALLOCATE",List.of(new SavingsCommand.Line(UUID.randomUUID(),new BigDecimal("9000.01"),new BigDecimal("20000")))))).isInstanceOf(ResponseStatusException.class);
+  assertThat(service.funding(account,goal.toString()).get("availableBalance")).isEqualByComparingTo("9000");
  }
  @Test void conflictingRetryAndForeignOwnerFail() {
   UUID id=UUID.randomUUID();service.apply(command(id,"ALLOCATE","100.00"));

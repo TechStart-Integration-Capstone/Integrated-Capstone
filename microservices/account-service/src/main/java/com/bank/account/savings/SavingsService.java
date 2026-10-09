@@ -12,6 +12,25 @@ import java.util.*;
 public class SavingsService {
  private final JdbcTemplate jdbc;
  private final SavingsCoreClient core;
+ public Map<String,Object> breakdown(Long customer,Long accountId) {
+  customer(customer);account(customer,accountId);
+  var rows=jdbc.queryForList("SELECT * FROM app.SAVINGS_GOAL WHERE customer_id=? AND account_id=? ORDER BY created_at,goal_id",customer,accountId);
+  var snapshot=core.breakdown(accountId);
+  var allocations=new ArrayList<Map<String,Object>>();
+  BigDecimal personal=BigDecimal.ZERO,group=BigDecimal.ZERO;
+  for(var goal:rows){
+   BigDecimal amount=snapshot.reservations().getOrDefault(goal.get("goal_id").toString(),BigDecimal.ZERO);
+   if(amount.signum()<=0)continue;
+   boolean circle=goal.get("circle_id")!=null;
+   if(circle)group=group.add(amount);else personal=personal.add(amount);
+   allocations.add(Map.of("goalId",goal.get("goal_id"),"name",goal.get("name"),"kind",circle?"PINK_CIRCLE":"PERSONAL","amount",amount));
+  }
+  var result=new LinkedHashMap<String,Object>(snapshot.funds());
+  result.remove("goalSavedAmount");result.put("accountId",accountId);
+  result.put("personalReserved",personal);result.put("circleReserved",group);
+  result.put("unlistedReservations",snapshot.funds().get("reservedSavings").subtract(personal).subtract(group).max(BigDecimal.ZERO));
+  result.put("allocations",allocations);return result;
+ }
  private final com.fasterxml.jackson.databind.ObjectMapper json;
  public SavingsService(JdbcTemplate jdbc,SavingsCoreClient core,com.fasterxml.jackson.databind.ObjectMapper json){this.jdbc=jdbc;this.core=core;this.json=json;}
  public void customer(Long customer) {
@@ -67,6 +86,15 @@ public class SavingsService {
   if(goal.get("circle_id")!=null)throw new ResponseStatusException(CONFLICT,"Circle targets require a member-approved proposal");
   if(edit.target().compareTo(saved(goal))<0)throw new ResponseStatusException(CONFLICT,"Target is below reserved savings");
   jdbc.update("UPDATE app.SAVINGS_GOAL SET name=?,target_amount=?,target_date=? WHERE goal_id=?",name(edit.name()),edit.target(),edit.targetDate(),id);
+ }
+ public Map<String,Object> funding(Long customer,String id) {
+  customer(customer);var goal=owned(customer,id);long accountId=number(goal,"account_id");account(customer,accountId);
+  var funds=core.funding(accountId,id);
+  BigDecimal remaining=decimal(goal,"target_amount").subtract(funds.get("goalSavedAmount")).max(BigDecimal.ZERO);
+  var result=new LinkedHashMap<String,Object>(funds);
+  result.put("accountId",accountId);result.put("remainingTarget",remaining);
+  result.put("maximumContribution",funds.get("availableBalance").min(remaining).max(BigDecimal.ZERO).setScale(2,java.math.RoundingMode.DOWN));
+  return result;
  }
  @Transactional public void schedule(Long customer,String id,SavingsRequests.Schedule schedule) {
   lock(customer);noPending(customer);owned(customer,id);

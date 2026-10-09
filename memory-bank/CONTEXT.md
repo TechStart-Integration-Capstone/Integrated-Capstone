@@ -28,6 +28,14 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### Savings contribution limits (2026-10-09)
+
+- My accounts now includes a live per-account savings breakdown and View allocations disclosure showing only the owner's goal/circle reservations. Other holds are omitted from the panel per user preference; actual core available balance remains authoritative. New owner-checked `/api/v1/accounts/savings/accounts/{id}/breakdown` endpoint uses a locked core snapshot. Local only; backend/frontend rebuild required, no migration. Verified with 13 savings app tests, 10 core savings tests, posting/hold suites and browser checks. Transfer regression rejects spending reserved funds, then permits spending after release while preserving the remaining reservation.
+
+- The web goals/PinkCircles section is now named Savings Hub in live navigation, breadcrumbs and headings, with matching offline preview. Account product names remain Savings account. Rename is local; syntax and savings browser checks passed; awaits frontend deployment.
+
+- Add-money and own PinkCircle contribution dialogs fetch an owner-checked live core funding snapshot and display account balance minus all goal/circle allocations and other holds. Maximum equals min(available funds, remaining own target), rounded down to centavos. Core confirmation still rechecks funds under the account lock. Failed reads block contribution instead of using cached balances. Offline preview mirrors the UI with sample funds. Validation: account-service and t24-adapter test reports have zero failures/errors; savings browser checks and git diff --check passed. No migration/deployment; updating requires account-service and t24-adapter JAR/image builds plus frontend rebuild.
+
 The PayPink system is being refactored from a shared-database monolithic ledger into a Domain-Driven Design (DDD) banking architecture. In this design, Temenos T24 (simulated by `t24-adapter`) acts as the stateful System of Record (SoR) and authoritative double-entry book of record. It powers a mobile P2P remittance application (domestic, PHP) with real-time fraud screening and T24 core banking integration.
 
 ### Refactoring Roadmap (Phases 0 through 10)

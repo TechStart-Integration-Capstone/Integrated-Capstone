@@ -1,5 +1,11 @@
 # Changelog
 
+- 2026-10-09 - Added owner-checked savings account breakdown API and My accounts panel with account selector, personal/circle totals, actual available balance and collapsible own allocations. Other holds omitted from panel per request; backend still respects actual holds. Corrected account-card total label. Validation passed: 13 savings app tests, 10 core savings tests, posting/hold suites, browser checks and git diff --check. Transfer regression proves reserved funds cannot be spent until released. Local only; no migration or deployment. - [dom]
+
+- 2026-10-09 - Renamed the bank section to Savings Hub in navigation, breadcrumbs, live heading and offline preview; refreshed script versions and updated the existing breadcrumb test. JavaScript syntax and savings browser checks passed. Local only; frontend rebuild required for deployment. - [dom]
+
+- 2026-10-09 - Added live owner-checked goal funding quotes backed by a core account-lock snapshot. Add money/PinkCircle dialogs now show account balance, goal/circle reservations, other holds, available funds, remaining own target and maximum; Add maximum uses min(available, remaining) rounded down to centavos. Added immediate limit feedback, unavailable/zero states, matching offline preview and backend/browser coverage. Validation: account-service and t24-adapter test reports have zero failures/errors; savings browser checks and git diff --check passed. No migration or deployment. - [dom]
+
 - 2026-10-09 — Mobile Real-Time Loan Aggregation & Apply Loan Implementation (`account_service.dart`, `loan_application_sheet.dart`, `dashboard_screen.dart`, `main.dart`):
   - **Mobile Loan Origination Flow (`loan_application_sheet.dart`):** Built dedicated bottom sheet featuring live eligibility check, disbursement account selector, amount & term dropdown (3 to 60 months), instant credit decision/offer card display, and Truth in Lending Act terms agreement modal.
   - **Loans Aggregation (`account_service.dart`):** Updated `AccountService.fetchProfile()` to asynchronously merge active loans from `fetchLoans()` (`GET /api/v1/loans`) into `UserProfile.accounts`, ensuring loan accounts are recognized across Dashboard, Accounts tab, and Payment sheets.

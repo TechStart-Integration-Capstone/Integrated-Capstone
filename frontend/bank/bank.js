@@ -108,7 +108,7 @@ function renderShell() {
   const initials = name.split(/\s+/).slice(0,2).map(part => part[0]).join('').toUpperCase();
   app.innerHTML = `<div class="bank-layout">
     <aside class="sidebar">${brand()}<div class="eyebrow">YOUR BANKING</div>
-      <nav aria-label="Main navigation">${navLink('overview','Overview','home')}${navLink('accounts','My accounts','wallet')}${navLink('transfer','Transfers','arrow')}${navLink('activity','Transactions','activity')}${navLink('loans','Loans','coins')}${navLink('savings','Savings','star')}</nav>
+      <nav aria-label="Main navigation">${navLink('overview','Overview','home')}${navLink('accounts','My accounts','wallet')}${navLink('transfer','Transfers','arrow')}${navLink('activity','Transactions','activity')}${navLink('loans','Loans','coins')}${navLink('savings','Savings Hub','star')}</nav>
       <div class="sidebar-bottom"><div class="privacy-note">${icon('shield')}<strong>A little privacy goes a long way.</strong><p>Keep your account details and password just for you.</p></div><button class="logout" data-action="logout">${icon('logout')}<span>Log out</span></button></div>
     </aside>
     <div class="bank-content"><header class="topbar"><div class="breadcrumb"><span>PayPink</span><span>/</span><strong id="breadcrumb-page">Personal banking</strong></div>
@@ -124,7 +124,7 @@ function heading(title, subtitle) {
 function renderPage() {
   const main = document.querySelector('#main');
   if (!state.session || !main) return;
-  const titles = {overview:'Overview',accounts:'My accounts',activity:'Transactions',transfer:'Transfers',loans:'Loans',savings:'Savings'};
+  const titles = {overview:'Overview',accounts:'My accounts',activity:'Transactions',transfer:'Transfers',loans:'Loans',savings:'Savings Hub'};
   document.title = `${titles[state.page]} — PayPink`;
   document.querySelector('#breadcrumb-page').textContent = titles[state.page];
   document.querySelectorAll('.nav-link').forEach(button => {
@@ -145,7 +145,32 @@ function renderPage() {
   main.innerHTML = (state.error ? `<div class="notice" role="alert">${escapeHtml(state.error)} Showing your last loaded information.</div>` : '')
     + (state.page === 'overview' ? overview() : state.page === 'accounts' ? accountsPage() : state.page === 'transfer' ? transferPage() : state.page === 'loans' ? loansPage() : activityPage())
     + `<footer class="page-footer"><span>© ${new Date().getFullYear()} PayPink. A little more everyday.</span><span>${icon('lock')} ${state.updated ? `Updated ${state.updated.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}` : 'Personal banking'} · Philippine peso accounts</span></footer>`;
+  if(state.page==='accounts')loadSavingsBreakdown();
 }
+
+async function loadSavingsBreakdown() {
+  const panel=document.querySelector('#account-savings-breakdown');
+  if(!panel)return;
+  const select=panel.querySelector('select'), content=panel.querySelector('[data-breakdown-content]');
+  const accountId=select.value, session=state.session;
+  const token=Symbol();panel.requestToken=token;
+  content.innerHTML='<p role="status">Loading your savings breakdown…</p>';
+  try {
+    const data=await api('/api/v1/accounts/savings/accounts/'+encodeURIComponent(accountId)+'/breakdown');
+    if(!panel.isConnected||state.session!==session||panel.requestToken!==token)return;
+    const row=(label,value)=>`<div><dt>${escapeHtml(label)}</dt><dd>${balance(value)}</dd></div>`;
+    content.innerHTML=`<dl class="sv-funding">${row('Total account balance',data.accountBalance)}${row('Set aside for personal goals',data.personalReserved)}${row('Your PinkCircle contributions',data.circleReserved)}${Number(data.unlistedReservations)>0?row('Other savings reservations',data.unlistedReservations):''}${row('Available balance',data.availableBalance)}</dl><p>Set-aside money stays in your account. Release it in Savings Hub before spending or reallocating it.</p><details class="account-allocations"><summary>View allocations (${data.allocations.length})</summary>${data.allocations.length?`<dl class="sv-funding">${data.allocations.map(a=>row(a.name+' · '+(a.kind==='PINK_CIRCLE'?'PinkCircle · your contribution':'Personal goal'),a.amount)).join('')}</dl>`:'<p>No money is set aside for goals or PinkCircles in this account yet.</p>'}</details><p class="sv-modal-note">Account numbers are masked. Use Refresh for the latest balances.</p>`;
+  } catch(error) {
+    if(panel.isConnected&&state.session===session&&panel.requestToken===token)content.innerHTML='<p role="alert">We couldn’t load your savings breakdown. Use Refresh to try again.</p>';
+  }
+}
+
+function savingsAccountBreakdown() {
+  const accounts=state.profile.accounts.filter(a=>['SAVINGS','SAVINGS_ACCOUNT'].includes(a.accountType)&&a.currency==='PHP'&&a.status==='ACTIVE');
+  if(!accounts.length)return '';
+  return `<section id="account-savings-breakdown" class="sv-card sv-separate" aria-labelledby="account-savings-title"><h2 id="account-savings-title">Savings account breakdown</h2><div class="form-field"><label for="breakdown-account">Savings account</label><select id="breakdown-account">${accounts.map(a=>`<option value="${escapeHtml(a.accountId)}">Savings account ${escapeHtml(maskedNumber(a.accountNumber))}</option>`).join('')}</select></div><div data-breakdown-content aria-live="polite"></div></section>`;
+}
+document.addEventListener('change',event=>{if(event.target.id==='breakdown-account')loadSavingsBreakdown();});
 
 function overview() {
   const accounts = state.profile.accounts;
@@ -227,14 +252,14 @@ function beneficiaries() {
 function accountCard(account) {
   return `<article class="account-card"><div class="account-card-top"><span class="account-symbol">${icon('wallet')}</span>${statusPill(account.status)}</div><h3>${escapeHtml(accountName(account.accountType))}</h3>
     <div class="account-number"><span>${escapeHtml(accountNumber(account))}</span><button class="icon-btn" data-action="account-visibility" data-id="${account.accountId}" aria-label="${state.visibleAccounts.has(account.accountId) ? 'Hide' : 'Show'} account number ending ${escapeHtml(account.accountNumber.slice(-4))}" aria-pressed="${state.visibleAccounts.has(account.accountId)}">${icon(state.visibleAccounts.has(account.accountId) ? 'eye-off' : 'eye')}</button></div>
-    <div class="account-balance">${balance(account.currentBalance,account.currency)}</div><div class="account-card-footer"><span>Available balance</span><button data-action="account-details" data-id="${account.accountId}">Account details ${icon('arrow')}</button></div></article>`;
+    <div class="account-balance">${balance(account.currentBalance,account.currency)}</div><div class="account-card-footer"><span>Total account balance</span><button data-action="account-details" data-id="${account.accountId}">Account details ${icon('arrow')}</button></div></article>`;
 }
 
 function accountsPage() {
   return heading('A home for your money.', 'Your accounts, together. Select an account to see its details.')
     + `<div class="section-heading"><h2>My accounts <small>${state.profile.accounts.length} linked</small></h2><button class="btn btn-subtle" data-action="balance-visibility" aria-pressed="${state.hideBalances}">${icon(state.hideBalances ? 'eye-off' : 'eye')} ${state.hideBalances ? 'Show' : 'Hide'} balances</button></div>
       <div class="accounts-grid">${state.profile.accounts.map(accountCard).join('') || empty('No accounts yet.','No accounts are linked to this profile yet.','wallet')}</div>
-      <div class="account-explainer"><span class="circle-icon">${icon('shield')}</span><div><h3>A little discretion, built in.</h3><p>Your account numbers are masked by default. Use the eye icon to reveal them, or open account details to copy a number.</p></div></div>`;
+      ${savingsAccountBreakdown()}<div class="account-explainer"><span class="circle-icon">${icon('shield')}</span><div><h3>A little discretion, built in.</h3><p>Your account numbers are masked by default. Use the eye icon to reveal them, or open account details to copy a number.</p></div></div>`;
 }
 
 function empty(title = 'A fresh page for your money.', text = 'Your transactions will appear here as you use your account.', symbol = 'activity') {

@@ -70,6 +70,23 @@ public class CoreSavingsService {
   jdbc.query("SELECT goal_id,reserved_amount FROM t24.SAVINGS_RESERVATION WHERE account_id=?",rs->{result.put(rs.getString(1),rs.getBigDecimal(2));},accountId);
   return result;
  }
+ @Transactional
+ public Map<String,BigDecimal> funding(Long accountId,String goalId) {
+  // Read account and reservations under the same lock used by contributions/transfers.
+  var account=accounts.findByIdForUpdate(accountId).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
+  var reserved=balances(accountId);
+  BigDecimal savings=reserved.values().stream().reduce(BigDecimal.ZERO,BigDecimal::add);
+  return Map.of("accountBalance",account.getCurrentBalance(),"reservedSavings",savings,
+   "otherHolds",account.getHeldBalance().subtract(savings).max(BigDecimal.ZERO),
+   "availableBalance",account.getAvailableBalance().max(BigDecimal.ZERO),
+   "goalSavedAmount",reserved.getOrDefault(goalId,BigDecimal.ZERO));
+ }
+ @Transactional
+ public Map<String,Object> breakdown(Long accountId) {
+  // funding acquires the account lock; retain it through reading all allocations.
+  var funds=funding(accountId,"");
+  return Map.of("funds",funds,"reservations",balances(accountId));
+ }
  private String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalStateException(e);}}
  @SuppressWarnings("unchecked") private Map<String,Object> decode(String value){try{return json.readValue(value,Map.class);}catch(Exception e){throw new IllegalStateException(e);}}
 }

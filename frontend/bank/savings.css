@@ -1,4 +1,5 @@
 /* Savings styles shared by the banking page and the offline preview. */
+.sv-funding{margin:8px 0;padding:14px;background:#fdf2f8;border-radius:10px}.sv-funding>div{display:flex;justify-content:space-between;gap:16px;padding:8px 0;font-size:12px}.sv-funding dt{color:#796c76}.sv-funding dd{margin:0;text-align:right;font-weight:600;overflow-wrap:anywhere;min-width:100px}.sv-funding>div:last-child{border-top:1px solid #e6d5de;color:#651c3e}
 .sv-milestone-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:10px;padding:0;margin:18px 0;list-style:none}
 .sv-milestone-list li{padding:12px;border:1px solid #ece5e9;border-radius:10px;background:#faf8f9;min-width:0}
 .sv-milestone-list strong{display:block;font-size:14px;overflow-wrap:anywhere}.sv-milestone-list small{display:block;margin-top:5px;font-size:10px;color:#796c76}
