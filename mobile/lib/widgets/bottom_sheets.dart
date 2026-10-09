@@ -24,7 +24,6 @@ class PayPinkBottomSheets {
           children: [
             _DetailRow(label: 'Account Number', value: fullNumber, isMono: true),
             _DetailRow(label: 'Available Balance', value: '₱${balance.toStringAsFixed(2)}', isBold: true),
-            _DetailRow(label: 'Ledger Balance', value: '₱${balance.toStringAsFixed(2)}'),
             const _DetailRow(label: 'Amount on Hold / Reserved', value: '₱0.00 (None)', valueColor: PayPinkTheme.green),
             const _DetailRow(label: 'Interest Accrual Rate', value: '1.50% p.a.'),
             const _DetailRow(label: 'Interest Posting', value: 'Monthly (Oct 31, 2026)'),

@@ -2,6 +2,10 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (Updated last card in digital deck with luxury Pinkish Beige palette - Desert Rose / Champagne Blush Nude into gradient black)_
+_Last Updated: 2026-10-09 (Removed Ledger Balance from Account Details modal, customized 3rd card with distinct Electric Fuchsia & Magenta Pink palette)_
+_Last Updated: 2026-10-09 (Mobile card styling & half-gradient black, bottom logo removal, favorites UI redesign matching PayPink theme with inline error messaging)_
+_Last Updated: 2026-10-09 (Mobile brand refactoring & backend validation: MOB-102 receipt PayPinkLogo, MOB-103 card color gradients & SVG watermark, MOB-104 dynamic dates, MOB-105 server-side favorites & 12-digit lookup verification)_
 _Last Updated: 2026-10-09 (Restored Local Dev Fallback Mode for Development & Firewall Testing, Comprehensive OpenAPI Swagger documentation, Phase 10 RBAC hardening)_
 _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
 
@@ -320,6 +324,12 @@ All planned phases complete through Phase 10 with CI/CD passing on Java 17 Temur
 - EOD settings were passed in memory without editing Compose/.env; preserve them during future rebuilds or recreate will restore disabled defaults.
 - PostgreSQL GL delivery is asynchronous through remittance.events/ledger.transaction.events and audit-service. Duplicate ledger legs are ignored; database errors propagate to Kafka retries.
 - Mobile app (`mobile/lib/main.dart`, `screens/dashboard_screen.dart`, `screens/remittance_screen.dart`, `services/remittance_service.dart`, `services/account_service.dart`): added global `DevHttpOverrides`, native `TextStyle` font fallbacks, Clean Architecture with BLoC state machines, and dynamically bound live Azure SQL accounts and transaction history across Overview, Accounts, Transfer (Remittance), and Activity (Transactions) screens.
+- Mobile Brand & Validation Hardening (2026-10-09):
+  - **MOB-102:** Integrated `PayPinkLogo.markOnly(size: 26)` into transfer receipt dialog.
+  - **MOB-103:** Replaced payment network badges (Mastercard/Visa) with PayPink card emblem, configured 3 distinct card gradients (Checking: `#E11D48` to `#DB2777`, Savings: `#FB7185` to `#FDA4AF`, Loan: `#18181B` through `#4C0519` to `#881337`), and rendered custom white PayPink "P" SVG watermark at 60% opacity centered on cards.
+  - **MOB-104:** Replaced static date strings with dynamic runtime dates across `main.dart` and `remittance_screen.dart`.
+  - **MOB-105:** Integrated live backend endpoints for favorites (`GET`, `POST`, `DELETE` on `/api/v1/accounts/favorites`), client-side 12-digit numeric validation (`^\d{12}$`), and server-side lookup verification (`/api/v1/accounts/recipients/lookup`), blocking transfers and favorite additions until both validations pass.
+
 
 ## Active Initiative: T24 Core Banking & DDD Domain Refactoring
 

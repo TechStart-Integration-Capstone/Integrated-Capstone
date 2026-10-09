@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../services/account_service.dart';
+import 'paypink_logo.dart';
 
 /// Card scheme type for realistic card face branding
 enum CardScheme {
@@ -18,6 +19,8 @@ class PayPinkCardModel {
   final String expiry;
   final CardScheme scheme;
   final bool isFrozen;
+  final int cardIndex;
+  final bool isLastCard;
 
   PayPinkCardModel({
     required this.account,
@@ -26,6 +29,8 @@ class PayPinkCardModel {
     required this.expiry,
     required this.scheme,
     this.isFrozen = false,
+    this.cardIndex = 0,
+    this.isLastCard = false,
   });
 
   String get last4 => account.last4;
@@ -33,10 +38,12 @@ class PayPinkCardModel {
     final type = account.accountType.toUpperCase();
     if (type.contains('SAVING')) return 'High-Yield Savings';
     if (type.contains('LOAN')) return 'Personal Loan';
+    if (type.contains('STRESS')) return 'Digital Reserve';
+    if (isLastCard || cardIndex >= 2) return 'Platinum Reserve';
     return 'Everyday Checking';
   }
 
-  PayPinkCardModel copyWith({bool? isFrozen}) {
+  PayPinkCardModel copyWith({bool? isFrozen, int? cardIndex, bool? isLastCard}) {
     return PayPinkCardModel(
       account: account,
       cardHolder: cardHolder,
@@ -44,6 +51,8 @@ class PayPinkCardModel {
       expiry: expiry,
       scheme: scheme,
       isFrozen: isFrozen ?? this.isFrozen,
+      cardIndex: cardIndex ?? this.cardIndex,
+      isLastCard: isLastCard ?? this.isLastCard,
     );
   }
 }
@@ -84,17 +93,18 @@ class PayPinkCardFace extends StatelessWidget {
     final border = BorderRadius.circular(radius);
     final isSavings = card.account.accountType.toUpperCase().contains('SAVING');
     final isLoan = card.account.accountType.toUpperCase().contains('LOAN');
+    final isPinkishBeige = card.isLastCard || card.cardIndex >= 2 || isLoan || card.account.accountType.toUpperCase().contains('STRESS');
 
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: border,
         boxShadow: [
           BoxShadow(
-            color: isLoan
-                ? const Color(0xFF8A2754).withValues(alpha: 0.35 * lift)
+            color: isPinkishBeige
+                ? const Color(0xFFBA8677).withValues(alpha: 0.35 * lift)
                 : (isSavings
-                    ? const Color(0xFF1E1428).withValues(alpha: 0.40 * lift)
-                    : PayPinkTheme.wine.withValues(alpha: 0.38 * lift)),
+                    ? const Color(0xFFFB7185).withValues(alpha: 0.35 * lift)
+                    : const Color(0xFFE11D48).withValues(alpha: 0.38 * lift)),
             blurRadius: 30 * lift,
             spreadRadius: -2,
             offset: Offset(0, 16 * lift),
@@ -108,6 +118,8 @@ class PayPinkCardFace extends StatelessWidget {
             sheen: sheen,
             isFrozen: card.isFrozen,
             accountType: card.account.accountType,
+            cardIndex: card.cardIndex,
+            isLastCard: card.isLastCard,
           ),
           child: Stack(
             fit: StackFit.passthrough,
@@ -121,6 +133,17 @@ class PayPinkCardFace extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.16),
                       width: 1.0,
                     ),
+                  ),
+                ),
+              ),
+
+              // Centered Custom White PayPink 'P' SVG Emblem Watermark at 60% opacity (MOB-103)
+              const Positioned.fill(
+                child: Center(
+                  child: PayPinkCardWatermark(
+                    width: 130,
+                    height: 156,
+                    opacity: 0.60,
                   ),
                 ),
               ),
@@ -161,60 +184,53 @@ class PayPinkCardFace extends StatelessWidget {
                         // Metallic Smart Chip
                         _SmartChip(width: constraints.maxWidth * 0.17),
 
-                        // Clean Spacing without watermark letter P
+                        // Clean Spacing
                         const Spacer(),
 
-                        // Card Holder Name & Balance Hint
-                        Text(
-                          card.cardHolder.toUpperCase(),
-                          style: PayPinkTheme.display(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white.withValues(alpha: 0.75),
-                            letterSpacing: 1.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Bottom Row: Network Scheme Mark & Product Label
+                        // Bottom Row: Card Holder on Left & Product Label / Expiry on Right
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            _NetworkSchemeMark(
-                              scheme: card.scheme,
-                              width: (constraints.maxWidth * 0.22).clamp(28.0, 48.0),
+                            Expanded(
+                              child: Text(
+                                card.cardHolder.toUpperCase(),
+                                style: PayPinkTheme.display(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  letterSpacing: 1.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             const SizedBox(width: 8),
-                            Flexible(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    card.productTitle,
-                                    style: PayPinkTheme.display(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                      letterSpacing: 0.2,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  card.productTitle,
+                                  style: PayPinkTheme.display(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: 0.2,
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'EXP ${card.expiry}',
-                                    style: PayPinkTheme.mono(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white.withValues(alpha: 0.60),
-                                    ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'EXP ${card.expiry}',
+                                  style: PayPinkTheme.mono(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white.withValues(alpha: 0.60),
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -236,11 +252,15 @@ class _PayPinkCardFacePainter extends CustomPainter {
   final double sheen;
   final bool isFrozen;
   final String accountType;
+  final int cardIndex;
+  final bool isLastCard;
 
   const _PayPinkCardFacePainter({
     required this.sheen,
     required this.isFrozen,
     required this.accountType,
+    this.cardIndex = 0,
+    this.isLastCard = false,
   });
 
   @override
@@ -248,45 +268,39 @@ class _PayPinkCardFacePainter extends CustomPainter {
     final rect = Offset.zero & size;
     final isSavings = accountType.toUpperCase().contains('SAVING');
     final isLoan = accountType.toUpperCase().contains('LOAN');
+    final isPinkishBeige = isLastCard || cardIndex >= 2 || isLoan || accountType.toUpperCase().contains('STRESS');
 
-    // 1. Signature Multi-stop Gradient Fall
+    // 1. Distinct Multi-stop Gradient Fall with Lower Half Gradient Black
     final List<Color> gradientColors;
-    if (isLoan) {
-      // Rose Gold Platinum
+    final List<double> stops;
+    if (isPinkishBeige) {
+      // Last Card: Elegant Pinkish Beige (Champagne Nude / Desert Rose) into gradient black
       gradientColors = const [
-        Color(0xFFFDE2E4),
-        Color(0xFFE2829F),
-        Color(0xFFB83262),
-        Color(0xFF8A2754),
-        Color(0xFF551633),
-        Color(0xFF2B0E1D),
-        Color(0xFF10050B),
+        Color(0xFFD8ABA0), // Warm Pinkish Beige / Champagne Nude
+        Color(0xFFBA8677), // Desert Rose Taupe
+        Color(0xFF261414), // Deep Warm Espresso Shadow
+        Color(0xFF09090B), // Gradient Black
       ];
+      stops = const [0.0, 0.38, 0.72, 1.0];
     } else if (isSavings) {
-      // Midnight Obsidian Plum Vault
+      // Card 2 (Savings Account): Soft Blush / Pastel Rose on top into gradient black
       gradientColors = const [
-        Color(0xFFFCE7F3),
-        Color(0xFFBE185D),
-        Color(0xFF6B1D48),
-        Color(0xFF3B142B),
-        Color(0xFF221122),
-        Color(0xFF121622),
-        Color(0xFF090B12),
+        Color(0xFFFDA4AF),
+        Color(0xFFFB7185),
+        Color(0xFF221118),
+        Color(0xFF09090B),
       ];
+      stops = const [0.0, 0.38, 0.72, 1.0];
     } else {
-      // Everyday Velvet Wine (Signature PayPink)
+      // Card 1 (Checking Account - Default): Signature PayPink Vibrant Rose on top into gradient black
       gradientColors = const [
-        Color(0xFFFDE8F1),
         Color(0xFFE11D48),
-        Color(0xFFBE185D),
-        Color(0xFF8A2754),
-        Color(0xFF651C3E),
-        Color(0xFF47142C),
-        Color(0xFF180611),
+        Color(0xFFDB2777),
+        Color(0xFF220E18),
+        Color(0xFF09090B),
       ];
+      stops = const [0.0, 0.38, 0.72, 1.0];
     }
-
-    const stops = [0.0, 0.07, 0.18, 0.32, 0.48, 0.70, 1.0];
 
     canvas.drawRect(
       rect,
@@ -299,7 +313,10 @@ class _PayPinkCardFacePainter extends CustomPainter {
         ),
     );
 
-    // 2. Rose bloom off the top-left corner
+    // 2. Rose/Beige bloom off the top-left corner
+    final bloomColor = isPinkishBeige
+        ? const Color(0xFFFDEEE9)
+        : (isSavings ? const Color(0xFFFDE2E4) : const Color(0xFFF7D6E3));
     canvas.drawRect(
       rect,
       Paint()
@@ -308,7 +325,7 @@ class _PayPinkCardFacePainter extends CustomPainter {
           size.width * 1.1,
           [
             Colors.white.withValues(alpha: 0.45),
-            const Color(0xFFF7D6E3).withValues(alpha: 0.15),
+            bloomColor.withValues(alpha: 0.15),
             Colors.transparent,
           ],
           const [0.0, 0.45, 1.0],
@@ -316,32 +333,40 @@ class _PayPinkCardFacePainter extends CustomPainter {
     );
 
     // 3. Ambient warm glow entering from upper-right
+    final ambientGlow1 = isPinkishBeige
+        ? const Color(0xFFD8ABA0).withValues(alpha: 0.35)
+        : const Color(0xFFBE185D).withValues(alpha: 0.35);
+    final ambientGlow2 = isPinkishBeige
+        ? const Color(0xFF5A3833).withValues(alpha: 0.12)
+        : const Color(0xFF651C3E).withValues(alpha: 0.12);
     canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height * 0.55),
+      Rect.fromLTWH(0, 0, size.width, size.height * 0.50),
       Paint()
         ..shader = ui.Gradient.radial(
           Offset(size.width * 1.05, size.height * 0.15),
           size.width * 0.85,
           [
-            const Color(0xFFBE185D).withValues(alpha: 0.40),
-            const Color(0xFF651C3E).withValues(alpha: 0.15),
+            ambientGlow1,
+            ambientGlow2,
             Colors.transparent,
           ],
           const [0.0, 0.55, 1.0],
         ),
     );
 
-    // 4. Bottom deep vignette to ground typography
+    // 4. Lower-half gradient black blend to ensure solid, sleek obsidian base
     canvas.drawRect(
       rect,
       Paint()
         ..shader = ui.Gradient.linear(
-          rect.center,
+          Offset(0, size.height * 0.42),
           rect.bottomCenter,
           [
             Colors.transparent,
-            Colors.black.withValues(alpha: 0.65),
+            const Color(0xFF141416).withValues(alpha: 0.82),
+            const Color(0xFF070709),
           ],
+          const [0.0, 0.55, 1.0],
         ),
     );
 
@@ -375,7 +400,9 @@ class _PayPinkCardFacePainter extends CustomPainter {
   bool shouldRepaint(covariant _PayPinkCardFacePainter oldDelegate) =>
       oldDelegate.sheen != sheen ||
       oldDelegate.isFrozen != isFrozen ||
-      oldDelegate.accountType != accountType;
+      oldDelegate.accountType != accountType ||
+      oldDelegate.cardIndex != cardIndex ||
+      oldDelegate.isLastCard != isLastCard;
 }
 
 /// Metallic SIM chip with golden micro-traces
@@ -475,91 +502,7 @@ class _ContactlessIcon extends StatelessWidget {
   }
 }
 
-/// Network Scheme Mark (Mastercard interlocking circles / Visa plate)
-class _NetworkSchemeMark extends StatelessWidget {
-  final CardScheme scheme;
-  final double width;
 
-  const _NetworkSchemeMark({
-    required this.scheme,
-    required this.width,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final height = width / 1.55;
-    if (scheme == CardScheme.visa) {
-      return Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(width * 0.14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 3,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: FittedBox(
-          fit: BoxFit.contain,
-          child: Text(
-            'VISA',
-            style: PayPinkTheme.display(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              fontStyle: FontStyle.italic,
-              color: const Color(0xFF1A1F71),
-              letterSpacing: 0.8,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Mastercard overlapping circles
-    final r = height / 2;
-    return SizedBox(
-      width: width,
-      height: height,
-      child: CustomPaint(
-        painter: _MastercardPainter(radius: r),
-      ),
-    );
-  }
-}
-
-
-
-class _MastercardPainter extends CustomPainter {
-  final double radius;
-  const _MastercardPainter({required this.radius});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = radius;
-    final leftCircle = Rect.fromCircle(center: Offset(r, r), radius: r);
-    final rightCircle = Rect.fromCircle(center: Offset(size.width - r, r), radius: r);
-
-    // Left Red
-    canvas.drawOval(leftCircle, Paint()..color = const Color(0xFFEB001B));
-    // Right Yellow
-    canvas.drawOval(rightCircle, Paint()..color = const Color(0xFFF79E1B));
-    // Overlapping Center Orange
-    final intersection = Path.combine(
-      PathOperation.intersect,
-      Path()..addOval(leftCircle),
-      Path()..addOval(rightCircle),
-    );
-    canvas.drawPath(intersection, Paint()..color = const Color(0xFFFF5F00));
-  }
-
-  @override
-  bool shouldRepaint(covariant _MastercardPainter oldDelegate) => false;
-}
 
 /// Dynamic 3D Card Carousel with real physical card depth, 3D turn tilt,
 /// specular sheen, and synchronized hero card details below.
@@ -730,6 +673,7 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
                 padEnds: true,
                 itemBuilder: (context, index) {
                   final acct = accounts[index];
+                  final isLast = index == accounts.length - 1;
                   final cardModel = PayPinkCardModel(
                     account: acct,
                     cardHolder: widget.cardHolder.isNotEmpty ? widget.cardHolder : 'PayPink Client',
@@ -737,6 +681,8 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
                     expiry: '10/29',
                     scheme: index % 2 == 0 ? CardScheme.mastercard : CardScheme.visa,
                     isFrozen: _frozenAccountIds.contains(acct.accountId),
+                    cardIndex: index,
+                    isLastCard: isLast,
                   );
 
                   return Center(

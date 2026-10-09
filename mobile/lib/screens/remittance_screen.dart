@@ -1,9 +1,15 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
-import '../widgets/bottom_sheets.dart';
 import '../widgets/pin_auth_sheet.dart';
+import '../widgets/paypink_logo.dart';
+import '../services/api_config.dart';
+import '../services/secure_token_storage.dart';
 import '../services/remittance_service.dart';
 import '../services/account_service.dart';
 
@@ -32,21 +38,811 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   double _riskScore = 0.12;
   bool get isHighRisk => _riskScore > 0.85;
   String? _verifiedName;
+  String? _recipientError;
+  bool _isLookingUpRecipient = false;
+  bool _isRecipientValid = false;
+  Timer? _lookupDebounce;
 
   String _transferRail = 'InstaPay';
   String _destinationBank = 'BDO';
 
-  final List<Map<String, String>> _favorites = [
-    {'name': 'Carlos Mendoza', 'number': '001381233467', 'avatar': 'CM', 'bank': 'PayPink'},
-    {'name': 'Maria Santos', 'number': '001181233469', 'avatar': 'MS', 'bank': 'PayPink'},
-    {'name': 'Gabriel Lim', 'number': '001381239988', 'avatar': 'GL', 'bank': 'PayPink'},
-  ];
+  List<Map<String, String>> _favorites = [];
+  bool _isLoadingFavorites = false;
 
   @override
   void initState() {
     super.initState();
     _initDefaultAccounts();
     _updateCalculations();
+    _loadFavorites();
+  }
+
+  @override
+  void dispose() {
+    _lookupDebounce?.cancel();
+    _amountController.dispose();
+    _recipientController.dispose();
+    super.dispose();
+  }
+
+  String _getAvatar(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    } else if (parts.isNotEmpty && parts[0].isNotEmpty) {
+      return parts[0].substring(0, math.min(2, parts[0].length)).toUpperCase();
+    }
+    return 'PP';
+  }
+
+  Future<void> _loadFavorites() async {
+    if (!mounted) return;
+    setState(() => _isLoadingFavorites = true);
+    try {
+      final token = await SecureTokenStorage.getToken();
+      final headers = {
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      // Query GET /api/v1/accounts/favorites
+      http.Response response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 5));
+
+      // Fallback to /api/v1/accounts/recipients if /favorites returns 404/405
+      if (response.statusCode == 404 || response.statusCode == 405) {
+        response = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/accounts/recipients'),
+          headers: headers,
+        ).timeout(const Duration(seconds: 5));
+      }
+
+      if (response.statusCode == 200) {
+        final dynamic decoded = jsonDecode(response.body);
+        List<dynamic> items = [];
+        if (decoded is List) {
+          items = decoded;
+        } else if (decoded is Map && decoded['favorites'] is List) {
+          items = decoded['favorites'] as List;
+        }
+
+        final List<Map<String, String>> loaded = [];
+        for (final item in items) {
+          if (item is Map) {
+            final name = item['fullName']?.toString() ?? item['name']?.toString() ?? 'Favorite';
+            final num = item['accountNumber']?.toString() ?? item['number']?.toString() ?? '';
+            if (num.isNotEmpty) {
+              loaded.add({
+                'name': name,
+                'number': num,
+                'avatar': _getAvatar(name),
+                'bank': 'PayPink',
+              });
+            }
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _favorites = loaded;
+            _isLoadingFavorites = false;
+          });
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('[RemittanceScreen] Error loading favorites: $e');
+    }
+
+    if (mounted) {
+      setState(() => _isLoadingFavorites = false);
+    }
+  }
+
+  Future<Map<String, dynamic>?> _lookupPayPinkAccount(String rawNumber) async {
+    final clean = rawNumber.replaceAll(RegExp(r'[\s-]'), '');
+    if (!RegExp(r'^\d{12}$').hasMatch(clean)) {
+      return null;
+    }
+
+    try {
+      final token = await SecureTokenStorage.getToken();
+      final headers = {
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/accounts/recipients/lookup?accountNumber=$clean'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+      }
+    } catch (e) {
+      debugPrint('[RemittanceScreen] Recipient lookup error: $e');
+    }
+    return null;
+  }
+
+  void _debounceServerLookup(String cleanNumber) {
+    _lookupDebounce?.cancel();
+    _lookupDebounce = Timer(const Duration(milliseconds: 350), () {
+      _performServerLookup(cleanNumber);
+    });
+  }
+
+  Future<bool> _performServerLookup(String cleanNumber) async {
+    if (!mounted) return false;
+    setState(() => _isLookingUpRecipient = true);
+
+    final recipient = await _lookupPayPinkAccount(cleanNumber);
+    if (!mounted) return false;
+
+    setState(() {
+      _isLookingUpRecipient = false;
+      if (recipient != null) {
+        _verifiedName = recipient['fullName']?.toString() ?? 'Verified PayPink Recipient';
+        _recipientError = null;
+        _isRecipientValid = true;
+      } else {
+        _verifiedName = null;
+        _recipientError = 'PayPink account not found. Please verify the account number.';
+        _isRecipientValid = false;
+      }
+    });
+
+    return recipient != null;
+  }
+
+  Future<bool> _saveFavorite(String rawNumber) async {
+    final clean = rawNumber.replaceAll(RegExp(r'[\s-]'), '');
+    // 1. Client-Side Format Validation: exactly 12 numeric digits
+    if (!RegExp(r'^\d{12}$').hasMatch(clean)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text('Invalid account number. PayPink account numbers must be 12 digits.'),
+        ),
+      );
+      return false;
+    }
+
+    // 2. Server-side lookup verification
+    final recipientData = await _lookupPayPinkAccount(clean);
+    if (!mounted) return false;
+    if (recipientData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text('PayPink account not found. Please verify the account number.'),
+        ),
+      );
+      return false;
+    }
+
+    final fullName = recipientData['fullName']?.toString() ?? 'PayPink Recipient';
+
+    // 3. POST /api/v1/accounts/favorites
+    try {
+      final token = await SecureTokenStorage.getToken();
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
+        headers: headers,
+        body: jsonEncode({'accountNumber': clean}),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        setState(() {
+          _favorites.removeWhere((f) => f['number'] == clean);
+          _favorites.insert(0, {
+            'name': fullName,
+            'number': clean,
+            'avatar': _getAvatar(fullName),
+            'bank': 'PayPink',
+          });
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: PayPinkTheme.green,
+              content: Text('Saved $fullName to Favorites'),
+            ),
+          );
+        }
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[RemittanceScreen] Error saving favorite: $e');
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text('Failed to save favorite. Please try again.'),
+        ),
+      );
+    }
+    return false;
+  }
+
+  Future<void> _deleteFavorite(String rawNumber, int index) async {
+    final clean = rawNumber.replaceAll(RegExp(r'[\s-]'), '');
+    try {
+      final token = await SecureTokenStorage.getToken();
+      final headers = {
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      };
+
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites/$clean'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        setState(() {
+          if (index < _favorites.length && _favorites[index]['number'] == clean) {
+            _favorites.removeAt(index);
+          } else {
+            _favorites.removeWhere((f) => f['number'] == clean);
+          }
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: PayPinkTheme.wine,
+              content: Text('Favorite removed'),
+            ),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('[RemittanceScreen] Error removing favorite: $e');
+    }
+
+    setState(() {
+      if (index < _favorites.length) {
+        _favorites.removeAt(index);
+      }
+    });
+  }
+
+  void _showFavoritesManagerModal(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final sheetBg = isDark ? PayPinkTheme.darkPaper : Colors.white;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
+            padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
+            decoration: BoxDecoration(
+              color: sheetBg,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 24,
+                  offset: Offset(0, -4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? textLine : Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Saved Favorites',
+                      style: PayPinkTheme.display(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: textInk,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 20, color: textMuted),
+                      onPressed: () => Navigator.pop(ctx),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Manage your saved PayPink transfer favorites for 1-tap remittances.',
+                  style: PayPinkTheme.body(fontSize: 11.5, color: textMuted),
+                ),
+                const SizedBox(height: 14),
+
+                // "+ Add New Favorite" Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      _showAddFavoriteModal(context, onAdded: () {
+                        setSheetState(() {});
+                      });
+                    },
+                    icon: const Icon(Icons.person_add_rounded, size: 17),
+                    label: const Text('Add New Favorite'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: PayPinkTheme.wine,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      textStyle: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Favorites List
+                Expanded(
+                  child: _favorites.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.star_outline_rounded, size: 40, color: textMuted.withValues(alpha: 0.5)),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'No saved favorites yet',
+                                  style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w700, color: textInk),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Tap "+ Add New Favorite" above to save frequent payees.',
+                                  style: PayPinkTheme.body(fontSize: 11, color: textMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _favorites.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, idx) {
+                            final fav = _favorites[idx];
+                            final name = fav['name'] ?? 'Recipient';
+                            final number = fav['number'] ?? '';
+                            final avatar = fav['avatar'] ?? _getAvatar(name);
+                            final bank = fav['bank'] ?? 'PayPink';
+
+                            return InkWell(
+                              onTap: () {
+                                _recipientController.text = number;
+                                _updateCalculations();
+                                Navigator.pop(ctx);
+                              },
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isDark ? PayPinkTheme.darkCard : PayPinkTheme.pinkSubtle.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: textLine),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.3) : PayPinkTheme.pinkSubtle,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: isDark ? PayPinkTheme.wine : PayPinkTheme.pink),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          avatar,
+                                          style: PayPinkTheme.display(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            name,
+                                            style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '$bank · $number',
+                                            style: PayPinkTheme.mono(fontSize: 10.5, color: textMuted),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 19, color: PayPinkTheme.red),
+                                      tooltip: 'Remove Favorite',
+                                      onPressed: () async {
+                                        await _deleteFavorite(number, idx);
+                                        setSheetState(() {});
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showAddFavoriteModal(BuildContext context, {VoidCallback? onAdded}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final dialogBg = isDark ? PayPinkTheme.darkPaper : Colors.white;
+    final cardBg = isDark ? PayPinkTheme.darkCard : PayPinkTheme.paper;
+
+    final nameController = TextEditingController();
+    final numberController = TextEditingController();
+    String selectedBank = 'PayPink';
+    String? modalError;
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: !isSaving,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            backgroundColor: dialogBg,
+            elevation: 20,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with Icon
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.3) : PayPinkTheme.pinkSubtle,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.star_rounded, size: 18, color: PayPinkTheme.wine),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Add New Favorite',
+                              style: PayPinkTheme.display(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: textInk,
+                              ),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close, size: 20, color: textMuted),
+                          onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Save an account for instant 1-tap remittances.',
+                      style: PayPinkTheme.body(fontSize: 11, color: textMuted),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Prominent Inline Error Banner inside window
+                    if (modalError != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: PayPinkTheme.red.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: PayPinkTheme.red.withValues(alpha: 0.45)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: PayPinkTheme.red, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                modalError!,
+                                style: PayPinkTheme.body(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: PayPinkTheme.red,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    // Field 1: Recipient Full Name
+                    Text('Recipient Full Name', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameController,
+                      style: PayPinkTheme.body(fontSize: 13, color: textInk),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. Carlos Mendoza (optional)',
+                        hintStyle: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+                        filled: true,
+                        fillColor: cardBg,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: textLine)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: textLine)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: PayPinkTheme.wine)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Field 2: 12-Digit PayPink Account Number
+                    Text('12-Digit PayPink Account Number', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: numberController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: (_) {
+                        if (modalError != null) {
+                          setModalState(() => modalError = null);
+                        }
+                      },
+                      style: PayPinkTheme.body(fontSize: 13, color: textInk),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. 001381233467',
+                        hintStyle: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+                        filled: true,
+                        fillColor: cardBg,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: textLine)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: modalError != null ? PayPinkTheme.red : textLine),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: modalError != null ? PayPinkTheme.red : PayPinkTheme.wine),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Field 3: Destination Bank
+                    Text('Destination Bank', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: textLine),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: selectedBank,
+                          isExpanded: true,
+                          dropdownColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
+                          style: PayPinkTheme.body(fontSize: 13, color: textInk),
+                          items: const [
+                            DropdownMenuItem(value: 'PayPink', child: Text('PayPink Digital Bank')),
+                            DropdownMenuItem(value: 'BDO', child: Text('BDO Unibank')),
+                            DropdownMenuItem(value: 'BPI', child: Text('Bank of the Philippine Islands (BPI)')),
+                            DropdownMenuItem(value: 'UnionBank', child: Text('UnionBank of the Philippines')),
+                            DropdownMenuItem(value: 'GCash', child: Text('GCash')),
+                            DropdownMenuItem(value: 'Maya', child: Text('Maya')),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setModalState(() => selectedBank = val);
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+
+                    // Action Buttons (Cancel / Save Favorite)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: textLine),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(
+                              'Cancel',
+                              style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w600, color: textInk),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    final navigator = Navigator.of(dialogCtx);
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    final rawNumber = numberController.text.trim();
+                                    final clean = rawNumber.replaceAll(RegExp(r'[\s-]'), '');
+
+                                    // 1. Client-Side Format Validation
+                                    if (!RegExp(r'^\d{12}$').hasMatch(clean)) {
+                                      setModalState(() {
+                                        modalError = 'Invalid account number. PayPink account numbers must be 12 digits.';
+                                      });
+                                      return;
+                                    }
+
+                                    setModalState(() {
+                                      isSaving = true;
+                                      modalError = null;
+                                    });
+
+                                    // 2. Server-Side Lookup Verification
+                                    final recipientData = await _lookupPayPinkAccount(clean);
+                                    if (recipientData == null) {
+                                      setModalState(() {
+                                        isSaving = false;
+                                        modalError = 'PayPink account not found. Please verify the account number.';
+                                      });
+                                      return;
+                                    }
+
+                                    final enteredName = nameController.text.trim();
+                                    final resolvedName = enteredName.isNotEmpty
+                                        ? enteredName
+                                        : (recipientData['fullName']?.toString() ?? 'PayPink Recipient');
+
+                                    // 3. POST /api/v1/accounts/favorites
+                                    try {
+                                      final token = await SecureTokenStorage.getToken();
+                                      final headers = {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json',
+                                        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+                                      };
+
+                                      final response = await http.post(
+                                        Uri.parse('${ApiConfig.baseUrl}/accounts/favorites'),
+                                        headers: headers,
+                                        body: jsonEncode({'accountNumber': clean}),
+                                      ).timeout(const Duration(seconds: 5));
+
+                                      if (response.statusCode == 200 || response.statusCode == 201) {
+                                        if (mounted) {
+                                          setState(() {
+                                            _favorites.removeWhere((f) => f['number'] == clean);
+                                            _favorites.insert(0, {
+                                              'name': resolvedName,
+                                              'number': clean,
+                                              'avatar': _getAvatar(resolvedName),
+                                              'bank': selectedBank,
+                                            });
+                                          });
+                                        }
+                                        onAdded?.call();
+                                        navigator.pop();
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            backgroundColor: PayPinkTheme.green,
+                                            content: Text('Saved $resolvedName to Favorites'),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                    } catch (e) {
+                                      debugPrint('[RemittanceScreen] Modal save error: $e');
+                                    }
+
+                                    setModalState(() {
+                                      isSaving = false;
+                                      modalError = 'Failed to save favorite. Please try again.';
+                                    });
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: PayPinkTheme.wine,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: isSaving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : Text(
+                                    'Save Favorite',
+                                    style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _initDefaultAccounts() {
@@ -80,17 +876,22 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     setState(() {
       _riskScore = RemittanceService.evaluateRisk(amt);
 
-      final cleanRec = _recipientController.text.replaceAll(' ', '');
-      if (cleanRec.length >= 8) {
-        if (cleanRec.endsWith('8')) {
-          _verifiedName = 'Carlos Mendoza';
-        } else if (cleanRec.endsWith('2')) {
-          _verifiedName = 'Maria Santos';
+      if (_selectedModeIndex == 1) {
+        final cleanRec = _recipientController.text.replaceAll(RegExp(r'[\s-]'), '');
+        if (cleanRec.isEmpty) {
+          _recipientError = null;
+          _verifiedName = null;
+          _isRecipientValid = false;
+        } else if (!RegExp(r'^\d{12}$').hasMatch(cleanRec)) {
+          _recipientError = 'Invalid account number. PayPink account numbers must be 12 digits.';
+          _verifiedName = null;
+          _isRecipientValid = false;
         } else {
-          _verifiedName = 'Verified PayPink Recipient';
+          _recipientError = null;
+          _debounceServerLookup(cleanRec);
         }
       } else {
-        _verifiedName = null;
+        _recipientError = null;
       }
     });
   }
@@ -420,8 +1221,13 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }
 
   void _selectFavorite(int index) {
+    if (index >= _favorites.length) return;
     final fav = _favorites[index];
-    _recipientController.text = fav['number']!;
+    final num = fav['number'] ?? '';
+    _recipientController.text = num;
+    _verifiedName = fav['name'];
+    _recipientError = null;
+    _isRecipientValid = true;
     _updateCalculations();
   }
 
@@ -431,7 +1237,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     _updateCalculations();
   }
 
-  void _handleReviewTransfer() {
+  void _handleReviewTransfer() async {
     final amt = double.tryParse(_amountController.text);
     if (amt == null || amt <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -475,6 +1281,43 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       return;
     }
 
+    // Strict validation for PayPink P2P transfers
+    if (_selectedModeIndex == 1) {
+      final cleanRec = _recipientController.text.replaceAll(RegExp(r'[\s-]'), '');
+      if (!RegExp(r'^\d{12}$').hasMatch(cleanRec)) {
+        setState(() {
+          _recipientError = 'Invalid account number. PayPink account numbers must be 12 digits.';
+          _isRecipientValid = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: PayPinkTheme.red,
+            content: Text('Invalid account number. PayPink account numbers must be 12 digits.'),
+          ),
+        );
+        return;
+      }
+
+      if (!_isRecipientValid || _verifiedName == null) {
+        final verified = await _performServerLookup(cleanRec);
+        if (!verified) {
+          setState(() {
+            _recipientError = 'PayPink account not found. Please verify the account number.';
+            _isRecipientValid = false;
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                backgroundColor: PayPinkTheme.red,
+                content: Text('PayPink account not found. Please verify the account number.'),
+              ),
+            );
+          }
+          return;
+        }
+      }
+    }
+
     final srcAcc = _getAccount(_sourceAccount);
     final srcDisplayName = srcAcc?.displayName ?? 'Checking Account';
     final srcLast4 = _sourceAccount.length >= 4 ? _sourceAccount.substring(_sourceAccount.length - 4) : _sourceAccount;
@@ -497,7 +1340,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       toAccountName = '$_destinationBank Account (•••• $recLast4)';
     }
 
-    _showConfirmationBottomSheet(amt, fromAccountName, toAccountName);
+    if (mounted) {
+      _showConfirmationBottomSheet(amt, fromAccountName, toAccountName);
+    }
   }
 
   void _showConfirmationBottomSheet(double amt, String fromAcc, String toAcc) {
@@ -639,7 +1484,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     if (result.success) {
       final cleanRef = result.referenceId != null && result.referenceId!.isNotEmpty
           ? result.referenceId!
-          : 'TXN-2026-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+          : 'TXN-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
       _showScreenshotReceiptDialog(amt, cleanRef, fromAcc, toAcc);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -712,17 +1557,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        width: 26,
-                        height: 26,
-                        decoration: const BoxDecoration(
-                          gradient: PayPinkTheme.cardPinkGradient,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Icon(Icons.flash_on_rounded, size: 15, color: Colors.white),
-                        ),
-                      ),
+                      PayPinkLogo.markOnly(size: 26, isDark: isDark),
                       const SizedBox(width: 8),
                       Text(
                         'PAYPINK DIGITAL BANK',
@@ -1139,16 +1974,7 @@ Thank you for banking with PayPink!
                     children: [
                       Text('Favorites', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: textInk)),
                       GestureDetector(
-                        onTap: () => PayPinkBottomSheets.showBeneficiaryManager(
-                          context,
-                          beneficiaries: _favorites,
-                          onAddBeneficiary: (b) => setState(() => _favorites.add(b)),
-                          onRemoveBeneficiary: (idx) => setState(() => _favorites.removeAt(idx)),
-                          onSelect: (name, number) {
-                            _recipientController.text = number;
-                            _updateCalculations();
-                          },
-                        ),
+                        onTap: () => _showFavoritesManagerModal(context),
                         child: Text(
                           'Favorites →',
                           style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
@@ -1159,43 +1985,66 @@ Thank you for banking with PayPink!
                   const SizedBox(height: 10),
 
                   // Quick Favorites Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: List.generate(_favorites.length, (idx) {
-                      final fav = _favorites[idx];
-                      return GestureDetector(
-                        onTap: () => _selectFavorite(idx),
-                        child: Column(
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: isDark ? PayPinkTheme.wine : PayPinkTheme.pink),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  fav['avatar']!,
-                                  style: PayPinkTheme.display(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                  if (_isLoadingFavorites) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: PayPinkTheme.wine),
+                        ),
+                      ),
+                    ),
+                  ] else if (_favorites.isEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Center(
+                        child: Text(
+                          'No saved favorites yet.',
+                          style: PayPinkTheme.body(fontSize: 11, color: textMuted),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(_favorites.length, (idx) {
+                        final fav = _favorites[idx];
+                        return GestureDetector(
+                          onTap: () => _selectFavorite(idx),
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: isDark ? PayPinkTheme.wine : PayPinkTheme.pink),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    fav['avatar'] ?? 'PP',
+                                    style: PayPinkTheme.display(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              fav['name']!.split(' ')[0],
-                              style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w600, color: textInk),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ),
+                              const SizedBox(height: 4),
+                              Text(
+                                (fav['name'] ?? 'Recipient').split(' ')[0],
+                                style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w600, color: textInk),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   if (_selectedModeIndex == 2) ...[
                     Text('Destination Institution', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
@@ -1286,29 +2135,59 @@ Thank you for banking with PayPink!
                   const SizedBox(height: 6),
                   TextField(
                     controller: _recipientController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (_) => _updateCalculations(),
                     style: PayPinkTheme.body(fontSize: 13, color: textInk),
                     decoration: InputDecoration(
-                      hintText: 'e.g. 001 1 2234567 8 (Carlos Mendoza)',
+                      hintText: 'e.g. 001381233467 (12 digits)',
                       hintStyle: PayPinkTheme.body(fontSize: 13, color: textMuted),
                       filled: true,
                       fillColor: cardBg,
+                      errorText: (_selectedModeIndex == 1 && _recipientController.text.isNotEmpty) ? _recipientError : null,
+                      errorStyle: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.red),
+                      errorMaxLines: 2,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: textLine),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: textLine),
+                        borderSide: BorderSide(
+                          color: (_selectedModeIndex == 1 && _recipientError != null && _recipientController.text.isNotEmpty)
+                              ? PayPinkTheme.red
+                              : textLine,
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: PayPinkTheme.wine),
+                        borderSide: BorderSide(
+                          color: (_selectedModeIndex == 1 && _recipientError != null && _recipientController.text.isNotEmpty)
+                              ? PayPinkTheme.red
+                              : PayPinkTheme.wine,
+                        ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
                   ),
-                  if (_verifiedName != null) ...[
+                  if (_isLookingUpRecipient) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: PayPinkTheme.wine),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Verifying PayPink account...',
+                          style: PayPinkTheme.body(fontSize: 11, color: textMuted),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (_selectedModeIndex == 1 && _verifiedName != null && _recipientError == null) ...[
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1330,7 +2209,34 @@ Thank you for banking with PayPink!
                               ),
                             ],
                           ),
-                          Text('Match', style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.green)),
+                          Row(
+                            children: [
+                              Text('Match', style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.green)),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => _saveFavorite(_recipientController.text),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? PayPinkTheme.wine.withValues(alpha: 0.3) : PayPinkTheme.pinkSubtle,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: PayPinkTheme.wine),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.star_rounded, size: 12, color: PayPinkTheme.wine),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        'Favorite',
+                                        style: PayPinkTheme.mono(fontSize: 9, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
