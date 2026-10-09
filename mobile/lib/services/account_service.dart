@@ -357,7 +357,7 @@ class AccountService {
 
     UserProfile? profile;
     try {
-      // Same profile the web app reads; /auth/banking/me returns the identical shape.
+      // 1. Primary: Same profile the web app reads (/accounts/me and /auth/banking/me return identical shape)
       for (final path in const ['/accounts/me', '/auth/banking/me']) {
         final resp = await _api.get(path, headers: cacheHeaders, queryParams: queryParams);
         if (resp.statusCode == 200) {
@@ -365,6 +365,55 @@ class AccountService {
           if (data is Map<String, dynamic>) {
             profile = UserProfile.fromJson(data);
             break;
+          }
+        }
+      }
+
+      // 2. Query customer-specific endpoint if available: GET /api/v1/accounts/customer/{customerId}
+      final customerId = await SecureTokenStorage.getCustomerId();
+      if (profile == null && customerId != null) {
+        final custResp = await _api.get(
+          '/accounts/customer/$customerId',
+          headers: cacheHeaders,
+          queryParams: queryParams,
+        );
+        if (custResp.statusCode == 200) {
+          final data = jsonDecode(custResp.body);
+          if (data is Map<String, dynamic> && data['accounts'] is List) {
+            profile = UserProfile.fromJson(data);
+          }
+        }
+      }
+
+      // 3. Fallback: GET /api/v1/accounts and filter STRICTLY by customerId
+      if (profile == null) {
+        final response = await _api.get(
+          ApiConfig.accountsPath,
+          headers: cacheHeaders,
+          queryParams: queryParams,
+        );
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          if (decoded is List) {
+            final filtered = decoded.where((a) {
+              if (a is! Map<String, dynamic>) return false;
+              if (customerId != null) {
+                final aCustId = a['customerId'];
+                return aCustId != null && aCustId.toString() == customerId.toString();
+              }
+              return true;
+            }).toList();
+
+            final accounts = filtered.map((a) => BankAccount.fromJson(a as Map<String, dynamic>)).toList();
+            if (accounts.isNotEmpty) {
+              profile = UserProfile(
+                firstName: savedName.isNotEmpty ? savedName.split(' ').first : 'User',
+                fullName: savedName.isNotEmpty ? savedName : 'User',
+                username: savedUser,
+                email: '$savedUser@paypink.ph',
+                accounts: accounts,
+              );
+            }
           }
         }
       }
@@ -642,8 +691,10 @@ class AccountService {
       queryParams['accountId'] = accountId;
     }
 
+    List<TransactionItem> results = [];
+
+    // 1. Primary endpoint: ApiConfig.transactionsPath (/transactions/activity CQRS feed)
     try {
-      // 1. Primary endpoint: GET /api/v1/transactions
       final response = await _api.get(
         ApiConfig.transactionsPath,
         queryParams: queryParams.isNotEmpty ? queryParams : null,
@@ -651,33 +702,79 @@ class AccountService {
 
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          return _mapTransactions(decoded);
-        } else if (decoded is Map<String, dynamic>) {
-          if (decoded.containsKey('content') && decoded['content'] is List) {
-            return _mapTransactions(decoded['content'] as List);
-          }
-          return _mapTransactions([decoded]);
-        }
-      }
-
-      // 2. Fallback to /auth/banking/transactions
-      final bankResp = await _api.get('/auth/banking/transactions');
-      if (bankResp.statusCode == 200) {
-        final dynamic decoded = jsonDecode(bankResp.body);
-        if (decoded is List) {
-          return _mapTransactions(decoded);
-        } else if (decoded is Map<String, dynamic>) {
-          if (decoded.containsKey('content') && decoded['content'] is List) {
-            return _mapTransactions(decoded['content'] as List);
-          }
-          return _mapTransactions([decoded]);
-        }
+        results = _extractAndMapTransactions(decoded);
       }
     } catch (e) {
-      debugPrint('[AccountService] fetchTransactions error: $e');
+      debugPrint('[AccountService] /transactions/activity error: $e');
     }
 
+    // 2. Fallback to /transactions (API Gateway route)
+    if (results.isEmpty) {
+      try {
+        final fallbackResp = await _api.get(
+          '/transactions',
+          queryParams: queryParams.isNotEmpty ? queryParams : null,
+        );
+        if (fallbackResp.statusCode == 200) {
+          final dynamic decoded = jsonDecode(fallbackResp.body);
+          results = _extractAndMapTransactions(decoded);
+        }
+      } catch (e) {
+        debugPrint('[AccountService] /transactions fallback error: $e');
+      }
+    }
+
+    // 3. Fallback to /auth/banking/transactions
+    if (results.isEmpty) {
+      try {
+        final bankResp = await _api.get(
+          '/auth/banking/transactions',
+          queryParams: queryParams.isNotEmpty ? queryParams : null,
+        );
+        if (bankResp.statusCode == 200) {
+          final dynamic decoded = jsonDecode(bankResp.body);
+          results = _extractAndMapTransactions(decoded);
+        }
+      } catch (e) {
+        debugPrint('[AccountService] /auth/banking/transactions fallback error: $e');
+      }
+    }
+
+    // Apply local filtering for filterType and accountId if backend returned unfiltered data
+    if (results.isNotEmpty) {
+      if (filterType != null && filterType.isNotEmpty && filterType.toUpperCase() != 'ALL') {
+        final ft = filterType.toUpperCase();
+        results = results.where((tx) {
+          if (ft == 'CREDIT' || ft == 'IN') return tx.isCredit;
+          if (ft == 'DEBIT' || ft == 'OUT') return !tx.isCredit;
+          if (ft == 'REVERSAL') return tx.status.toUpperCase() == 'REVERSED' || tx.status.toLowerCase().contains('refund');
+          if (ft == 'CHECKING') return tx.isCheckingRelated;
+          if (ft == 'SAVINGS') return tx.isSavingsRelated;
+          if (ft == 'PAYPINK') return tx.isPayPinkRelated;
+          if (ft == 'LOAN') return tx.isLoanRelated;
+          return tx.transactionType.toUpperCase() == ft || tx.displayType.toUpperCase().contains(ft);
+        }).toList();
+      }
+      if (accountId != null && accountId.isNotEmpty) {
+        results = results.where((tx) {
+          return (tx.sourceAccount != null && tx.sourceAccount == accountId) ||
+                 tx.account.contains(accountId);
+        }).toList();
+      }
+    }
+
+    return results;
+  }
+
+  static List<TransactionItem> _extractAndMapTransactions(dynamic decoded) {
+    if (decoded is List) {
+      return _mapTransactions(decoded);
+    } else if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey('content') && decoded['content'] is List) {
+        return _mapTransactions(decoded['content'] as List);
+      }
+      return _mapTransactions([decoded]);
+    }
     return [];
   }
 
@@ -690,7 +787,7 @@ class AccountService {
       final rawType = item['transactionType']?.toString().toUpperCase() ?? item['type']?.toString().toUpperCase() ?? '';
       final isCredit = op == 'CREDIT' || rawType == 'CREDIT' || rawType.contains('IN') || rawType == 'DEPOSIT' || rawType == 'WELCOME_GIFT' || rawType == 'LOAN_DISBURSEMENT';
 
-      final ref = item['reference'] ?? item['referenceNo'] ?? item['id'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+      final ref = item['reference'] ?? item['referenceNo'] ?? item['id'] ?? item['transactionId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
       final status = item['status']?.toString().toUpperCase() ?? 'COMPLETED';
       final acct = item['accountNumber']?.toString() ?? '';
       final last4 = acct.length >= 4 ? acct.substring(acct.length - 4) : acct;
@@ -705,7 +802,9 @@ class AccountService {
       }
 
       DateTime? parsedTime;
-      if (item['date'] != null) {
+      if (item['transactionDate'] != null) {
+        parsedTime = DateTime.tryParse(item['transactionDate'].toString());
+      } else if (item['date'] != null) {
         parsedTime = DateTime.tryParse(item['date'].toString());
       } else if (item['createdAt'] != null) {
         parsedTime = DateTime.tryParse(item['createdAt'].toString());
@@ -726,7 +825,7 @@ class AccountService {
         date = item['date'].toString().split('T').first;
       }
 
-      final cpName = item['counterpartyName']?.toString();
+      final cpName = item['counterpartyName']?.toString() ?? item['recipientName']?.toString();
       final cpAcct = item['counterpartyAccountNumber']?.toString() ?? item['destinationAccount']?.toString() ?? item['recipient']?.toString();
 
       String title = item['title']?.toString() ?? '';
@@ -767,16 +866,17 @@ class AccountService {
         counterparty: counterpartyDisplay,
         status: status.contains('FAIL') ? 'FAILED' : (status.contains('PEND') ? 'PENDING' : (status.contains('REV') ? 'REVERSED' : 'Completed')),
         timestamp: parsedTime,
-        sourceAccount: item['sourceAccount']?.toString() ?? acct,
+        sourceAccount: item['sourceAccount']?.toString() ?? item['accountNumber']?.toString() ?? acct,
         recipientAccount: cpAcct ?? cpName,
       );
     }).toList();
   }
 
   static String _extractErrorMessage(String responseBody) {
+    final msg = ApiClient.extractErrorMessage(0, responseBody);
+    if (msg.isNotEmpty) return msg;
     try {
       final data = jsonDecode(responseBody);
-      // loan-service returns RFC 7807 problem details, whose message is in "detail".
       return (data['message'] ?? data['detail'] ?? data['error'] ?? '').toString();
     } catch (_) {
       return '';
