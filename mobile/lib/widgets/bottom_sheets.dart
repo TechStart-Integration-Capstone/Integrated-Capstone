@@ -532,62 +532,7 @@ class PayPinkBottomSheets {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // 15-Minute Reversal Banner & Action
-              if (canReverse) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: PayPinkTheme.amberBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: PayPinkTheme.amber.withValues(alpha: 0.4)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.timer_outlined, size: 16, color: PayPinkTheme.amber),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '15-Minute Reversal Active ($reversalMinutesRemaining mins left)',
-                              style: PayPinkTheme.body(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: PayPinkTheme.amber,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 40,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            onReverse?.call();
-                          },
-                          icon: const Icon(Icons.undo_rounded, size: 16),
-                          label: Text(
-                            'Reverse Transfer & Refund (Instant)',
-                            style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: PayPinkTheme.wine,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ] else if (!isCredit && !isReversed) ...[
+              if (!isCredit && !isReversed) ...[
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
