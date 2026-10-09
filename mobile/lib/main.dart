@@ -309,7 +309,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     NotificationService.saveIds(widget.currentUser, 'hidden', _hiddenNotificationIds, current);
   }
 
-  void _loadLiveDatabaseData({bool preserveLocalTransactions = true, bool bypassCache = false}) async {
+  void _loadLiveDatabaseData({bool preserveLocalTransactions = false, bool bypassCache = false}) async {
     UserProfile? profile;
     String? profileError;
     try {
@@ -373,7 +373,26 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         } else {
           // Merge live transactions preserving newly posted local items at the top
           final fetchedIds = txs.map((t) => t.id).toSet();
-          final localUnsynced = _transactions.where((t) => !fetchedIds.contains(t.id)).toList();
+          final localUnsynced = _transactions.where((t) {
+            if (fetchedIds.contains(t.id)) return false;
+            // Also check if any fetched transaction shares the same reference/id (e.g. substring or prefixed)
+            final hasIdMatch = txs.any((f) =>
+                f.id == t.id ||
+                (t.id.isNotEmpty && f.id.isNotEmpty && (f.id.contains(t.id) || t.id.contains(f.id))));
+            if (hasIdMatch) return false;
+            // Also deduplicate by fuzzy match: same amount, same debit/credit, recent timestamp (< 15 mins)
+            if (t.timestamp != null) {
+              final hasRecentMatch = txs.any((f) {
+                final amountMatches = (f.amount - t.amount).abs() < 0.001;
+                final creditMatches = f.isCredit == t.isCredit;
+                final timeMatches = f.timestamp == null ||
+                    f.timestamp!.difference(t.timestamp!).inMinutes.abs() < 15;
+                return amountMatches && creditMatches && timeMatches;
+              });
+              if (hasRecentMatch) return false;
+            }
+            return true;
+          }).toList();
           _transactions.clear();
           _transactions.addAll([...localUnsynced, ...txs]);
         }
@@ -427,6 +446,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       sourceCategory = 'PayPink Account';
     }
 
+    // Check if the transfer is between the user's OWN accounts
+    final ownAccounts = _userProfile?.accounts ?? [];
+    final ownAccountNumbers = ownAccounts.map((a) => a.accountNumber.replaceAll(RegExp(r'\D'), '')).toSet();
+    final isOwnAccountTransfer = ownAccountNumbers.contains(destClean);
+
     // 1. Immediate in-memory optimistic balance mutation (sender debited, receiver credited if owned)
     if (_userProfile != null && _userProfile!.accounts.isNotEmpty) {
       final srcClean = source.replaceAll(RegExp(r'\D'), '');
@@ -442,8 +466,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           );
         }
 
-        // Credit receiver account if it belongs to user's own accounts
-        if (acctClean == destClean || acct.accountNumber == recipient || acct.accountId.toString() == recipient || (destClean.length >= 4 && acctClean.endsWith(destClean))) {
+        // Credit receiver account ONLY if it belongs to user's own accounts
+        if (isOwnAccountTransfer && (acctClean == destClean || acct.accountNumber == recipient || acct.accountId.toString() == recipient || (destClean.length >= 4 && acctClean.endsWith(destClean)))) {
           final newBal = acct.currentBalance + amount;
           return acct.copyWith(
             currentBalance: newBal,
@@ -458,24 +482,45 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       );
     }
 
-    final cleanRefId = refId.startsWith('TXN-')
+    final cleanRefId = (refId.isNotEmpty)
         ? refId
         : 'TXN-${DateTime.now().year}-${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}';
 
-    final isToSavings = recipient.toLowerCase().contains('saving') || destClean.startsWith('0011');
-    final isToChecking = recipient.toLowerCase().contains('checking') || destClean.startsWith('0013');
-
+    // Transaction title and credit leg determination
     String txTitle;
-    if (isToSavings) {
-      txTitle = 'Transfer to Savings';
-    } else if (isToChecking) {
-      txTitle = 'Transfer to Checking';
-    } else if (recipient.toLowerCase().contains('paypink')) {
-      final cleanRecipientName = recipient.split('·').first.split('(').first.trim();
-      txTitle = 'Transfer to $cleanRecipientName';
+    TransactionItem? creditTx;
+
+    if (isOwnAccountTransfer) {
+      final isToSavings = recipient.toLowerCase().contains('saving') || destClean.startsWith('0011');
+      final isToChecking = recipient.toLowerCase().contains('checking') || destClean.startsWith('0013');
+      if (isToSavings) {
+        txTitle = 'Transfer to Savings';
+      } else if (isToChecking) {
+        txTitle = 'Transfer to Checking';
+      } else {
+        txTitle = 'Transfer to Own Account';
+      }
+
+      creditTx = TransactionItem(
+        id: '$cleanRefId-CR',
+        title: 'Transfer from $sourceCategory',
+        date: dateStr,
+        account: '${isToSavings ? 'Savings' : 'Checking'} Account •••• ${destClean.length >= 4 ? destClean.substring(destClean.length - 4) : destClean}',
+        amount: amount,
+        isCredit: true,
+        transactionType: 'TRANSFER_IN',
+        counterparty: last4.isNotEmpty ? '$sourceCategory •••• $last4' : sourceCategory,
+        status: 'Completed',
+        timestamp: now,
+        sourceAccount: source,
+        recipientAccount: recipient,
+      );
     } else {
+      // External / P2P transfer — NO incoming credit leg should be created for sender
       final cleanRecipientName = recipient.split('·').first.split('(').first.trim();
-      txTitle = 'Transfer to ${cleanRecipientName.isNotEmpty ? cleanRecipientName : recipient}';
+      txTitle = cleanRecipientName.isNotEmpty && cleanRecipientName != destClean
+          ? 'Transfer to $cleanRecipientName'
+          : (recipient.toLowerCase().contains('paypink') ? 'Transfer to PayPink Recipient' : 'Transfer to $recipient');
     }
 
     final newTx = TransactionItem(
@@ -493,24 +538,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       recipientAccount: recipient,
     );
 
-    TransactionItem? creditTx;
-    if (isToSavings) {
-      creditTx = TransactionItem(
-        id: '$cleanRefId-CR',
-        title: 'Transfer from Checking',
-        date: dateStr,
-        account: 'Savings Account •••• ${destClean.length >= 4 ? destClean.substring(destClean.length - 4) : '3469'}',
-        amount: amount,
-        isCredit: true,
-        transactionType: 'TRANSFER_IN',
-        counterparty: last4.isNotEmpty ? '$sourceCategory •••• $last4' : sourceCategory,
-        status: 'Completed',
-        timestamp: now,
-        sourceAccount: source,
-        recipientAccount: recipient,
-      );
-    }
-
     setState(() {
       _transactions.removeWhere((t) => t.id == cleanRefId || t.id == '$cleanRefId-CR');
       if (creditTx != null) {
@@ -525,7 +552,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     _triggerStatusToast('Sent ₱${amount.toStringAsFixed(2)} to $recipient', '✅');
 
     // Bypass client-side caching to retrieve fresh balances directly from Azure SQL
-    _loadLiveDatabaseData(preserveLocalTransactions: true, bypassCache: true);
+    _loadLiveDatabaseData(preserveLocalTransactions: false, bypassCache: true);
   }
 
   void _handleLoanPaymentSuccess(double amount, String fundingAccount, String loanAccount) {
@@ -579,7 +606,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     });
 
     _triggerStatusToast('Loan payment of ₱${amount.toStringAsFixed(2)} processed!', '💳');
-    _loadLiveDatabaseData(preserveLocalTransactions: true, bypassCache: true);
+    _loadLiveDatabaseData(preserveLocalTransactions: false, bypassCache: true);
   }
 
   void _markAllNotificationsRead() {

@@ -176,4 +176,82 @@ void main() {
     expect(find.text('-₱1500.00'), findsOneWidget);
     expect(find.text('PayPink'), findsOneWidget);
   });
+
+  testWidgets('TransactionsScreen deduplicates duplicate transactions with identical ID and direction', (WidgetTester tester) async {
+    final tx1 = TransactionItem(
+      id: 'TXN-DUPLICATE-1',
+      title: 'Transfer to Aly Rosales',
+      date: 'Today · 2:00 PM',
+      account: 'Everyday Checking •••• 2611',
+      amount: 250.00,
+      isCredit: false,
+      counterparty: 'Aly Rosales',
+      sourceAccount: '001373612611',
+      recipientAccount: '001142169612',
+      timestamp: DateTime.now(),
+    );
+    final tx2 = tx1.copyWith(); // duplicate item
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransactionsScreen(
+            transactions: [tx1, tx2],
+            customerName: 'Levi Viernes',
+            primaryAccountNumber: '001373612611',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify exactly ONE item is rendered, not two
+    expect(find.text('Transfer to Aly Rosales'), findsOneWidget);
+    expect(find.text('-₱250.00'), findsOneWidget);
+  });
+
+  testWidgets('TransactionsScreen drops optimistic transaction when authoritative server transaction is present', (WidgetTester tester) async {
+    final now = DateTime.now();
+    final optimisticTx = TransactionItem(
+      id: 'TX-PH-ABCD1234',
+      title: 'Transfer to Checking Account',
+      date: 'Today · 6:24 PM',
+      account: 'Savings Account •••• 2613',
+      amount: 10.00,
+      isCredit: false,
+      counterparty: 'Checking Account (•••• 2611)',
+      sourceAccount: '001173612613',
+      recipientAccount: '001373612611',
+      timestamp: now,
+    );
+    final serverTx = TransactionItem(
+      id: 'PP-20261009-000000000044',
+      title: 'Transfer to Checking Account',
+      date: 'Today · 6:24 PM',
+      account: 'Savings •••• 2613',
+      amount: 10.00,
+      isCredit: false,
+      counterparty: 'Checking Account (•••• 2611)',
+      sourceAccount: '001173612613',
+      recipientAccount: '001373612611',
+      timestamp: now.subtract(const Duration(seconds: 2)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransactionsScreen(
+            transactions: [optimisticTx, serverTx],
+            customerName: 'Levi Viernes',
+            primaryAccountNumber: '001373612611',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify only the server transaction is shown (single item rendered, no duplicate)
+    expect(find.text('Transfer to Checking Account'), findsOneWidget);
+    expect(find.text('-₱10.00'), findsOneWidget);
+  });
 }

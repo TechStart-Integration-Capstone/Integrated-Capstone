@@ -149,6 +149,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
     final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
 
+    final seen = <String>{};
     var filtered = widget.transactions.where((tx) {
       if (_filter == 'credit' && !tx.isCredit) return false;
       if (_filter == 'debit' && tx.isCredit) return false;
@@ -165,7 +166,28 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             (tx.counterparty?.toLowerCase().contains(q) ?? false);
       }
       return true;
+    }).where((tx) {
+      final key = '${tx.id}_${tx.isCredit}_${tx.amount.toStringAsFixed(2)}';
+      return seen.add(key);
     }).toList();
+
+    // Deduplicate optimistic client-side transactions if authoritative server transactions are present
+    final hasAuthoritative = filtered.where((tx) => tx.id.startsWith('PP-') || int.tryParse(tx.id) != null).toList();
+    if (hasAuthoritative.isNotEmpty) {
+      filtered = filtered.where((tx) {
+        final isOptimistic = tx.id.startsWith('TXN-') || tx.id.startsWith('TRF-') || tx.id.startsWith('TX-PH-') || tx.id.startsWith('LOAN-PAY-');
+        if (isOptimistic) {
+          final matchesServer = hasAuthoritative.any((srv) {
+            final amtMatch = (srv.amount - tx.amount).abs() < 0.001;
+            final credMatch = srv.isCredit == tx.isCredit;
+            final timeMatch = tx.timestamp == null || srv.timestamp == null || srv.timestamp!.difference(tx.timestamp!).inMinutes.abs() < 15;
+            return amtMatch && credMatch && timeMatch;
+          });
+          if (matchesServer) return false;
+        }
+        return true;
+      }).toList();
+    }
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),

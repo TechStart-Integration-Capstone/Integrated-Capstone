@@ -751,7 +751,7 @@ class AccountService {
 
       if (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 202) {
         final data = jsonDecode(response.body);
-        final ref = data['reference'] ?? data['referenceId'] ?? data['transactionId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+        final ref = data['referenceNo'] ?? data['reference'] ?? data['referenceId'] ?? data['transactionId']?.toString() ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
         return TransferReceipt(
           success: true,
           referenceId: ref.toString(),
@@ -982,7 +982,7 @@ class AccountService {
       final rawType = item['transactionType']?.toString().toUpperCase() ?? item['type']?.toString().toUpperCase() ?? '';
       final isCredit = op == 'CREDIT' || rawType == 'CREDIT' || rawType.contains('IN') || rawType == 'DEPOSIT' || rawType == 'WELCOME_GIFT' || rawType == 'LOAN_DISBURSEMENT';
 
-      final ref = item['reference'] ?? item['referenceNo'] ?? item['id'] ?? item['transactionId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+      final ref = item['reference'] ?? item['referenceNo'] ?? item['id']?.toString() ?? item['transactionId']?.toString() ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
       final status = item['status']?.toString().toUpperCase() ?? 'COMPLETED';
       final acct = item['accountNumber']?.toString() ?? '';
       final last4 = acct.length >= 4 ? acct.substring(acct.length - 4) : acct;
@@ -997,14 +997,15 @@ class AccountService {
       }
 
       DateTime? parsedTime;
-      if (item['transactionDate'] != null) {
-        parsedTime = DateTime.tryParse(item['transactionDate'].toString());
-      } else if (item['date'] != null) {
-        parsedTime = DateTime.tryParse(item['date'].toString());
-      } else if (item['createdAt'] != null) {
-        parsedTime = DateTime.tryParse(item['createdAt'].toString());
-      } else if (item['timestamp'] != null) {
-        parsedTime = DateTime.tryParse(item['timestamp'].toString());
+      final rawDate = (item['transactionDate'] ?? item['date'] ?? item['createdAt'] ?? item['timestamp'])?.toString();
+      if (rawDate != null && rawDate.isNotEmpty) {
+        // Azure SQL / Spring Boot returns ISO-8601 UTC timestamps without timezone offset (e.g. "2026-10-09T10:24:13.4268199").
+        // If no timezone suffix exists, append 'Z' so DateTime treats it as UTC, then convert toLocal() for Asia/Manila (PHT).
+        String normalizedDate = rawDate;
+        if (!normalizedDate.contains('Z') && !normalizedDate.contains('+') && !RegExp(r'-\d{2}:\d{2}$').hasMatch(normalizedDate)) {
+          normalizedDate = '${normalizedDate}Z';
+        }
+        parsedTime = DateTime.tryParse(normalizedDate)?.toLocal() ?? DateTime.tryParse(rawDate)?.toLocal();
       }
 
       String date = 'Recent';
@@ -1023,6 +1024,11 @@ class AccountService {
       final cpName = item['counterpartyName']?.toString() ?? item['recipientName']?.toString();
       final cpAcct = item['counterpartyAccountNumber']?.toString() ?? item['destinationAccount']?.toString() ?? item['recipient']?.toString();
 
+      final cpAcctClean = cpAcct?.replaceAll(RegExp(r'\D'), '') ?? '';
+      final isOwnAccount = cpAcctClean.startsWith('0011') || cpAcctClean.startsWith('0013') || cpAcctClean.startsWith('0019');
+      final isChecking = cpAcctClean.startsWith('0013') || (cpAcct?.toLowerCase().contains('check') ?? false);
+      final isSavings = cpAcctClean.startsWith('0011') || (cpAcct?.toLowerCase().contains('sav') ?? false);
+
       String title = item['title']?.toString() ?? '';
       if (title.isEmpty) {
         if (rawType == 'WELCOME_GIFT' || op == 'WELCOME_GIFT') {
@@ -1031,6 +1037,12 @@ class AccountService {
           title = 'Personal Loan Disbursement';
         } else if (rawType == 'LOAN_REPAYMENT') {
           title = 'Personal Loan Repayment';
+        } else if (isOwnAccount) {
+          if (isCredit) {
+            title = isSavings ? 'Transfer from Savings Account' : (isChecking ? 'Transfer from Checking Account' : 'Transfer from Own Account');
+          } else {
+            title = isChecking ? 'Transfer to Checking Account' : (isSavings ? 'Transfer to Savings Account' : 'Transfer to Own Account');
+          }
         } else if (isCredit) {
           title = (cpName != null && cpName.isNotEmpty) ? 'Transfer from $cpName' : 'Received Funds';
         } else {
@@ -1039,7 +1051,11 @@ class AccountService {
       }
 
       String? counterpartyDisplay;
-      if (cpName != null && cpName.isNotEmpty) {
+      if (isOwnAccount) {
+        final targetType = isChecking ? 'Checking Account' : (isSavings ? 'Savings Account' : 'Own Account');
+        final cpLast4 = cpAcctClean.length >= 4 ? cpAcctClean.substring(cpAcctClean.length - 4) : cpAcctClean;
+        counterpartyDisplay = cpLast4.isNotEmpty ? '$targetType (•••• $cpLast4)' : targetType;
+      } else if (cpName != null && cpName.isNotEmpty) {
         if (cpAcct != null && cpAcct.isNotEmpty) {
           final cpLast4 = cpAcct.length >= 4 ? cpAcct.substring(cpAcct.length - 4) : cpAcct;
           counterpartyDisplay = '$cpName (•••• $cpLast4)';
