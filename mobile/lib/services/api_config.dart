@@ -9,7 +9,7 @@ class ApiConfig {
   /// - Production domain: https://api.yourbank.com/v1
   /// Canonical Cloud API Gateway URL for Azure West US 2
   static const String defaultCloudGateway =
-      'http://paypink-levi-westus2.westus2.cloudapp.azure.com:8080/api/v1';
+      'http://paypink.westus2.cloudapp.azure.com:8080/api/v1';
 
   /// Base API Gateway URL:
   /// - Priority 1: Explicit build-time override via --dart-define=API_BASE_URL=...
