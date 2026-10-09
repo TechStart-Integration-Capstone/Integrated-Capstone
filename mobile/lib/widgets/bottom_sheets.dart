@@ -168,6 +168,10 @@ class PayPinkBottomSheets {
               _DetailRow(label: 'Annual Interest Rate', value: '${loan.interestRate!.toStringAsFixed(2)}% p.a.'),
             if (loan.termMonths != null)
               _DetailRow(label: 'Term', value: '${loan.termMonths} months'),
+            if (loan.paymentsRemaining != null && loan.paymentsTotal != null)
+              _DetailRow(label: 'Payments Left', value: '${loan.paymentsRemaining} of ${loan.paymentsTotal}', isBold: true),
+            if (loan.payoffAmount != null)
+              _DetailRow(label: 'Total to Pay Off', value: formatPeso(loan.payoffAmount!)),
             if (loan.repaymentAccountNumber != null)
               _DetailRow(label: 'Auto-debit From', value: loan.repaymentAccountNumber!, isMono: true),
             const SizedBox(height: 20),

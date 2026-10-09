@@ -10,6 +10,7 @@ import '../widgets/spending_chart.dart';
 import '../widgets/account_card_carousel.dart';
 import '../widgets/promo_banner.dart';
 import '../widgets/transaction_report_sheet.dart';
+import 'loans_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool hideBalances;
@@ -171,6 +172,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         widget.onLoanPaymentSuccess?.call(amount, fundingAccount.accountNumber, loan.accountNumber);
         widget.onRefreshData?.call();
       },
+    );
+  }
+
+  /// Loans hub: your loans, Pay, Details & schedule, and Apply in one place.
+  void _openLoans() {
+    LoansScreen.open(
+      context,
+      accounts: widget.accounts ?? const [],
+      onChanged: widget.onRefreshData,
+      onLoanPaymentSuccess: widget.onLoanPaymentSuccess,
     );
   }
 
@@ -393,15 +404,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _buildQuickAction(
                 context,
-                icon: Icons.credit_score_rounded,
-                label: 'Pay Loan',
-                onTap: _openLoanPaymentSheet,
-              ),
-              _buildQuickAction(
-                context,
-                icon: Icons.account_balance_wallet_rounded,
-                label: 'Apply Loan',
-                onTap: _openLoanApplicationSheet,
+                icon: Icons.account_balance_rounded,
+                label: 'Loans',
+                onTap: _openLoans,
               ),
               _buildQuickAction(
                 context,
