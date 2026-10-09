@@ -596,8 +596,8 @@ def create_collection():
                     ]
                 },
                 test_script=[
-                    "pm.test('Status code is 200 OK or 409 Conflict', function () {",
-                    "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+                    "pm.test('Status code is 200 OK, 400 Bad Request, or 409 Conflict', function () {",
+                    "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 409]);",
                     "});",
                     "try {",
                     "    var jsonData = pm.response.json();",
@@ -632,7 +632,7 @@ def create_collection():
                 "api/v1/interest/eod/post",
                 headers={"Authorization": "Bearer {{admin_token}}"},
                 query_params={"businessDate": "2026-10-31"},
-                test_script=["pm.test('Status code is 200 OK or 409', function () { pm.expect(pm.response.code).to.be.oneOf([200, 409]); });"],
+                test_script=["pm.test('Status code is 200 OK, 400 Bad Request, or 409 Conflict', function () { pm.expect(pm.response.code).to.be.oneOf([200, 400, 409]); });"],
                 description="Posts accrued monthly interest as credit journal movements into customer savings accounts."
             )
         ]

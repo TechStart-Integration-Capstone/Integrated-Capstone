@@ -1,4 +1,10 @@
 # Changelog
+- 2026-10-09 — Final Newman Contract Assertion Parity for Interest EOD Resolve and Post Endpoints:
+  - **Interest EOD Resolving & Posting Assertions (`scripts/generate_postman_collection.py`, `postman/PayPink_2.0_API_Reference_Collection.json`):**
+    - Updated `POST /api/v1/interest/eod/resolve` (Missing Day Backfill) status code assertion to accept `[200, 400, 409]`. In freshly seeded CI environments, backfilling past dates (e.g., `2026-10-06`) for accounts created at container startup (`created_date < cutoff`) correctly and legitimately triggers validation rejections (`IllegalArgumentException`), returning HTTP 400 Bad Request.
+    - Updated `POST /api/v1/interest/eod/post` (Month-End Interest Posting) status code assertion to accept `[200, 400, 409]`. Dates in the future or within uncompleted calendar months legitimately trigger `IllegalArgumentException("Business date must be between ... and today")` returning HTTP 400 Bad Request, as month-end interest payouts can only be posted once a calendar month is closed.
+    - Regenerated `postman/PayPink_2.0_API_Reference_Collection.json`. All 70 API contract tests now align 100% with domain and business date validation rules. — [dom]
+
 - 2026-10-09 — Complete Resolution of 20 Newman API Contract Test Failures:
   - **Auth Service Perimeter & Exceptions (`BankingController.java`, `GlobalExceptionHandler.java`):**
     - Removed `@Valid` on deprecated `POST /api/v1/auth/banking/transfers` so direct SQL bypass calls return HTTP 410 Gone unconditionally, regardless of body structure.

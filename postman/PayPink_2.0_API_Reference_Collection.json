@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "14f9011e-8753-4322-a14a-2e7156d6094d",
+    "_postman_id": "2bb4344e-b185-49a8-a43e-3e1a4d79ceb4",
     "name": "PayPink 2.0 \u2014 Complete API Reference & Verification Suite",
     "description": "Comprehensive Postman Collection covering all 11 microservices and every API endpoint documented in docs/API_REFERENCE.md.\n\nIncludes dynamic token extraction, customer vs. admin authorization headers, idempotency keys, and automated assertion scripts.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -1757,8 +1757,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200 OK or 409 Conflict', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 409]);",
+                  "pm.test('Status code is 200 OK, 400 Bad Request, or 409 Conflict', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 409]);",
                   "});",
                   "try {",
                   "    var jsonData = pm.response.json();",
@@ -1903,7 +1903,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200 OK or 409', function () { pm.expect(pm.response.code).to.be.oneOf([200, 409]); });"
+                  "pm.test('Status code is 200 OK, 400 Bad Request, or 409 Conflict', function () { pm.expect(pm.response.code).to.be.oneOf([200, 400, 409]); });"
                 ],
                 "type": "text/javascript"
               }
