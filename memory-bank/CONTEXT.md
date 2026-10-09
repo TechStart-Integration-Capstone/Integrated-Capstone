@@ -1,8 +1,10 @@
 # PayPink 2.0 — Project Context
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
-_Active Working Branch: feature/mobile-web-feature-parity (mobile/web feature parity; not yet merged to main)_  
+_Active Working Branch: main_  
 _Last Updated: 2026-10-09 (Mobile/web feature parity: missed loan auto-debit alert, real InstaPay/PESONet transfers, 30-second cancel window removed from web and mobile, server-derived notifications, server transaction report, local card freeze and client reversal removed; 27/27 tests pass by [gillianneysha])_  
+_Last Updated: 2026-10-09 (Patched db/phase6_loans.sql and scripts/migrate_phase6_loans.sql with dual dbo/app/t24 schema guards, preventing SQL Server 4909 'Cannot alter dbo.CUSTOMER because it is not a table' synonym error and allowing loan-service to start and pass Swagger probes in CI/CD)_
+_Last Updated: 2026-10-09 (Restored docker-compose.yml DataSource URL fallbacks and CI workflow env secrets, resolving Spring Boot HikariCP failed jdbc url crash and enabling automated CI/CD pipeline health checks and Newman tests to succeed)_
 _Last Updated: 2026-10-09 (Mobile UI aligned with the customer web app: DM Sans/Manrope fonts bundled, flat web-style tokens and cards, login/register rebuilt to mirror the frontend/bank auth panel, web-style bottom tab bar; 17/17 tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Resolved Web Crypto Null check operator crash in SecureTokenStorage on plain HTTP via browser localStorage fallback, enabling seamless session persistence and login on http://paypink.westus2.cloudapp.azure.com:3002)_
 _Last Updated: 2026-10-09 (Aligned Mobile Web to dynamic reverse proxy origin ${Uri.base.origin}/api/v1 via container Nginx on port 3002, matching Web Banking architecture and eliminating cross-port CORS blocks)_

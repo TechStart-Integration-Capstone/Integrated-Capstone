@@ -1,6 +1,7 @@
 -- ============================================================================
 -- PayPink 2.0 — Azure SQL Phase 6 Loans Migration Script
 -- Safe to re-run: every change is guarded by an existence check.
+-- Compatible with both pre-split (dbo.*) and post-split (app.* / t24.*) schemas.
 --
 -- loan-service applies this automatically at startup (LoanSchemaMigration), so a plain
 -- `docker compose up` works on both fresh and existing databases. Running it by hand with
@@ -8,56 +9,88 @@
 -- ============================================================================
 
 -- 1. Hardcoded credit score + income on CUSTOMER (income drives the affordability check)
-IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CUSTOMER') AND name = 'credit_score')
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id IN (OBJECT_ID('dbo.CUSTOMER', 'U'), OBJECT_ID('app.CUSTOMER', 'U')) AND name = 'credit_score')
 BEGIN
-    ALTER TABLE dbo.CUSTOMER ADD credit_score INT NOT NULL CONSTRAINT DF_CUSTOMER_CS DEFAULT 650
-        CONSTRAINT CK_CUSTOMER_CS CHECK (credit_score BETWEEN 300 AND 850);
-    ALTER TABLE dbo.CUSTOMER ADD monthly_income DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000;
-    -- Demo bands, set only when the columns are first created (later edits are never overwritten).
-    -- EXEC defers compilation until after the ALTERs above.
-    EXEC('UPDATE dbo.CUSTOMER SET credit_score = 520, monthly_income = 20000  WHERE username = ''lviernes'';
-          UPDATE dbo.CUSTOMER SET credit_score = 670, monthly_income = 45000  WHERE username = ''arosales'';
-          UPDATE dbo.CUSTOMER SET credit_score = 800, monthly_income = 150000 WHERE username = ''glim'';');
+    IF OBJECT_ID('app.CUSTOMER', 'U') IS NOT NULL
+    BEGIN
+        ALTER TABLE app.CUSTOMER ADD credit_score INT NOT NULL CONSTRAINT DF_CUSTOMER_CS DEFAULT 650
+            CONSTRAINT CK_CUSTOMER_CS CHECK (credit_score BETWEEN 300 AND 850);
+        ALTER TABLE app.CUSTOMER ADD monthly_income DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000;
+        EXEC('UPDATE app.CUSTOMER SET credit_score = 520, monthly_income = 20000  WHERE username = ''lviernes'';
+              UPDATE app.CUSTOMER SET credit_score = 670, monthly_income = 45000  WHERE username = ''arosales'';
+              UPDATE app.CUSTOMER SET credit_score = 800, monthly_income = 150000 WHERE username = ''glim'';');
+    END
+    ELSE
+    BEGIN
+        ALTER TABLE dbo.CUSTOMER ADD credit_score INT NOT NULL CONSTRAINT DF_CUSTOMER_CS DEFAULT 650
+            CONSTRAINT CK_CUSTOMER_CS CHECK (credit_score BETWEEN 300 AND 850);
+        ALTER TABLE dbo.CUSTOMER ADD monthly_income DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000;
+        EXEC('UPDATE dbo.CUSTOMER SET credit_score = 520, monthly_income = 20000  WHERE username = ''lviernes'';
+              UPDATE dbo.CUSTOMER SET credit_score = 670, monthly_income = 45000  WHERE username = ''arosales'';
+              UPDATE dbo.CUSTOMER SET credit_score = 800, monthly_income = 150000 WHERE username = ''glim'';');
+    END
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.CUSTOMER') AND name = 'monthly_income')
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id IN (OBJECT_ID('dbo.CUSTOMER', 'U'), OBJECT_ID('app.CUSTOMER', 'U')) AND name = 'monthly_income')
 BEGIN
-    ALTER TABLE dbo.CUSTOMER ADD monthly_income DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000;
+    IF OBJECT_ID('app.CUSTOMER', 'U') IS NOT NULL
+        ALTER TABLE app.CUSTOMER ADD monthly_income DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000;
+    ELSE
+        ALTER TABLE dbo.CUSTOMER ADD monthly_income DECIMAL(18,4) NOT NULL CONSTRAINT DF_CUSTOMER_INC DEFAULT 30000;
 END
 GO
 
 -- 2. Track loan money movement on the remittance record
 --    Allowed values: TRANSFER | LOAN_DISBURSEMENT | LOAN_REPAYMENT
 --    (LEDGER_TRANSACTION.transaction_type has no CHECK constraint, so no change is needed there.)
-IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.REMITTANCE') AND name = 'transaction_type')
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id IN (OBJECT_ID('dbo.REMITTANCE', 'U'), OBJECT_ID('app.REMITTANCE', 'U')) AND name = 'transaction_type')
 BEGIN
-    ALTER TABLE dbo.REMITTANCE ADD transaction_type NVARCHAR(30) NOT NULL
-        CONSTRAINT DF_REMITTANCE_TYPE DEFAULT 'TRANSFER';
+    IF OBJECT_ID('app.REMITTANCE', 'U') IS NOT NULL
+        ALTER TABLE app.REMITTANCE ADD transaction_type NVARCHAR(30) NOT NULL
+            CONSTRAINT DF_REMITTANCE_TYPE DEFAULT 'TRANSFER';
+    ELSE
+        ALTER TABLE dbo.REMITTANCE ADD transaction_type NVARCHAR(30) NOT NULL
+            CONSTRAINT DF_REMITTANCE_TYPE DEFAULT 'TRANSFER';
 END
 GO
 
 -- 3. Loan events have no ledger transaction, so OUTBOX_EVENT.transaction_id becomes optional.
 --    SQL Server will not alter a column used by a FOREIGN KEY, so the FK is dropped and re-added.
 IF EXISTS (SELECT * FROM sys.columns
-           WHERE object_id = OBJECT_ID('dbo.OUTBOX_EVENT') AND name = 'transaction_id' AND is_nullable = 0)
+           WHERE object_id IN (OBJECT_ID('dbo.OUTBOX_EVENT', 'U'), OBJECT_ID('app.OUTBOX_EVENT', 'U'))
+             AND name = 'transaction_id' AND is_nullable = 0)
 BEGIN
-    IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'fk_outbox_transaction')
-        ALTER TABLE dbo.OUTBOX_EVENT DROP CONSTRAINT fk_outbox_transaction;
-    ALTER TABLE dbo.OUTBOX_EVENT ALTER COLUMN transaction_id BIGINT NULL;
-    ALTER TABLE dbo.OUTBOX_EVENT ADD CONSTRAINT fk_outbox_transaction
-        FOREIGN KEY (transaction_id) REFERENCES dbo.LEDGER_TRANSACTION(transaction_id);
+    IF OBJECT_ID('app.OUTBOX_EVENT', 'U') IS NOT NULL
+    BEGIN
+        IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'fk_outbox_transaction')
+            ALTER TABLE app.OUTBOX_EVENT DROP CONSTRAINT fk_outbox_transaction;
+        ALTER TABLE app.OUTBOX_EVENT ALTER COLUMN transaction_id BIGINT NULL;
+        ALTER TABLE app.OUTBOX_EVENT ADD CONSTRAINT fk_outbox_transaction
+            FOREIGN KEY (transaction_id) REFERENCES dbo.LEDGER_TRANSACTION(transaction_id);
+    END
+    ELSE
+    BEGIN
+        IF EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'fk_outbox_transaction')
+            ALTER TABLE dbo.OUTBOX_EVENT DROP CONSTRAINT fk_outbox_transaction;
+        ALTER TABLE dbo.OUTBOX_EVENT ALTER COLUMN transaction_id BIGINT NULL;
+        ALTER TABLE dbo.OUTBOX_EVENT ADD CONSTRAINT fk_outbox_transaction
+            FOREIGN KEY (transaction_id) REFERENCES dbo.LEDGER_TRANSACTION(transaction_id);
+    END
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.OUTBOX_EVENT') AND name = 'aggregate_id')
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id IN (OBJECT_ID('dbo.OUTBOX_EVENT', 'U'), OBJECT_ID('app.OUTBOX_EVENT', 'U')) AND name = 'aggregate_id')
 BEGIN
-    ALTER TABLE dbo.OUTBOX_EVENT ADD aggregate_id NVARCHAR(40) NULL;   -- e.g. LOAN reference_no
+    IF OBJECT_ID('app.OUTBOX_EVENT', 'U') IS NOT NULL
+        ALTER TABLE app.OUTBOX_EVENT ADD aggregate_id NVARCHAR(40) NULL;   -- e.g. LOAN reference_no
+    ELSE
+        ALTER TABLE dbo.OUTBOX_EVENT ADD aggregate_id NVARCHAR(40) NULL;   -- e.g. LOAN reference_no
 END
 GO
 
 -- 4. Loan tables
-IF OBJECT_ID('dbo.LOAN_APPLICATION', 'U') IS NULL
+IF OBJECT_ID('dbo.LOAN_APPLICATION', 'U') IS NULL AND OBJECT_ID('app.LOAN_APPLICATION', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.LOAN_APPLICATION (
         application_id      BIGINT IDENTITY(1,1) PRIMARY KEY,
@@ -83,13 +116,16 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.LOAN_APPLICATION') AND name = 'retry_count')
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id IN (OBJECT_ID('dbo.LOAN_APPLICATION', 'U'), OBJECT_ID('app.LOAN_APPLICATION', 'U')) AND name = 'retry_count')
 BEGIN
-    ALTER TABLE dbo.LOAN_APPLICATION ADD retry_count INT NOT NULL CONSTRAINT DF_LOAN_APP_RETRY DEFAULT 0;
+    IF OBJECT_ID('app.LOAN_APPLICATION', 'U') IS NOT NULL
+        ALTER TABLE app.LOAN_APPLICATION ADD retry_count INT NOT NULL CONSTRAINT DF_LOAN_APP_RETRY DEFAULT 0;
+    ELSE
+        ALTER TABLE dbo.LOAN_APPLICATION ADD retry_count INT NOT NULL CONSTRAINT DF_LOAN_APP_RETRY DEFAULT 0;
 END
 GO
 
-IF OBJECT_ID('dbo.LOAN', 'U') IS NULL
+IF OBJECT_ID('dbo.LOAN', 'U') IS NULL AND OBJECT_ID('t24.LOAN', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.LOAN (
         loan_id               BIGINT IDENTITY(1,1) PRIMARY KEY,
@@ -113,7 +149,7 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID('dbo.LOAN_SCHEDULE', 'U') IS NULL
+IF OBJECT_ID('dbo.LOAN_SCHEDULE', 'U') IS NULL AND OBJECT_ID('t24.LOAN_SCHEDULE', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.LOAN_SCHEDULE (
         schedule_id     BIGINT IDENTITY(1,1) PRIMARY KEY,
@@ -131,7 +167,7 @@ BEGIN
 END
 GO
 
-IF OBJECT_ID('dbo.LOAN_REPAYMENT', 'U') IS NULL
+IF OBJECT_ID('dbo.LOAN_REPAYMENT', 'U') IS NULL AND OBJECT_ID('t24.LOAN_REPAYMENT', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.LOAN_REPAYMENT (
         repayment_id    BIGINT IDENTITY(1,1) PRIMARY KEY,
@@ -163,10 +199,15 @@ END
 GO
 
 -- 6. EOD auto-debit: outcome of the last automatic installment collection, shown to the customer.
-IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('dbo.LOAN') AND name = 'last_autodebit_status')
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id IN (OBJECT_ID('dbo.LOAN', 'U'), OBJECT_ID('t24.LOAN', 'U')) AND name = 'last_autodebit_status')
 BEGIN
-    ALTER TABLE dbo.LOAN ADD last_autodebit_date DATE NULL,
-        last_autodebit_status NVARCHAR(20) NULL,          -- PAID | INSUFFICIENT_FUNDS | FAILED
-        last_autodebit_amount DECIMAL(18,4) NULL;
+    IF OBJECT_ID('t24.LOAN', 'U') IS NOT NULL
+        ALTER TABLE t24.LOAN ADD last_autodebit_date DATE NULL,
+            last_autodebit_status NVARCHAR(20) NULL,          -- PAID | INSUFFICIENT_FUNDS | FAILED
+            last_autodebit_amount DECIMAL(18,4) NULL;
+    ELSE
+        ALTER TABLE dbo.LOAN ADD last_autodebit_date DATE NULL,
+            last_autodebit_status NVARCHAR(20) NULL,          -- PAID | INSUFFICIENT_FUNDS | FAILED
+            last_autodebit_amount DECIMAL(18,4) NULL;
 END
 GO
