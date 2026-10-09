@@ -23,10 +23,19 @@ class PinAuthSheet extends StatefulWidget {
     required String description,
     double? amount,
   }) async {
-    // If user hasn't set an MPIN yet, initialize default demo PIN '123456'
+    // Force user to have set an MPIN before authorizing (no default 123456)
     final hasPin = await SecureTokenStorage.hasPin();
     if (!hasPin) {
-      await SecureTokenStorage.savePin('123456');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please set up your 6-digit MPIN first.'),
+            backgroundColor: PayPinkTheme.wine,
+          ),
+        );
+      }
+      return false;
     }
     if (!context.mounted) return false;
 

@@ -2,6 +2,8 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (AccountService conflict resolved after pulling from main: seamlessly merged loan-service fetchLoans aggregation, ProfileUnavailableException, and RFC-7807 problem details with Member 5 cascading profile fallbacks and ApiClient error extractor; 17/17 mobile tests pass by [dom])_  
+_Last Updated: 2026-10-09 (Member 5 Implementation: Mobile backlog MOB-501 through MOB-506 delivered, Gateway CORS and routing aligned, CQRS activity feed integrated, RFC-7807 error handling unified, all 6 widget tests and 24 gateway tests passing by [dom])_  
 _Last Updated: 2026-10-09 (Restored missing saga polling state declarations in remittance_screen.dart after git merge from main; verified clean flutter analyze build)_  
 _Last Updated: 2026-10-09 (Clean Architecture, BLoC State Machines, Mobile App cloud connection by [levi, cisko]; Newman auth credentials aligned with seeded Azure SQL users, dual token persistence, full CI stack coverage, 20 Newman API contract test resolutions, and 100% test assertion parity on Interest EOD resolve/post endpoints by [dom])_  
 _Last Updated: 2026-10-09 (Hosted Azure Cloud SQL paypink-sql.database.windows.net schema patched with roles, Saga columns, and synonyms; Web Banking login and end-to-end remittance transfers fully verified operational by [levi])_  
@@ -44,7 +46,7 @@ The PayPink system is being refactored from a shared-database monolithic ledger 
 | 5b | Loans — apply / accept / disburse / repay / EOD | Implemented (unit-tested; not yet Docker end-to-end) |
 | 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Done |
 | Interest EOD | Daily interest accrual and monthly savings posting | Enabled in local Docker; PostgreSQL GL integration deployed; 78 change-specific tests passed |
-| 7 | Mobile Frontend (PWA) | Pending |
+| 7 | Mobile Frontend (Flutter App & PWA) | Integrated with Microservices (MOB-501..506 complete; Flutter analyze & tests pass) |
 | 8 | Chaos + Load Testing | Pending |
 
 - **Perimeter (Edge):** `api-gateway` (:8080) acts as the sole public ingress, validating JWTs, enforcing RBAC (Customer vs. Admin), and applying rate limits.

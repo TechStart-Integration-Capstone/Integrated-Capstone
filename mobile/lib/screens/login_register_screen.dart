@@ -26,42 +26,76 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
   bool _obscurePassword = true;
   bool _rememberMe = true;
 
-  // Controllers pre-filled with live database user
+  // Controllers
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _fullNameController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
+  bool _obscureConfirmPassword = true;
   String _selectedAccountType = 'EVERYDAY';
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
-    _fullNameController.dispose();
+    _confirmPasswordController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text.trim();
+    final username = _usernameController.text.trim().toLowerCase();
+    final password = _passwordController.text; // Do not trim password
 
     if (username.isEmpty || password.isEmpty) {
       _showToast('Please enter both username and password', Icons.warning_amber_rounded);
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (_isRegister) {
+      final firstName = _firstNameController.text.trim();
+      final lastName = _lastNameController.text.trim();
+      final email = _emailController.text.trim();
+      final phone = _phoneController.text.trim();
+      final confirmPassword = _confirmPasswordController.text;
 
-    try {
-      if (_isRegister) {
-        final email = _emailController.text.trim();
-        final name = _fullNameController.text.trim();
+      if (firstName.isEmpty || lastName.isEmpty || email.isEmpty || phone.isEmpty) {
+        _showToast('Please fill out all registration fields', Icons.warning_amber_rounded);
+        return;
+      }
+
+      if (password != confirmPassword) {
+        _showToast('Your passwords don’t match. Please enter them again.', Icons.warning_amber_rounded);
+        return;
+      }
+
+      if (password.length < 8) {
+        _showToast('Password must be at least 8 characters long.', Icons.warning_amber_rounded);
+        return;
+      }
+
+      final userRegex = RegExp(r'^[a-zA-Z0-9_]{3,50}$');
+      if (!userRegex.hasMatch(username)) {
+        _showToast('Username must be 3–50 characters (letters, numbers, or underscores).', Icons.warning_amber_rounded);
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      try {
         final res = await AuthService.register(
+          firstName: firstName,
+          lastName: lastName,
+          email: email,
+          phone: phone,
           username: username,
           password: password,
-          email: email,
-          fullName: name,
         );
 
         if (!mounted) return;
@@ -71,12 +105,19 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
           _showToast('Account created! Welcome to PayPink.', Icons.check_circle_rounded);
           widget.onLoginSuccess(
             res.username ?? username,
-            res.fullName ?? (name.isNotEmpty ? name : username),
+            res.fullName ?? '$firstName $lastName',
           );
         } else {
           _showToast(res.message, Icons.error_outline_rounded);
         }
-      } else {
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showToast('Registration failed: ${e.toString()}', Icons.error_outline_rounded);
+      }
+    } else {
+      setState(() => _isLoading = true);
+      try {
         final res = await AuthService.login(
           username: username,
           password: password,
@@ -94,11 +135,11 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
         } else {
           _showToast(res.message, Icons.error_outline_rounded);
         }
+      } catch (e) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showToast('Authentication failed: ${e.toString()}', Icons.error_outline_rounded);
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showToast('Authentication failed: ${e.toString()}', Icons.error_outline_rounded);
     }
   }
 
@@ -364,18 +405,53 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
 
                                   // Registration Extra Fields
                                   if (_isRegister) ...[
-                                    _buildLabel('Full Legal Name', textColor),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              _buildLabel('First Name', textColor),
+                                              _buildTextField(
+                                                controller: _firstNameController,
+                                                hint: 'e.g. Maria',
+                                                icon: Icons.badge_outlined,
+                                                isDark: isDark,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              _buildLabel('Last Name', textColor),
+                                              _buildTextField(
+                                                controller: _lastNameController,
+                                                hint: 'e.g. Santos',
+                                                icon: Icons.badge_outlined,
+                                                isDark: isDark,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 14),
+                                    _buildLabel('Mobile Number', textColor),
                                     _buildTextField(
-                                      controller: _fullNameController,
-                                      hint: 'e.g. Maria Santos',
-                                      icon: Icons.badge_outlined,
+                                      controller: _phoneController,
+                                      hint: '+63 917 123 4567',
+                                      icon: Icons.phone_android_rounded,
+                                      keyboardType: TextInputType.phone,
                                       isDark: isDark,
                                     ),
                                     const SizedBox(height: 14),
                                     _buildLabel('Email Address', textColor),
                                     _buildTextField(
                                       controller: _emailController,
-                                      hint: 'name@example.com',
+                                      hint: 'you@example.com',
                                       icon: Icons.email_outlined,
                                       keyboardType: TextInputType.emailAddress,
                                       isDark: isDark,
@@ -391,6 +467,15 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                                     icon: Icons.person_outline_rounded,
                                     isDark: isDark,
                                   ),
+                                  if (_isRegister) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4, left: 4),
+                                      child: Text(
+                                        '3–50 letters, numbers, or underscores.',
+                                        style: PayPinkTheme.body(fontSize: 10.5, color: mutedColor),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 14),
 
                                   // Password
@@ -410,6 +495,32 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                                       onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                                     ),
                                   ),
+                                  if (_isRegister) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4, left: 4),
+                                      child: Text(
+                                        'Use 8–64 characters.',
+                                        style: PayPinkTheme.body(fontSize: 10.5, color: mutedColor),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    _buildLabel('Confirm Password', textColor),
+                                    _buildTextField(
+                                      controller: _confirmPasswordController,
+                                      hint: '••••••••',
+                                      icon: Icons.lock_outline_rounded,
+                                      obscureText: _obscureConfirmPassword,
+                                      isDark: isDark,
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                          size: 18,
+                                          color: mutedColor,
+                                        ),
+                                        onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 12),
 
                                   // Sign-in options: Remember me & Forgot Password
