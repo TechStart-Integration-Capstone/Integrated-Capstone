@@ -2,6 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (Restored docker-compose.yml DataSource URL fallbacks and CI workflow env secrets, resolving Spring Boot HikariCP failed jdbc url crash and enabling automated CI/CD pipeline health checks and Newman tests to succeed)_
 _Last Updated: 2026-10-09 (Mobile UI aligned with the customer web app: DM Sans/Manrope fonts bundled, flat web-style tokens and cards, login/register rebuilt to mirror the frontend/bank auth panel, web-style bottom tab bar; 17/17 tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Resolved Web Crypto Null check operator crash in SecureTokenStorage on plain HTTP via browser localStorage fallback, enabling seamless session persistence and login on http://paypink.westus2.cloudapp.azure.com:3002)_
 _Last Updated: 2026-10-09 (Aligned Mobile Web to dynamic reverse proxy origin ${Uri.base.origin}/api/v1 via container Nginx on port 3002, matching Web Banking architecture and eliminating cross-port CORS blocks)_
