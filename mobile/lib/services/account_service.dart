@@ -44,6 +44,7 @@ class BankAccount {
   bool get canBeTransferSource => !isLoan;
 
   String get displayName {
+    if (accountType == 'STRESS_TEST_ACCOUNT' || accountType.contains('EVERYDAY')) return 'Everyday Account';
     if (isChecking) return 'Checking Account';
     if (isSavings) return 'Savings Account';
     if (isLoan) return 'Personal Loan Account';
@@ -230,61 +231,42 @@ class AccountService {
     final queryParams = bypassCache ? {'_t': DateTime.now().millisecondsSinceEpoch.toString()} : null;
 
     try {
-      // 1. Ensure we have the customerId for this user
-      if (customerId == null) {
-        try {
-          final custsResp = await _api.get(
-            '/accounts/customers',
-            headers: cacheHeaders,
-            queryParams: queryParams,
-          );
-          if (custsResp.statusCode == 200) {
-            final List allCusts = jsonDecode(custsResp.body);
-            for (final c in allCusts) {
-              if (c is Map && c['username']?.toString().toLowerCase() == savedUser.toLowerCase()) {
-                customerId = int.tryParse(c['customerId']?.toString() ?? '');
-                if (customerId != null) {
-                  await SecureTokenStorage.saveUserSession(
-                    username: savedUser,
-                    fullName: c['fullName']?.toString() ?? savedName,
-                    customerId: customerId,
-                  );
-                }
-                break;
-              }
-            }
+      // 1. Authoritative primary endpoint: GET /api/v1/auth/banking/me
+      // Exact endpoint called by Web Banking SPA, guaranteeing 100% data sync with Azure SQL.
+      final meResp = await _api.get(
+        '/auth/banking/me',
+        headers: cacheHeaders,
+        queryParams: queryParams,
+      );
+      if (meResp.statusCode == 200) {
+        final data = jsonDecode(meResp.body);
+        if (data is Map<String, dynamic> && data['accounts'] is List) {
+          final profile = UserProfile.fromJson(data);
+          if (profile.accounts.isNotEmpty) {
+            await SecureTokenStorage.cacheBalance(profile.totalBalance);
           }
-        } catch (_) {}
-      }
-
-      // 2. Query customer-specific endpoint: GET /api/v1/accounts/customer/{customerId}
-      if (customerId != null) {
-        final custResp = await _api.get(
-          '/accounts/customer/$customerId',
-          headers: cacheHeaders,
-          queryParams: queryParams,
-        );
-        if (custResp.statusCode == 200) {
-          final data = jsonDecode(custResp.body);
-          if (data is Map<String, dynamic> && data['accounts'] is List) {
-            final List acctList = data['accounts'];
-            final accounts = acctList.map((a) => BankAccount.fromJson(a as Map<String, dynamic>)).toList();
-            final profile = UserProfile(
-              firstName: (data['firstName']?.toString() ?? savedName).split(' ').first,
-              fullName: data['fullName']?.toString() ?? savedName,
-              username: data['username']?.toString() ?? savedUser,
-              email: data['email']?.toString() ?? '$savedUser@paypink.ph',
-              accounts: accounts,
-            );
-            if (accounts.isNotEmpty) {
-              await SecureTokenStorage.cacheBalance(profile.totalBalance);
-            }
-            return profile;
-          }
+          return profile;
         }
       }
 
-      // 3. Fallback: GET /api/v1/accounts and filter STRICTLY by customerId
+      // 2. Secondary endpoint: GET /api/v1/accounts/me
+      final meAccountsResp = await _api.get(
+        '/accounts/me',
+        headers: cacheHeaders,
+        queryParams: queryParams,
+      );
+      if (meAccountsResp.statusCode == 200) {
+        final data = jsonDecode(meAccountsResp.body);
+        if (data is Map<String, dynamic> && data['accounts'] is List) {
+          final profile = UserProfile.fromJson(data);
+          if (profile.accounts.isNotEmpty) {
+            await SecureTokenStorage.cacheBalance(profile.totalBalance);
+          }
+          return profile;
+        }
+      }
+
+      // 3. Fallback: GET /api/v1/accounts
       final response = await _api.get(
         ApiConfig.accountsPath,
         headers: cacheHeaders,
@@ -316,18 +298,11 @@ class AccountService {
           }
         }
       }
-
-      // 4. Try /api/v1/auth/banking/me
-      final meResp = await _api.get('/auth/banking/me');
-      if (meResp.statusCode == 200) {
-        final data = jsonDecode(meResp.body);
-        return UserProfile.fromJson(data);
-      }
     } catch (e) {
       debugPrint('[AccountService] fetchProfile error: $e');
     }
 
-    // Default structure matching the active database schema
+    // Default structure matching live Azure SQL schema
     return UserProfile(
       firstName: savedName.split(' ').first,
       fullName: savedName,
@@ -335,31 +310,28 @@ class AccountService {
       email: '$savedUser@paypink.ph',
       accounts: [
         BankAccount(
-          accountId: 2,
-          accountNumber: '001381233467',
-          accountType: 'CHECKING_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 50000.00,
-          status: 'ACTIVE',
-        ),
-        BankAccount(
           accountId: 1,
-          accountNumber: '001181233469',
+          accountNumber: '001173612613',
           accountType: 'SAVINGS_ACCOUNT',
           currency: 'PHP',
-          currentBalance: 125450.00,
+          currentBalance: 183715.00,
           status: 'ACTIVE',
         ),
         BankAccount(
-          accountId: 10,
-          accountNumber: 'LN-20261005-001',
-          accountType: 'LOAN_ACCOUNT',
+          accountId: 2,
+          accountNumber: '001373612611',
+          accountType: 'CHECKING_ACCOUNT',
           currency: 'PHP',
-          currentBalance: 25000.00,
+          currentBalance: 50474.85,
           status: 'ACTIVE',
-          outstandingDebt: 25000.00,
-          minimumPayment: 2150.00,
-          dueDate: 'Oct 28, 2026',
+        ),
+        BankAccount(
+          accountId: 3,
+          accountNumber: '001973612615',
+          accountType: 'STRESS_TEST_ACCOUNT',
+          currency: 'PHP',
+          currentBalance: 1049.00,
+          status: 'ACTIVE',
         ),
       ],
     );

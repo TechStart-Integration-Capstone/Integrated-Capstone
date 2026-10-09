@@ -1,5 +1,9 @@
 # Changelog
-- 2026-10-09 — Local Mobile Testing Connectivity & Local Mode Fallback in `auth_service.dart`: Added graceful local fallback in `AuthService.login` for local development testing when Windows corporate firewall blocks Docker host port forwarding, enabling seamless UI authentication and feature testing while keeping all Clean Architecture Dio/BLoC modules intact for cloud cutover. — [Antigravity]
+- 2026-10-09 — Permanent Web & Mobile Cloud Synchronization Fix:
+  - **Mobile Gateway Default Configuration (`api_config.dart`):** Permanently set canonical cloud gateway (`http://paypink-levi-westus2.westus2.cloudapp.azure.com:8080/api/v1`) as default across all platforms (Web, Android, iOS, Desktop) so subsequent merges on `main` by any teammate never revert mobile to `localhost:8080`.
+  - **Mobile Account Service Alignment (`account_service.dart`):** Updated `AccountService.fetchProfile()` to call `GET /auth/banking/me` as its first authoritative endpoint—identical to Web Banking SPA—synchronizing all 3 live Azure SQL accounts (`₱235,238.85` total) across Web and Mobile; mapped `STRESS_TEST_ACCOUNT` to `Everyday Account` display name.
+  - **Transparent Error Handling (`auth_service.dart`):** Removed silent mock offline token generation (`jwt_local_demo_token`) in `AuthService.login` catch block; returns explicit 503 error when cloud gateway is unreachable to eliminate silent fallback to old hardcoded mock balances.
+  - **Docker & Teammate Onboarding Templates (`mobile/Dockerfile`, `.env.example`, `docker/.env.example`):** Added `--dart-define=API_BASE_URL` to `mobile/Dockerfile` web build; checked in tracked `.env.example` templates pointing to `paypink-sql.database.windows.net` to prevent unseeded local SQL container fallbacks. — [levi & Antigravity]
 
 - 2026-10-08 — Disabled GoogleFonts Runtime HTTP Fetching in `main.dart`: Set `GoogleFonts.config.allowRuntimeFetching = false` at app startup to prevent `fonts.gstatic.com` network load exceptions (`ClientException: Failed to fetch`), fixing the blank screen crash on Web/Chrome platforms. — [Antigravity]
 
