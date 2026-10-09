@@ -1,5 +1,8 @@
 # Changelog
-- 2026-10-09 — Last Card Pinkish Beige Palette (`dynamic_card_deck.dart`, `paypink_theme.dart`):
+- 2026-10-09 — Fix Mobile Docker Build & Resolve Merge Syntax Error:
+  - **Syntax Error Fix (`account_service.dart`):** Resolved broken merge syntax error in `fetchProfile()` that caused `flutter build web` compilation failure in CI/CD pipeline.
+  - **Docker Build Optimization (`mobile/Dockerfile`, `mobile/.dockerignore`):** Added `mobile/.dockerignore` to prevent copying host `.dart_tool/` and `build/` artifacts into the container; added `--no-wasm-dry-run --no-tree-shake-icons` to `flutter build web` command to prevent OOM termination on the CI/CD runner. Verified with `dart analyze` (0 errors, 0 warnings). — [levi & Antigravity]
+
   - **Last Card Theme Refinement (`dynamic_card_deck.dart`, `paypink_theme.dart`):** Styled the last card in an elegant, luxury **Pinkish Beige** palette (Desert Rose & Champagne Blush Nude: `#D8ABA0` to `#BA8677` transitioning to deep warm espresso `#261414` and gradient black `#09090B`); added `isLastCard` property to `PayPinkCardModel` and `_PayPinkCardFacePainter`; updated card title to 'Platinum Reserve' and configured delicate warm blush-cream specular bloom and matching card shadow glow. Verified clean with `flutter analyze` (0 errors, 0 warnings). — [Antigravity]
 
 - 2026-10-09 — Account Details Polish & Third Card Color Customization (`bottom_sheets.dart`, `dynamic_card_deck.dart`, `paypink_theme.dart`):
