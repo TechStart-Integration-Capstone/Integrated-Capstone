@@ -1,4 +1,5 @@
 # Changelog
+<<<<<<< Updated upstream
 - 2026-10-09 — Last Card Pinkish Beige Palette (`dynamic_card_deck.dart`, `paypink_theme.dart`):
   - **Last Card Theme Refinement (`dynamic_card_deck.dart`, `paypink_theme.dart`):** Styled the last card in an elegant, luxury **Pinkish Beige** palette (Desert Rose & Champagne Blush Nude: `#D8ABA0` to `#BA8677` transitioning to deep warm espresso `#261414` and gradient black `#09090B`); added `isLastCard` property to `PayPinkCardModel` and `_PayPinkCardFacePainter`; updated card title to 'Platinum Reserve' and configured delicate warm blush-cream specular bloom and matching card shadow glow. Verified clean with `flutter analyze` (0 errors, 0 warnings). — [Antigravity]
 
@@ -16,6 +17,9 @@
   - **MOB-104 (`main.dart`, `remittance_screen.dart`):** Replaced hardcoded date strings ("Oct 2, 2026") with dynamic `DateTime.now()` month/day/year formatting and dynamic reference years.
   - **MOB-105 (`remittance_screen.dart`):** Replaced hardcoded favorites with live backend endpoints (`GET /api/v1/accounts/favorites`, `POST`, `DELETE`); added client-side 12-digit format validation ("Invalid account number. PayPink account numbers must be 12 digits."); integrated server-side account lookup (`/accounts/recipients/lookup`) displaying "PayPink account not found. Please verify the account number."; prevented transfers and favorite saving until both validations pass. Verified clean with `flutter analyze` (0 issues). — [Antigravity]
 
+=======
+- 2026-10-09 — Fixed Loan Schedule & _DetailRow Compilation Errors (`bottom_sheets.dart`): Added explicit `.map<Widget>()` type parameter to `rows.map` in `showLoanSchedule` to fix `List<dynamic>` type assignment error; added `isSmall` parameter with default value `false` to `_DetailRow` constructor. Verified clean compile with `flutter analyze` (0 errors, 0 warnings). — [Antigravity]
+>>>>>>> Stashed changes
 - 2026-10-09 — Merge Conflict Resolution in `mobile/lib/services/account_service.dart`:
   - Resolved merge conflict between `main` branch updates (loan-service `fetchLoans()` aggregation, RFC-7807 problem details parsing, and `ProfileUnavailableException`) and Member 5 mobile hardening (resilient `/accounts/me`, `/auth/banking/me`, `/accounts/customer/$customerId`, and `/accounts` cascading fallbacks, admin `/accounts/customers` elimination, centralized `ApiClient.extractErrorMessage` integration). Preserved both functionalities with 100% test coverage: all 17 mobile tests pass (`account_model_test.dart` and `widget_test.dart`), `flutter analyze` has 0 issues, and all 24 gateway unit tests pass. — [dom]
 

@@ -251,7 +251,7 @@ class PayPinkBottomSheets {
               child: ListView(
                 shrinkWrap: true,
                 children: rows
-                    .map((r) => _DetailRow(
+                    .map<Widget>((r) => _DetailRow(
                           label: '#${r.installmentNo} · ${r.dueDate}',
                           value: '${formatPeso(r.totalDue)} · ${r.statusLabel}',
                           valueColor: r.isPaid ? PayPinkTheme.green : (r.isOverdue ? PayPinkTheme.red : null),
