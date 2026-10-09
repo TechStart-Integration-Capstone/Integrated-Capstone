@@ -10,41 +10,11 @@ import java.time.LocalDateTime;
  *  - account_id       — nullable; populated from LEDGER_MUTATION_AUDIT when available
  *  - azure_sql_status — was oracle_status; reflects Azure SQL LEDGER_TRANSACTION.status
  */
-/**
- * Maps to RECONCILIATION_LOG in PostgreSQL (ledger_audit_db).
- *
- * Column notes (post Phase-1 migration):
- *  - account_id       — nullable; populated from LEDGER_MUTATION_AUDIT when available
- *  - azure_sql_status — was oracle_status; reflects Azure SQL LEDGER_TRANSACTION.status
- */
 @Entity
 @Table(name = "RECONCILIATION_LOG")
 public class ReconciliationLog {
 
-
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "recon_id")
-    private Long reconId;
-
-    @Column(name = "transaction_id", nullable = false)
-    private Long transactionId;
-
-    /** Nullable — populated from LEDGER_MUTATION_AUDIT when an audit row exists. */
-    @Column(name = "account_id")
-    private Long accountId;
-
-    /** Azure SQL LEDGER_TRANSACTION.status (was oracle_status — renamed in Phase 1). */
-    @Column(name = "azure_sql_status", nullable = false, length = 30)
-    private String azureSqlStatus;
-
-    @Column(name = "postgres_status", nullable = false, length = 30)
-    private String postgresStatus;
-
-    @Column(name = "recon_status", nullable = false, length = 30)
-    private String reconStatus;
-
-    @Column(name = "recon_date", nullable = false, updatable = false)
-    private LocalDateTime reconDate = LocalDateTime.now();
     @Column(name = "recon_id")
     private Long reconId;
 
