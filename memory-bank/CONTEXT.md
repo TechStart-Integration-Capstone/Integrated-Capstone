@@ -13,6 +13,10 @@ _Last Updated: 2026-10-09 (Savings recovery worker proxy fix validated; 28 accou
 
 ## Active Initiative: T24 Core Banking & DDD Domain Refactoring
 
+### Savings milestones (2026-10-09)
+
+- Bank and offline preview share savings-milestones.js, showing PHP 10K, 100K, 500K, 1M, 2M and later million milestones. Progress targets the next unreached amount, and reached tiles reflect current personal savings. Larger totals show current/next million milestones without an unbounded list. Existing first-1K recognition and completed-goal count remain. Syntax, existing offline/mocked bank browser checks (including mobile overflow), and whitespace checks pass. Frontend-only change; rebuild the frontend image on the other machine to deploy. No migration or deployment performed.
+
 ### Savings rollout debugging (2026-10-09)
 
 - The backend guide now explicitly requires Java compilation before Docker image rebuilding because service Dockerfiles copy prebuilt JARs. It documents the worker proxy fix and preserves existing pending intents; no new migration is needed.

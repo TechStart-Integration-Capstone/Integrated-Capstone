@@ -2,6 +2,10 @@
 
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 - Savings milestone update validation complete: existing offline preview and mocked bank browser suite passes, including mobile overflow checks; JavaScript syntax and whitespace checks pass. Frontend rebuild required on the other machine; no JAR or migration changes for this UI update. - [dom]
+
+- 2026-10-09 - Replaced the single First Million progress display with shared personal savings milestones at PHP 10K, 100K, 500K, 1M, 2M and subsequent million increments in bank and preview. Added reached/next states, remaining amount and responsive milestone tiles; bumped bank asset versions. Syntax checks pass; browser validation pending. No backend/database/deployment changes. - [dom]
+
 - 2026-10-09 - Validated SavingsWorker proxy fix: all 28 account-service tests pass (11 savings tests), including pending recovery without duplicate intent, single scheduled contribution/next-date advancement and once-only circle notification. Whitespace checks pass. Fix not deployed; user must sync source, rebuild account-service JAR and recreate its container. No database migration required. - [dom]
 
 - 2026-10-09 - Corrected docs/savings-backend.md rollout instructions to compile Java JARs before Docker builds; documented pending recovery, proxy fix and account-service-only rebuild without a new database migration. Worker regression validation is running. - [dom]

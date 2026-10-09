@@ -1,4 +1,8 @@
-/* Savings prototype: shared by the banking page and the offline preview. */
+/* Savings styles shared by the banking page and the offline preview. */
+.sv-milestone-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:10px;padding:0;margin:18px 0;list-style:none}
+.sv-milestone-list li{padding:12px;border:1px solid #ece5e9;border-radius:10px;background:#faf8f9;min-width:0}
+.sv-milestone-list strong{display:block;font-size:14px;overflow-wrap:anywhere}.sv-milestone-list small{display:block;margin-top:5px;font-size:10px;color:#796c76}
+.sv-milestone-list .sv-milestone-reached{background:#f9e8f0;border-color:#e6bdd0;color:#651c3e}.sv-milestone-list .sv-milestone-next{border-color:#ac517b;background:#fff8fb}
 .savings-view{--sv-rose:#f8e8ee;--sv-muted:#796c76;--sv-border:#ece5e9;color:var(--ink,#29242a)}
 .sv-heading,.sv-section-heading,.sv-card-top{display:flex;align-items:center;justify-content:space-between;gap:18px}
 .sv-heading{margin-bottom:22px}.sv-heading h1{font-size:32px;letter-spacing:-1.2px;margin:8px 0}.sv-heading p,.sv-section-heading p{color:var(--sv-muted);font-size:12px;margin:0}
