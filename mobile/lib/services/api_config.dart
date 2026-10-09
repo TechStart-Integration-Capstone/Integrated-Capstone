@@ -22,9 +22,9 @@ class ApiConfig {
       return envUrl;
     }
     if (kIsWeb) {
-      final host = Uri.base.host;
-      if (host.isNotEmpty && host != 'localhost' && host != '127.0.0.1') {
-        return 'http://$host:8080/api/v1';
+      final origin = Uri.base.origin;
+      if (origin.isNotEmpty && !origin.contains('localhost') && !origin.contains('127.0.0.1')) {
+        return '$origin/api/v1';
       }
     }
     return defaultCloudGateway;

@@ -4,6 +4,9 @@
   - **Loans Aggregation (`account_service.dart`):** Updated `AccountService.fetchProfile()` to asynchronously merge active loans from `fetchLoans()` (`GET /api/v1/loans`) into `UserProfile.accounts`, ensuring loan accounts are recognized across Dashboard, Accounts tab, and Payment sheets.
   - **Real-Time Instant Refresh (`main.dart`, `dashboard_screen.dart`):** Added 'Apply Loan' quick action button on Overview dashboard and wired `onRefreshData` callback to immediately trigger `_loadLiveDatabaseData(bypassCache: true)` when a loan offer is accepted or a payment is submitted, rendering updated balances and opening `LoanPaymentSheet` without requiring page reloads or app restarts. Verified clean build (`flutter analyze` 0 errors) and 100% test pass rate (`17/17` tests passed). — [dom]
 
+- 2026-10-09 — Mobile Web Reverse Proxy Routing Parity:
+  - **Dynamic Origin Proxy Routing (`api_config.dart`, `mobile/Dockerfile`):** Removed hardcoded port 8080 cross-origin call; configured Flutter Web to use dynamic origin `${Uri.base.origin}/api/v1` matching the Nginx container reverse proxy on port 3002. Eliminates cross-port network blocks and CORS overhead while preserving direct cloud gateway connection for local emulator and desktop builds. Verified with `dart analyze` (0 errors). — [levi & Antigravity]
+
 - 2026-10-09 — Azure Gateway FQDN & Font Runtime Fetching Fixes:
   - **Azure FQDN Correction (`api_config.dart`, `mobile/Dockerfile`):** Corrected backend gateway host from non-existent `paypink-levi-westus2.westus2.cloudapp.azure.com` to authoritative cloud host `paypink.westus2.cloudapp.azure.com:8080/api/v1`.
   - **Browser Cache Prevention (`mobile/nginx.conf`):** Added no-cache headers for `index.html` and service workers so browser clients immediately reflect new Flutter builds upon reload.

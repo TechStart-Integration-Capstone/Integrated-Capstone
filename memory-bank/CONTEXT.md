@@ -2,6 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (Aligned Mobile Web to dynamic reverse proxy origin ${Uri.base.origin}/api/v1 via container Nginx on port 3002, matching Web Banking architecture and eliminating cross-port CORS blocks)_
 _Last Updated: 2026-10-09 (Mobile real-time loan origination & instant state refresh implemented: merged fetchLoans() into fetchProfile() UserProfile.accounts, and wired onRefreshData to trigger _loadLiveDatabaseData(bypassCache: true) immediately upon loan acceptance; 17/17 tests pass clean by [dom])_  
 _Last Updated: 2026-10-09 (Corrected Azure FQDN to paypink.westus2.cloudapp.azure.com:8080/api/v1, enabled GoogleFonts runtime fetching, and tuned nginx caching to avoid stale mobile app browser caching)_
 _Last Updated: 2026-10-09 (Self-contained offline fonts bundled in mobile/assets/fonts/ and registered in pubspec.yaml; resolved blank white screen crash on http://localhost:3002 Docker release; 17/17 tests pass by [dom])_  
