@@ -81,7 +81,7 @@ public class BankingController {
     @Operation(summary = "Direct transfer (Gone/Deprecated)", description = "Deprecated (410 Gone). All transfers must be routed via /api/v1/remittance/transfer.")
     @PostMapping("/transfers")
     public BankingTransferService.Receipt transfer(@Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String token,
-                                                   @Valid @RequestBody BankingTransferService.Request request) {
+                                                   @RequestBody(required = false) Object request) {
         throw new ResponseStatusException(HttpStatus.GONE,
                 "Direct database transfer is deprecated. All transfers must be routed via /api/v1/remittance/transfer.");
     }
