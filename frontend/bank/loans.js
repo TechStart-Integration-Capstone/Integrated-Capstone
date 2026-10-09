@@ -2,10 +2,10 @@
 
 // Phase 6 Loans: apply → offer → accept → my loans → schedule → pay. All money moves server-side.
 const LOANS_API = '/api/v1/loans';
-const loanState = {owner:null, loans:[], eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}};
+const loanState = {owner:null, loans:[], progress:{}, eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}};
 
 function resetLoansFor(owner) {
-  Object.assign(loanState, {owner, loans:[], eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}});
+  Object.assign(loanState, {owner, loans:[], progress:{}, eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}});
 }
 
 async function loanApi(path, {method = 'GET', body, idempotencyKey} = {}) {
@@ -37,6 +37,26 @@ const loanPill = status => `<span class="pill ${['APPROVED','ACTIVE','PAID','CLO
 const loanDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'}) : '—';
 const declineText = reason => ({CREDIT_SCORE_TOO_LOW:'Your credit score is below our minimum for a personal loan.', INSUFFICIENT_INCOME:'The monthly installment would be more than 30% of your monthly income.', EXISTING_LOAN_OVERDUE:'You have a loan with an overdue installment. Please settle it first.', CREDIT_LIMIT_REACHED:'You’ve reached your credit limit. Pay down your current loan to borrow more.'}[reason] || 'We can’t offer a loan right now.');
 
+// Payments left and the full payoff amount come from the schedule: payoff = penalty + every unpaid
+// installment's remaining principal and interest, the same total the server accepts as a final payment.
+function loanProgressFrom(loan, schedule) {
+  const rows = schedule?.installments || [];
+  const unpaid = rows.filter(r => r.status !== 'PAID');
+  const owedCents = Math.round(Number(loan.penaltyDue || 0) * 100)
+    + unpaid.reduce((sum, r) => sum + Math.round((Number(r.totalDue) - Number(r.amountPaid || 0)) * 100), 0);
+  return {remaining: unpaid.length, total: rows.length, owed: owedCents / 100};
+}
+
+async function loadLoanProgress(loans) {
+  const open = loans.filter(l => l.status !== 'CLOSED');
+  const results = await Promise.allSettled(open.map(l => loanApi(`/${l.loanId}/schedule`)));
+  const progress = {};
+  results.forEach((r, i) => { if (r.status === 'fulfilled') progress[open[i].loanId] = loanProgressFrom(open[i], r.value); });
+  return progress;
+}
+
+const paymentsLeft = p => `${p.remaining} of ${p.total} monthly ${p.total === 1 ? 'payment' : 'payments'}`;
+
 async function loadLoans() {
   if (!state.session || !state.profile || loanState.loading) return;
   if (loanState.owner !== state.profile.username) resetLoansFor(state.profile.username);
@@ -46,6 +66,8 @@ async function loadLoans() {
     const [loans, eligibility] = await Promise.all([loanApi(''), loanApi('/eligibility').catch(() => null)]);
     if (generation !== state.generation) return;
     loanState.loans = loans; loanState.eligibility = eligibility; loanState.loaded = true; loanState.error = '';
+    loanState.progress = await loadLoanProgress(loans);
+    if (generation !== state.generation) return;
   } catch (error) {
     if (generation === state.generation) loanState.error = error.message;
   } finally {
@@ -141,7 +163,7 @@ function myLoansMarkup() {
   if (!loanState.loans.length) return '<p class="muted">Loans you accept will appear here, with what’s due next.</p>';
   return loanState.loans.map(loan => `<article class="account-card" style="margin-bottom:16px"><div class="account-card-top"><strong>${escapeHtml(loan.referenceNo)}</strong>${loanPill(loan.status)}</div>
     ${missedAutoDebit(loan) ? autoDebitAlert(loan) : ''}
-    <dl class="detail-list">${detail('Outstanding principal',balance(loan.outstandingPrincipal))}${Number(loan.penaltyDue) > 0 ? detail('Penalty due',balance(loan.penaltyDue)) : ''}
+    <dl class="detail-list">${detail('Outstanding principal',balance(loan.outstandingPrincipal))}${loanState.progress[loan.loanId] ? detail('Payments left',escapeHtml(paymentsLeft(loanState.progress[loan.loanId]))) + detail('Total to pay off',balance(loanState.progress[loan.loanId].owed)) : ''}${Number(loan.penaltyDue) > 0 ? detail('Penalty due',balance(loan.penaltyDue)) : ''}
     ${loan.nextDue ? detail('Next payment',`${balance(loan.nextDue.amount)} · ${escapeHtml(loanDate(loan.nextDue.dueDate))}`) + detail('Auto-debit',`On the due date from ${escapeHtml(maskedNumber(loan.accountNo))}`) : ''}${detail('Rate · term',`${escapeHtml(loan.annualRate)}% · ${escapeHtml(loan.termMonths)} months`)}</dl>
     <div class="dialog-actions"><button class="btn btn-secondary" type="button" data-loan-action="schedule" data-id="${loan.loanId}">View schedule</button>${loan.status !== 'CLOSED' ? `<button class="btn btn-primary" type="button" data-loan-action="pay" data-id="${loan.loanId}">Pay now</button>` : ''}</div></article>`).join('');
 }
@@ -203,21 +225,50 @@ async function showSchedule(loanId) {
   } catch (error) { toast(error.message, true); }
 }
 
-function showPayForm(loanId) {
+async function showPayForm(loanId) {
   const loan = loanState.loans.find(l => l.loanId === loanId);
   if (!loan) return;
+  // Refresh the payoff figure so "Full balance" matches what the server will accept right now.
+  let progress = loanState.progress[loanId];
+  try { progress = loanProgressFrom(loan, await loanApi(`/${loanId}/schedule`)); loanState.progress[loanId] = progress; }
+  catch { /* Fall back to the figure loaded with the page, if any. */ }
   const suggested = (Number(loan.nextDue?.amount || 0) + Number(loan.penaltyDue || 0)).toFixed(2);
+  const option = (id, label, amount, checked) => `<label class="loan-pay-option"><input type="radio" name="option" value="${id}" data-amount="${escapeHtml(amount)}" ${checked ? 'checked' : ''}><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(money(amount))}</small></span></label>`;
+  const options = progress ? `<fieldset class="loan-pay-options"><legend>How much would you like to pay?</legend>
+      ${Number(suggested) > 0 ? option('next', 'Next payment', suggested, true) : ''}
+      ${option('full', 'Full balance', progress.owed.toFixed(2), Number(suggested) <= 0)}
+      <label class="loan-pay-option"><input type="radio" name="option" value="other"><span><strong>Another amount</strong><small>Up to ${escapeHtml(money(progress.owed))}</small></span></label>
+    </fieldset>
+    <p class="muted loan-pay-left">${escapeHtml(paymentsLeft(progress))} left. Paying the full balance closes your loan.</p>` : '';
+  const initial = Number(suggested) > 0 || !progress ? suggested : progress.owed.toFixed(2);
   showDialog(`Pay loan ${loan.referenceNo}`, `<form id="loan-pay-form" class="auth-form" data-id="${loanId}"><p class="muted">The payment is taken from the account the loan was paid into. Any penalty is paid first, then your oldest installment.</p>
-    <div class="form-field"><label for="loan-pay-amount">Amount (PHP)</label><input id="loan-pay-amount" name="amount" type="number" min="0.01" step="0.01" required value="${escapeHtml(suggested)}"></div>
+    ${options}
+    <div class="form-field"><label for="loan-pay-amount">Amount (PHP)</label><input id="loan-pay-amount" name="amount" type="number" min="0.01" step="0.01" ${progress ? `max="${progress.owed.toFixed(2)}"` : ''} required value="${escapeHtml(initial)}"></div>
     <div id="loan-pay-error" class="form-error" role="alert" hidden></div><button class="btn btn-primary" type="submit">Pay now</button></form>`);
 }
+
+// Choosing an option fills the amount; typing a different amount switches to "Another amount".
+document.addEventListener('change', event => {
+  if (event.target.name !== 'option' || !event.target.closest('#loan-pay-form')) return;
+  const input = document.querySelector('#loan-pay-amount');
+  if (event.target.dataset.amount) input.value = event.target.dataset.amount; else input.focus();
+});
+document.addEventListener('input', event => {
+  if (event.target.id !== 'loan-pay-amount') return;
+  const form = event.target.closest('#loan-pay-form');
+  const match = [...form.querySelectorAll('input[name="option"][data-amount]')].find(o => Number(o.dataset.amount) === Number(event.target.value));
+  const choice = match || form.querySelector('input[name="option"][value="other"]');
+  if (choice) choice.checked = true;
+});
 
 async function payLoan(form) {
   const loanId = Number(form.dataset.id);
   const amount = Number(new FormData(form).get('amount'));
   const errorBox = form.querySelector('#loan-pay-error'), button = form.querySelector('[type="submit"]');
   errorBox.hidden = true;
-  if (!Number.isFinite(amount) || amount <= 0) { errorBox.textContent = 'Enter a positive amount.'; errorBox.hidden = false; return; }
+  if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > .00001) { errorBox.textContent = 'Enter a positive amount with at most two decimal places.'; errorBox.hidden = false; return; }
+  const owed = loanState.progress[loanId]?.owed;
+  if (owed !== undefined && Math.round(amount * 100) > Math.round(owed * 100)) { errorBox.textContent = `That’s more than you owe. The full balance is ${money(owed)}.`; errorBox.hidden = false; return; }
   const pending = loanState.payKeys[loanId];
   const key = pending && pending.amount === amount
     ? pending.key

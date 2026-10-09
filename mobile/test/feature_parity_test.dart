@@ -100,4 +100,20 @@ void main() {
     expect(ReportService.validateRange(DateTime(2026, 1, 2), DateTime(2026, 1, 1)), isNotNull);
     expect(ReportService.validateRange(DateTime(2025, 1, 1), DateTime(2026, 1, 3)), isNotNull);
   });
+
+  test('payments left and payoff come from the schedule (same as web loans.js)', () {
+    LoanInstallment row(int n, double due, double paid, String status) => LoanInstallment(
+          installmentNo: n, dueDate: '2026-1$n-01', totalDue: due, amountPaid: paid, status: status);
+    final loan = BankAccount.fromLoanJson(loanJson(penalty: 36)).withSchedule([
+      row(1, 1800, 1800, 'PAID'),
+      row(2, 1800, 500, 'OVERDUE'),
+      row(3, 1800, 0, 'PENDING'),
+    ]);
+    expect(loan.paymentsRemaining, 2);
+    expect(loan.paymentsTotal, 3);
+    expect(loan.paymentsLeftLabel, '2 of 3 monthly payments left');
+    // penalty 36 + (1800 - 500) + 1800
+    expect(loan.payoffAmount, 3136);
+  });
 }
+

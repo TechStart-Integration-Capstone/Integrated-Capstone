@@ -34,6 +34,11 @@ class BankAccount {
   /// failure still applies (same rule as the web `missedAutoDebit` in loans.js).
   final double? missedAutoDebitAmount;
   final String? missedAutoDebitDate;
+  /// Loans only, from the repayment schedule: installments not yet fully paid, all installments,
+  /// and the full payoff amount (penalty + every unpaid installment), the most one repayment can be.
+  final int? paymentsRemaining;
+  final int? paymentsTotal;
+  final double? payoffAmount;
 
   BankAccount({
     required this.accountId,
@@ -52,9 +57,46 @@ class BankAccount {
     this.termMonths,
     this.missedAutoDebitAmount,
     this.missedAutoDebitDate,
+    this.paymentsRemaining,
+    this.paymentsTotal,
+    this.payoffAmount,
   });
 
   bool get hasMissedAutoDebit => isLoan && missedAutoDebitAmount != null;
+
+  /// e.g. "8 of 12 monthly payments left"; null until the schedule is known.
+  String? get paymentsLeftLabel {
+    final left = paymentsRemaining, total = paymentsTotal;
+    if (left == null || total == null || total == 0) return null;
+    return '$left of $total monthly ${total == 1 ? 'payment' : 'payments'} left';
+  }
+
+  /// Copy with figures derived from the loan's repayment schedule.
+  BankAccount withSchedule(List<LoanInstallment> rows) {
+    final unpaid = rows.where((r) => !r.isPaid);
+    final owedCents = ((penaltyDue ?? 0) * 100).round() + unpaid.fold<int>(0, (sum, r) => sum + (r.remaining * 100).round());
+    return BankAccount(
+      accountId: accountId,
+      accountNumber: accountNumber,
+      accountType: accountType,
+      currency: currency,
+      currentBalance: currentBalance,
+      status: status,
+      outstandingDebt: outstandingDebt,
+      minimumPayment: minimumPayment,
+      dueDate: dueDate,
+      interestRate: interestRate,
+      loanId: loanId,
+      repaymentAccountNumber: repaymentAccountNumber,
+      penaltyDue: penaltyDue,
+      termMonths: termMonths,
+      missedAutoDebitAmount: missedAutoDebitAmount,
+      missedAutoDebitDate: missedAutoDebitDate,
+      paymentsRemaining: unpaid.length,
+      paymentsTotal: rows.length,
+      payoffAmount: owedCents / 100,
+    );
+  }
 
   bool get isChecking =>
       accountType.contains('CHECKING') || accountType.contains('EVERYDAY');
@@ -159,6 +201,9 @@ class BankAccount {
       termMonths: termMonths ?? this.termMonths,
       missedAutoDebitAmount: missedAutoDebitAmount,
       missedAutoDebitDate: missedAutoDebitDate,
+      paymentsRemaining: paymentsRemaining,
+      paymentsTotal: paymentsTotal,
+      payoffAmount: payoffAmount,
     );
   }
 
@@ -589,12 +634,17 @@ class AccountService {
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
         if (data is List) {
-          return data
+          final loans = data
               .whereType<Map<String, dynamic>>()
               .where((l) => const ['ACTIVE', 'OVERDUE'].contains(l['status']?.toString().toUpperCase()))
               .map(BankAccount.fromLoanJson)
               .where((l) => l.loanId != null)
               .toList();
+          // Attach payments left and the payoff total from each loan's schedule (same as the web).
+          return await Future.wait(loans.map((loan) async {
+            final rows = await fetchLoanSchedule(loan);
+            return rows == null ? loan : loan.withSchedule(rows);
+          }));
         }
       }
     } catch (e) {
