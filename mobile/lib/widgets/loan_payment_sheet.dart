@@ -302,7 +302,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
               Text(
                 'Pay From',
                 style: PayPinkTheme.body(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: textInk,
                 ),
@@ -371,7 +371,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
               Text(
                 'Payment Amount',
                 style: PayPinkTheme.body(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: textInk,
                 ),

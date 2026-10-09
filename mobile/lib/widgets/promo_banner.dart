@@ -120,7 +120,7 @@ class _PromoBannerState extends State<PromoBanner> {
                       Text(
                         'Offers & Highlights',
                         style: PayPinkTheme.display(
-                          fontSize: 12.5,
+                          fontSize: 13,
                           fontWeight: FontWeight.w800,
                           color: isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink,
                           letterSpacing: -0.2,
@@ -255,8 +255,8 @@ class _PromoBannerState extends State<PromoBanner> {
                                       ),
                                       child: Text(
                                         promo.tag,
-                                        style: PayPinkTheme.mono(
-                                          fontSize: 8.5,
+                                        style: PayPinkTheme.eyebrow(
+                                          fontSize: 10,
                                           fontWeight: FontWeight.w800,
                                           color: (hasImage || isDark) ? Colors.white : Colors.white,
                                           letterSpacing: 0.5,
@@ -286,7 +286,7 @@ class _PromoBannerState extends State<PromoBanner> {
                                   child: Text(
                                     promo.body,
                                     style: PayPinkTheme.body(
-                                      fontSize: 10.5,
+                                      fontSize: 11,
                                       color: (hasImage || isDark)
                                           ? Colors.white.withValues(alpha: 0.84)
                                           : (isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted),
@@ -321,7 +321,7 @@ class _PromoBannerState extends State<PromoBanner> {
                                         Text(
                                           promo.actionLabel,
                                           style: PayPinkTheme.display(
-                                            fontSize: 10.5,
+                                            fontSize: 11,
                                             fontWeight: FontWeight.w800,
                                             color: (hasImage || isDark)
                                                 ? PayPinkTheme.wine

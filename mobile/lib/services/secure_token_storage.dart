@@ -103,11 +103,32 @@ class SecureTokenStorage {
     return double.tryParse(str ?? '0.00') ?? 0.00;
   }
 
-  /// Hashes and securely persists user MPIN
-  static Future<void> savePin(String pin) async {
+  static const String _pinOwnerKey = 'paypink_mpin_owner';
+
+  /// Hashes and securely persists user MPIN, remembering which user it belongs to.
+  static Future<void> savePin(String pin, {String? owner}) async {
     final bytes = utf8.encode('paypink_salt_${pin.trim()}');
     final digest = sha256.convert(bytes);
     await _write(_pinHashKey, digest.toString());
+    final given = owner?.trim() ?? '';
+    final resolvedOwner = (given.isNotEmpty ? given : (await getUsername() ?? '')).trim().toLowerCase();
+    if (resolvedOwner.isNotEmpty) {
+      await _write(_pinOwnerKey, resolvedOwner);
+    }
+  }
+
+  /// True when this device already holds an MPIN for [username].
+  /// A different user signing in on the same device must create their own.
+  static Future<bool> hasPinFor(String username) async {
+    if (!await hasPin()) return false;
+    final owner = await _read(_pinOwnerKey);
+    final user = username.trim().toLowerCase();
+    if (owner == null || owner.isEmpty) {
+      // MPIN saved before owners were recorded: adopt it for this user.
+      if (user.isNotEmpty) await _write(_pinOwnerKey, user);
+      return true;
+    }
+    return owner == user;
   }
 
   /// Verifies input PIN against securely persisted SHA-256 hash
@@ -130,6 +151,15 @@ class SecureTokenStorage {
     await _delete(_pinHashKey);
   }
 
+  /// Ends the signed-in session (token, customer ID, cached balance) but keeps the
+  /// MPIN and the remembered user, so the MPIN only has to be created once per device.
+  static Future<void> clearSession() async {
+    await _delete(_tokenKey);
+    await _delete(_customerIdKey);
+    await _delete(_cachedBalanceKey);
+  }
+
+  /// Wipes everything on the device, including the MPIN.
   static Future<void> clearVault() async {
     _memoryFallback.clear();
     if (kIsWeb) {

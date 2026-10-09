@@ -34,7 +34,7 @@ class PayPinkShimmer extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: blockColor,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(14),
         ),
       ),
     );

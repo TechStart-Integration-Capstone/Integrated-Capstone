@@ -127,7 +127,7 @@ class ApiClient {
   void _handleResponseStatus(http.Response response) {
     if (response.statusCode == 401) {
       debugPrint('[ApiClient] HTTP 401 Unauthorized encountered on ${response.request?.url}. Triggering session expiration.');
-      SecureTokenStorage.clearVault();
+      SecureTokenStorage.clearSession();
       triggerUnauthorized();
     }
   }
