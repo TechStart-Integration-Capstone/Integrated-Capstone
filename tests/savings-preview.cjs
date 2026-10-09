@@ -130,7 +130,7 @@ function send(method, params = {}, sessionId) {
     })`);
     const liveResults = await evaluate(fs.readFileSync(path.join(__dirname, 'savings-live-checks.js'), 'utf8'));
     for (const result of liveResults) console.log(`PASS ${result}`);
-    assert.equal(await evaluate(`document.querySelector('#breadcrumb-page').textContent`), 'Savings', 'Savings navigation updates breadcrumb');
+    assert.equal(await evaluate(`document.querySelector('#breadcrumb-page').textContent`), 'Savings Hub', 'Savings Hub navigation updates breadcrumb');
     assert.equal(await evaluate(`document.querySelector('.nav-link.active').dataset.page`), 'savings', 'Savings navigation is active');
     assert.equal(await evaluate(`document.querySelector('[data-page="loans"]').nextElementSibling.dataset.page`), 'savings', 'Savings follows Loans');
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth`), true, 'Bank shell fits narrow viewport');
