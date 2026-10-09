@@ -1,6 +1,9 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — Fix In-Memory Concurrency Test Race Condition (`transaction-service`):
+  - **`LedgerMutationServiceTest.java`:** Synchronized `service.mutateBalance` calls across the 10 concurrent executor threads on the `shared` account instance in `concurrency_pessimisticLock_preventsOverdraft`. In a mock unit test lacking a live database engine with `UPDLOCK, ROWLOCK`, this eliminates in-memory thread races and accurately simulates database-level pessimistic serialization, guaranteeing exactly 1 success and 9 overdraft rejections deterministically on multi-core CI runners. All 107 tests pass. — [dom]
+
 - 2026-10-09 — CI/CD Pipeline & Newman Contract Test Runner Overhaul:
   - **CI Temporary Stack Orchestration (`.github/workflows/pipeline.yml`):**
     - Split Stage 2 container startup into a 2-phase lifecycle (`CI_DATASTORES` then `CI_APPS`) to eliminate race conditions.

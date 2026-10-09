@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-09 (CI/CD pipeline Stage 2 test stack lifecycle overhaul, explicit Azure SQL and PostgreSQL migrations in CI & Prod, and Newman API contract testing alignment by [dom])_  
+_Last Updated: 2026-10-09 (CI/CD pipeline Stage 2 test stack lifecycle overhaul, explicit Azure SQL and PostgreSQL migrations in CI & Prod, Newman API contract testing alignment, and transaction-service concurrency unit test fix by [dom])_  
 
 ---
 
