@@ -2,6 +2,9 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (Permanent Web & Mobile Cloud Synchronization established; mobile defaults to Azure Cloud API Gateway and aligns directly with /auth/banking/me endpoint, rendering 3 live accounts totaling ₱235,238.85 identically across Web Banking and Mobile App)_
+_Last Updated: 2026-10-09 (Hosted Azure Cloud SQL paypink-sql.database.windows.net schema patched with roles, Saga columns, and synonyms; Web Banking login and end-to-end remittance transfers fully verified operational by [levi])_  
+_Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
 _Last Updated: 2026-10-09 (AccountService conflict resolved after pulling from main: seamlessly merged loan-service fetchLoans aggregation, ProfileUnavailableException, and RFC-7807 problem details with Member 5 cascading profile fallbacks and ApiClient error extractor; 17/17 mobile tests pass by [dom])_  
 _Last Updated: 2026-10-09 (Member 5 Implementation: Mobile backlog MOB-501 through MOB-506 delivered, Gateway CORS and routing aligned, CQRS activity feed integrated, RFC-7807 error handling unified, all 6 widget tests and 24 gateway tests passing by [dom])_  
 _Last Updated: 2026-10-09 (Mobile sprint MOB-304/301/302/303/305: payload normalization, offline mock purge, client risk removal, RFC-7807 error surfacing, direct settlement with skipClientWindow, reversal UI purge by [dom])_  
