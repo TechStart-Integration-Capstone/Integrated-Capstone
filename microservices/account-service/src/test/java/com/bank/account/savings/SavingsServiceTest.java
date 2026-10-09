@@ -30,9 +30,11 @@ class SavingsServiceTest {
   @Bean PlatformTransactionManager transactionManager(DataSource d){return new DataSourceTransactionManager(d);}
   @Bean SavingsCoreClient core(){return mock(SavingsCoreClient.class);}
   @Bean ObjectMapper json(){return new ObjectMapper().findAndRegisterModules();}
+  @Bean SavingsWorker worker(SavingsService service,SavingsOperations operations,JdbcTemplate jdbc,SavingsCoreClient core){return new SavingsWorker(service,operations,jdbc,core);}
  }
  @Autowired SavingsService service;
  @Autowired SavingsOperations operations;
+ @Autowired SavingsWorker worker;
  @Autowired SavingsCoreClient core;
  @Autowired JdbcTemplate jdbc;
  @Autowired DataSource dataSource;
@@ -124,6 +126,35 @@ class SavingsServiceTest {
   service.schedule(1L,goal,new SavingsRequests.Schedule(new BigDecimal("500"),"WEEKLY",due,false));
   assertThatThrownBy(()->operations.submitScheduled(1L,"schedule:"+goal+":"+due,operation(goal),snapshot)).isInstanceOf(ResponseStatusException.class);
   verify(core,never()).apply(any());
+ }
+
+ @Test void workerRecoversPendingIntentWithTransactionalServiceProxy() {
+  assertThat(org.springframework.aop.support.AopUtils.isAopProxy(service)).isTrue();
+  String goal=create();when(core.apply(any())).thenThrow(new RuntimeException("timeout"));
+  var pending=operations.submit(1L,"worker-recovery",operation(goal));
+  doReturn(Map.of("status","CONFIRMED","operationId",pending.get("operationId"))).when(core).apply(any());
+  worker.poll();worker.poll();
+  assertThat(operations.status(1L,pending.get("operationId").toString()).get("status")).isEqualTo("CONFIRMED");
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM app.SAVINGS_ACTIVITY",Integer.class)).isEqualTo(1);
+  verify(core,times(2)).apply(any());
+  service.edit(1L,goal,new SavingsRequests.Edit("Recovered goal",new BigDecimal("10000"),LocalDate.now().plusMonths(6)));
+ }
+
+ @Test void workerExecutesDueScheduleAndAdvancesItWithTransactionalServiceProxy() {
+  String goal=create();LocalDate today=LocalDate.now(java.time.ZoneId.of("Asia/Manila"));
+  service.schedule(1L,goal,new SavingsRequests.Schedule(new BigDecimal("500"),"WEEKLY",today,true));
+  when(core.apply(any())).thenAnswer(call->{@SuppressWarnings("unchecked") var command=(Map<String,Object>)call.getArgument(0);return Map.of("status","CONFIRMED","operationId",command.get("operationId"));});
+  worker.poll();worker.poll();
+  verify(core,times(1)).apply(any());
+  assertThat(jdbc.queryForObject("SELECT next_due FROM app.SAVINGS_SCHEDULE WHERE goal_id=?",java.sql.Date.class,goal).toLocalDate()).isEqualTo(today.plusWeeks(1));
+  assertThat(operations.history(1L).get(0).get("idempotency_key")).isEqualTo("schedule:"+goal+":"+today);
+ }
+
+ @Test void workerNotifiesCompletedCircleWithTransactionalServiceProxy() {
+  var circle=service.createCircle(1L,new SavingsRequests.Circle(goal(11),new BigDecimal("10000"),false));
+  when(core.balances(11L)).thenReturn(Map.of(circle.get("goalId").toString(),new BigDecimal("10000")));
+  worker.notifyCompletedCircles();worker.notifyCompletedCircles();
+  assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM app.OUTBOX_EVENT",Integer.class)).isEqualTo(1);
  }
 
 }

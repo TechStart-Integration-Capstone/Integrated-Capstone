@@ -10,8 +10,8 @@ import java.util.*;
 
 @Service
 public class SavingsService {
- final JdbcTemplate jdbc;
- final SavingsCoreClient core;
+ private final JdbcTemplate jdbc;
+ private final SavingsCoreClient core;
  private final com.fasterxml.jackson.databind.ObjectMapper json;
  public SavingsService(JdbcTemplate jdbc,SavingsCoreClient core,com.fasterxml.jackson.databind.ObjectMapper json){this.jdbc=jdbc;this.core=core;this.json=json;}
  public void customer(Long customer) {

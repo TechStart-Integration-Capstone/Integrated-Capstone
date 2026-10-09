@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (Savings bank UI connected to backend; migration unapplied, [dom])_
+_Last Updated: 2026-10-09 (Savings recovery worker proxy fix validated; 28 account-service tests pass, [dom])_
 
 ---
 
@@ -12,6 +12,13 @@ _Last Updated: 2026-10-08 (Savings bank UI connected to backend; migration unapp
 - Local frontend change only; backend, API contracts and deployment unchanged. JavaScript syntax and 11 transaction-monitor tests pass; browser visual validation not performed.
 
 ## Active Initiative: T24 Core Banking & DDD Domain Refactoring
+
+### Savings rollout debugging (2026-10-09)
+
+- The backend guide now explicitly requires Java compilation before Docker image rebuilding because service Dockerfiles copy prebuilt JARs. It documents the worker proxy fix and preserves existing pending intents; no new migration is needed.
+
+- User reports applying schema-split, core and Savings migrations to Azure paypink and rebuilding/running on another machine. After correcting local/Azure configuration and rebuilding Java JARs, the live Savings UI works but a contribution remains pending. These deployment reports are user-provided, not independently verified from this machine.
+- Supplied logs show SavingsWorker crashing on service.jdbc because SavingsService is a transactional Spring proxy. Worker now constructor-injects its own JdbcTemplate and SavingsCoreClient instead of accessing proxy fields. Service dependencies are private. All 28 account-service tests pass, including three new Spring/H2 tests for worker recovery, due schedules and circle completion through the transactional service proxy. Whitespace checks pass. Existing durable intents/retry keys are preserved. Fix still needs syncing, JAR rebuilding and container recreation on the user's other machine. No database changes or local stack startup performed.
 
 ### Savings backend implementation (2026-10-08)
 

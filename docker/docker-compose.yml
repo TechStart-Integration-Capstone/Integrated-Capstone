@@ -184,9 +184,9 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
     volumes:
       - ./../microservices/auth-service/target/auth-service.jar:/app/app.jar
@@ -206,10 +206,10 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - APP_SAVINGS_ENABLED=${SAVINGS_ENABLED:-false}
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - APP_SAVINGS_ENABLED=${SAVINGS_ENABLED}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     volumes:
@@ -232,9 +232,9 @@ services:
         condition: service_healthy
     # No host port — internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -318,9 +318,9 @@ services:
     ports:
       - "8086:8086"
     environment:
-      - ORACLE_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - ORACLE_DATASOURCE_USERNAME=sa
-      - ORACLE_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - ORACLE_DATASOURCE_URL=${AZURE_SQL_URL}
+      - ORACLE_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - ORACLE_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
@@ -342,9 +342,9 @@ services:
         condition: service_healthy
     # No host port — internal only
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - OUTBOX_POLL_INTERVAL_MS=5000
       - OUTBOX_RETRY_INTERVAL_MS=30000
@@ -414,9 +414,9 @@ services:
         condition: service_healthy
     environment:
       - T24_SIMULATOR_URL=http://localhost:8090/ofs/process
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - OTEL_SERVICE_NAME=t24-adapter
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     volumes:
@@ -440,9 +440,9 @@ services:
     # No host port — internal only, accessed via api-gateway:8080 (/api/v1/loans/**)
     # Money moves only through transaction-service's /internal/remittance/transfer (not routed by the gateway).
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
-      - SPRING_DATASOURCE_USERNAME=sa
-      - SPRING_DATASOURCE_PASSWORD=PayPink2.0_StrongPass!
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_URL}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - ORCHESTRATOR_URL=http://transaction-service:8083
       - LOAN_SCHEMA_MIGRATION_ENABLED=false
     volumes:

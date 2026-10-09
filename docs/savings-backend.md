@@ -21,7 +21,8 @@ it never substitutes sample customer data.
 3. Set `SAVINGS_ENABLED=true` for Compose, or `APP_SAVINGS_ENABLED=true` directly on
    account-service. It defaults to false. This enables both customer endpoints and
    the recovery/schedule/completion worker.
-4. Build/start account-service, t24-adapter, outbox-publisher, notification-service
+4. Compile the Java JARs first (`scripts/build-all.ps1` from the repository root),
+   then build/start account-service, t24-adapter, outbox-publisher, notification-service
    and frontend with the rest of the banking stack. The frontend must be rebuilt too:
    Nginx serves the JavaScript copied into its image.
 5. Test with two test customers and small amounts using the bank's Savings navigation.
@@ -39,11 +40,14 @@ new files, to the other machine, then:
 2. From the repository root, in PowerShell, enable Savings and build/start the stack:
 
    ```powershell
+   .\scripts\build-all.ps1
    $env:SAVINGS_ENABLED = 'true'
    docker compose -f docker/docker-compose.yml up -d --build
    ```
 
    Keep the project's existing database and other environment configuration. The
+   service Dockerfiles copy prebuilt `target/*.jar` files; Docker `--build` does not
+   compile Java source. Do not proceed to Docker startup if the JAR build fails. The
    PowerShell setting applies to this terminal; for later starts, put
    `SAVINGS_ENABLED=true` in the Compose environment file you normally use. In an
    environment with Kafka automatic topic creation disabled, provision `savings.events`
@@ -208,6 +212,22 @@ persisted backend intents still recover through the worker and appear in activit
 Metadata creation is not automatically retried after an uncertain response: the UI
 refreshes the list and asks the customer to check it before creating another item.
 Initial funding and schedule setup report partial success separately.
+
+### Pending requests and the recovery worker
+
+A pending reservation is awaiting a confirmed core result, not manual admin approval.
+The recovery worker retries the original persisted command; never delete the intent
+or manually mark it confirmed to unlock the UI.
+
+The 2026-10-09 worker fix addresses a runtime `NullPointerException` on
+`this.service.jdbc`. Direct field access on the transactional service's Spring proxy
+read uninitialized proxy fields. The worker now receives `JdbcTemplate` and
+`SavingsCoreClient` through its own constructor. Recovery, due schedules and circle
+completion are covered by Spring/H2 tests using the transactional service proxy.
+Sync the fixed source and rebuild account-service's JAR before rebuilding/recreating
+its container. No new database migration is required for this fix. Existing pending
+intents will be retried on the worker's next cycle; their eventual outcome still
+depends on core/database/risk availability and validation.
 
 ### Circle creation and acceptance
 

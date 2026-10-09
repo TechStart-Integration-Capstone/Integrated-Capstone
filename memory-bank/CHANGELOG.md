@@ -2,6 +2,12 @@
 
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 - Validated SavingsWorker proxy fix: all 28 account-service tests pass (11 savings tests), including pending recovery without duplicate intent, single scheduled contribution/next-date advancement and once-only circle notification. Whitespace checks pass. Fix not deployed; user must sync source, rebuild account-service JAR and recreate its container. No database migration required. - [dom]
+
+- 2026-10-09 - Corrected docs/savings-backend.md rollout instructions to compile Java JARs before Docker builds; documented pending recovery, proxy fix and account-service-only rebuild without a new database migration. Worker regression validation is running. - [dom]
+
+- 2026-10-09 - Fixed SavingsWorker direct dependency-field access through the transactional SavingsService proxy, which caused null JDBC/core dependencies and stopped pending recovery, schedules and completion notifications in the user's runtime. Inject JdbcTemplate/SavingsCoreClient into worker; make service dependencies private. Added three Spring/H2 worker regression tests covering recovery, schedule advancement and once-only completion. Validation pending; no local stack or database changes. - [dom]
+
 - 2026-10-08 - Completed Savings frontend integration validation: authenticated bank flows and standalone preview browser checks pass, including pending/retry, partial success, membership/privacy, schedules, mobile layout and logout; JavaScript syntax and whitespace checks pass. Reviewed live mobile screenshot. Account suite passes 25 tests; prior core/outbox/notification checks remain valid (91 backend tests across runs). Updated CONTEXT.md and manual handoff docs. No migration applied, full stack started or deployment performed. - [dom]
 
 - 2026-10-08 - All 25 account-service tests pass; mocked bank and offline preview browser checks pass. Fixed delayed dialog-close handling, preserve plan inputs on Back, and use cryptographic retry IDs compatible with HTTP contexts. Updated docs/savings-backend.md with the manual migration/enable/build/test handoff and actual live-UI behavior. Final browser rerun pending for dialog fix; no live database or deployment changes. - [dom]
