@@ -1,5 +1,7 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
+
+- 2026-10-09 — Fix ReconciliationLog compilation error from PR #30 merge: removed duplicate field and javadoc declarations in ReconciliationLog.java; verified reconciliation-service compilation and 8/8 tests passed. — [dom]
 - 2026-10-06 — Dynamic Mobile Transfer & Activity History Binding: passed live user accounts (`_userProfile?.accounts`) to `RemittanceScreen` in `mobile/lib/main.dart`; updated `RemittanceService` and `RemittanceScreen` to submit and transfer using dynamic account numbers instead of hardcoded 5046/8504 mocks; updated `AccountService.fetchTransactions()` to query live database transactions from Azure SQL via `/auth/admin/transactions/today` & `/auth/banking/transactions`. — [Antigravity]
 - 2026-10-06 — Dynamic Mobile Dashboard & Accounts Binding: updated `mobile/lib/screens/dashboard_screen.dart` to dynamically render live database accounts (`widget.accounts`) fetched from Azure SQL instead of static hardcoded cards. — [Antigravity]
 - 2026-10-06 — Enforced project memory workflow in root `AGENTS.md`: read `memory-bank/CONTEXT.md` before code and update CONTEXT/CHANGELOG after every change, including migrations and deployments. Updated context to reflect actual local runtime rather than pending activation. — [Codex; uncommitted]
