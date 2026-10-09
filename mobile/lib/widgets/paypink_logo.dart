@@ -196,7 +196,7 @@ class PayPinkLogo extends StatelessWidget {
               Text(
                 subtitle!,
                 style: PayPinkTheme.body(
-                  fontSize: 9.5,
+                  fontSize: 10,
                   color: isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
                   fontWeight: FontWeight.w500,
                 ),

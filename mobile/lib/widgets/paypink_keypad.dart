@@ -147,7 +147,7 @@ class PayPinkKeypad extends StatelessWidget {
                 Text(
                   subText,
                   style: PayPinkTheme.mono(
-                    fontSize: 8.5,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: subCol,
                   ),

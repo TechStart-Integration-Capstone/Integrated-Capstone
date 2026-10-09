@@ -158,7 +158,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
       } else {
         // Step 2 confirmation
         if (pin == _firstEnteredPin) {
-          await SecureTokenStorage.savePin(pin);
+          await SecureTokenStorage.savePin(pin, owner: _resolvedUsername);
           HapticFeedback.mediumImpact();
           if (widget.onAuthSuccess != null) {
             widget.onAuthSuccess!();
@@ -285,7 +285,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
                             : 'Set a secure PIN for login and payment authorization'),
                     textAlign: TextAlign.center,
                     style: PayPinkTheme.body(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       color: textMuted,
                     ),
                   ),

@@ -396,7 +396,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Manage your saved PayPink transfer favorites for 1-tap remittances.',
-                  style: PayPinkTheme.body(fontSize: 11.5, color: textMuted),
+                  style: PayPinkTheme.body(fontSize: 12, color: textMuted),
                 ),
                 const SizedBox(height: 14),
 
@@ -486,7 +486,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                         child: Text(
                                           avatar,
                                           style: PayPinkTheme.display(
-                                            fontSize: 12.5,
+                                            fontSize: 13,
                                             fontWeight: FontWeight.w800,
                                             color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                           ),
@@ -507,7 +507,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                           const SizedBox(height: 2),
                                           Text(
                                             '$bank · $number',
-                                            style: PayPinkTheme.mono(fontSize: 10.5, color: textMuted),
+                                            style: PayPinkTheme.mono(fontSize: 11, color: textMuted),
                                           ),
                                         ],
                                       ),
@@ -555,7 +555,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setModalState) {
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PayPinkTheme.radiusXl)),
             backgroundColor: dialogBg,
             elevation: 20,
             insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -627,7 +627,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                               child: Text(
                                 modalError!,
                                 style: PayPinkTheme.body(
-                                  fontSize: 11.5,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                   color: PayPinkTheme.red,
                                 ),
@@ -640,14 +640,14 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     ],
 
                     // Field 1: Recipient Full Name
-                    Text('Recipient Full Name', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    Text('Recipient Full Name', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: nameController,
                       style: PayPinkTheme.body(fontSize: 13, color: textInk),
                       decoration: InputDecoration(
                         hintText: 'e.g. Carlos Mendoza (optional)',
-                        hintStyle: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+                        hintStyle: PayPinkTheme.body(fontSize: 13, color: textMuted),
                         filled: true,
                         fillColor: cardBg,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -659,7 +659,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     const SizedBox(height: 14),
 
                     // Field 2: 12-Digit PayPink Account Number
-                    Text('12-Digit PayPink Account Number', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    Text('12-Digit PayPink Account Number', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: numberController,
@@ -673,7 +673,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                       style: PayPinkTheme.body(fontSize: 13, color: textInk),
                       decoration: InputDecoration(
                         hintText: 'e.g. 001381233467',
-                        hintStyle: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+                        hintStyle: PayPinkTheme.body(fontSize: 13, color: textMuted),
                         filled: true,
                         fillColor: cardBg,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -691,7 +691,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     const SizedBox(height: 14),
 
                     // Field 3: Destination Bank
-                    Text('Destination Bank', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    Text('Destination Bank', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -735,7 +735,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                             ),
                             child: Text(
                               'Cancel',
-                              style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w600, color: textInk),
+                              style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w600, color: textInk),
                             ),
                           ),
                         ),
@@ -838,7 +838,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                                   )
                                 : Text(
                                     'Save Favorite',
-                                    style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
+                                    style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
                                   ),
                           ),
                         ),
@@ -1075,14 +1075,14 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                               ),
                               child: Text(
                                 'FROM',
-                                style: PayPinkTheme.mono(fontSize: 8.5, fontWeight: FontWeight.w700, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
+                                style: PayPinkTheme.eyebrow(fontSize: 10, fontWeight: FontWeight.w700, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
                               ),
                             ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 fromName,
-                                style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk),
+                                style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -1100,9 +1100,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     children: [
                       Text(
                         '₱${fromBal.toStringAsFixed(2)}',
-                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w800, color: textInk),
+                        style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w800, color: textInk),
                       ),
-                      Text('Available', style: PayPinkTheme.body(fontSize: 9.5, color: textMuted)),
+                      Text('Available', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
                     ],
                   ),
                 ],
@@ -1186,14 +1186,14 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                               ),
                               child: Text(
                                 'TO',
-                                style: PayPinkTheme.mono(fontSize: 8.5, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
+                                style: PayPinkTheme.eyebrow(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
                               ),
                             ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 toName,
-                                style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk),
+                                style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -1211,9 +1211,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     children: [
                       Text(
                         '₱${toBal.toStringAsFixed(2)}',
-                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w800, color: textInk),
+                        style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w800, color: textInk),
                       ),
-                      Text('Balance', style: PayPinkTheme.body(fontSize: 9.5, color: textMuted)),
+                      Text('Balance', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
                     ],
                   ),
                 ],
@@ -1441,7 +1441,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     amount: amt,
                   );
                   if (pinVerified) {
-                    _executeTransferWithPin(amt, fromAcc, toAcc);
+                    _executeTransfer(amt, fromAcc, toAcc);
                   }
                 },
                 icon: const Icon(Icons.send_rounded, size: 18),
@@ -1460,15 +1460,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     );
   }
 
-  void _executeTransferWithPin(double amt, String fromAcc, String toAcc) async {
-    final pinOk = await PinAuthSheet.show(
-      context,
-      title: 'Authorize Transfer',
-      description: 'Enter your 6-digit MPIN to authorize transfer of ₱${amt.toStringAsFixed(2)}',
-      amount: amt,
-    );
-    if (!pinOk) return;
-
+  /// Submits the transfer. The caller has already verified the MPIN once on the
+  /// confirmation sheet, so this must not prompt again.
+  void _executeTransfer(double amt, String fromAcc, String toAcc) async {
     final cleanDest = _selectedModeIndex == 0
         ? _ownTargetAccount
         : _recipientController.text.replaceAll(' ', '');
@@ -1618,7 +1612,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PayPinkTheme.radiusXl)),
         backgroundColor: dialogBg,
         elevation: 20,
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -1650,7 +1644,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   const SizedBox(height: 2),
                   Text(
                     'OFFICIAL TRANSFER CONFIRMATION',
-                    style: PayPinkTheme.mono(fontSize: 9, fontWeight: FontWeight.w600, color: textMuted),
+                    style: PayPinkTheme.eyebrow(fontSize: 10, fontWeight: FontWeight.w600, color: textMuted),
                   ),
 
                   const SizedBox(height: 16),
@@ -1774,7 +1768,7 @@ Thank you for banking with PayPink!
                           ),
                           child: Text(
                             'Done',
-                            style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w700, color: Colors.white),
+                            style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
                           ),
                         ),
                       ),
@@ -1851,7 +1845,7 @@ Thank you for banking with PayPink!
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: PayPinkTheme.body(fontSize: 11.5, color: textMuted)),
+        Text(label, style: PayPinkTheme.body(fontSize: 12, color: textMuted)),
         const SizedBox(width: 12),
         Flexible(
           child: Text(
@@ -1859,12 +1853,12 @@ Thank you for banking with PayPink!
             textAlign: TextAlign.end,
             style: isMono
                 ? PayPinkTheme.mono(
-                    fontSize: isSmall ? 9 : 11.5,
+                    fontSize: isSmall ? 10 : 12,
                     fontWeight: FontWeight.w600,
                     color: valColor ?? textInk,
                   )
                 : PayPinkTheme.body(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: valColor ?? textInk,
                   ),
@@ -2003,7 +1997,7 @@ Thank you for banking with PayPink!
           const SizedBox(height: 4),
           Text(
             'Transfer between your accounts or send to another PayPink account.',
-            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+            style: PayPinkTheme.body(fontSize: 13, color: textMuted),
           ),
           const SizedBox(height: 18),
 
@@ -2031,7 +2025,7 @@ Thank you for banking with PayPink!
                       child: Text(
                         '• No transfer fee',
                         style: PayPinkTheme.body(
-                          fontSize: 9.5,
+                          fontSize: 10,
                           color: PayPinkTheme.green,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2069,7 +2063,7 @@ Thank you for banking with PayPink!
                   ),
                 ] else ...[
                   // Source Account Dropdown for external transfers
-                  Text('Transfer from', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                  Text('Transfer from', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -2119,7 +2113,7 @@ Thank you for banking with PayPink!
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Favorites', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: textInk)),
+                      Text('Favorites', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: textInk)),
                       GestureDetector(
                         onTap: () => _showFavoritesManagerModal(context),
                         child: Text(
@@ -2194,7 +2188,7 @@ Thank you for banking with PayPink!
                   ],
                   const SizedBox(height: 12),
                   if (_selectedModeIndex == 2) ...[
-                    Text('Destination Institution', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    Text('Destination Institution', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -2223,7 +2217,7 @@ Thank you for banking with PayPink!
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Text('Clearing Rail & Settlement', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                    Text('Clearing Rail & Settlement', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -2244,7 +2238,7 @@ Thank you for banking with PayPink!
                                 children: [
                                   Text('InstaPay', style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk)),
                                   const SizedBox(height: 2),
-                                  Text('Real-time · Up to ₱50k', style: PayPinkTheme.body(fontSize: 9.5, color: textMuted)),
+                                  Text('Real-time · Up to ₱50k', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
                                 ],
                               ),
                             ),
@@ -2268,7 +2262,7 @@ Thank you for banking with PayPink!
                                 children: [
                                   Text('PESONet', style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk)),
                                   const SizedBox(height: 2),
-                                  Text('Batch EOD cutoff · Unlimited', style: PayPinkTheme.body(fontSize: 9.5, color: textMuted)),
+                                  Text('Batch EOD cutoff · Unlimited', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
                                 ],
                               ),
                             ),
@@ -2278,7 +2272,7 @@ Thank you for banking with PayPink!
                     ),
                     const SizedBox(height: 12),
                   ],
-                  Text('Recipient Account Number', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                  Text('Recipient Account Number', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _recipientController,
@@ -2352,7 +2346,7 @@ Thank you for banking with PayPink!
                               const SizedBox(width: 8),
                               Text(
                                 _verifiedName!,
-                                style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
+                                style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
                               ),
                             ],
                           ),
@@ -2376,7 +2370,7 @@ Thank you for banking with PayPink!
                                       const SizedBox(width: 2),
                                       Text(
                                         'Favorite',
-                                        style: PayPinkTheme.mono(fontSize: 9, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                                        style: PayPinkTheme.eyebrow(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
                                       ),
                                     ],
                                   ),
@@ -2392,7 +2386,7 @@ Thank you for banking with PayPink!
                 const SizedBox(height: 16),
 
                 // Amount Field
-                Text('Amount', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w600, color: textInk)),
+                Text('Amount', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                 const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -2494,8 +2488,8 @@ Thank you for banking with PayPink!
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Transfer fee', style: PayPinkTheme.body(fontSize: 11.5, color: textMuted)),
-                    Text('₱0.00', style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk)),
+                    Text('Transfer fee', style: PayPinkTheme.body(fontSize: 12, color: textMuted)),
+                    Text('₱0.00', style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700, color: textInk)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -2509,7 +2503,7 @@ Thank you for banking with PayPink!
                       backgroundColor: PayPinkTheme.wine,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      textStyle: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700),
+                      textStyle: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w700),
                     ),
                     child: const Text('Review transfer →'),
                   ),
@@ -2567,7 +2561,7 @@ Thank you for banking with PayPink!
             label,
             textAlign: TextAlign.center,
             style: PayPinkTheme.body(
-              fontSize: 10.5,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
               color: isSelected ? Colors.white : textMuted,
             ),

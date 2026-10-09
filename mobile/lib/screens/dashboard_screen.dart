@@ -186,14 +186,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 4),
           Text(
             "Your everyday, at a glance. It's good to have you here.",
-            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
-          ),
-          const SizedBox(height: 12),
-
-          // Promotional / Advertisement Banner (Dismissible)
-          PromoBanner(
-            isDark: isDark,
-            onAction: () => widget.onNavigateTab(2),
+            style: PayPinkTheme.body(fontSize: 13, color: textMuted),
           ),
           const SizedBox(height: 12),
 
@@ -202,7 +195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             width: double.infinity,
             decoration: PayPinkTheme.wineHeroDecoration(),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(PayPinkTheme.radiusLg),
               child: Stack(
                 children: [
                   Positioned.fill(
@@ -279,7 +272,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       : '\u20B1${_formatCurrency(effectiveBalance)}',
                                   style: PayPinkTheme.display(
                                     fontSize: 38,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.white,
                                     letterSpacing: -1.2,
                                   ),
@@ -289,7 +282,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   'Across $accountCount account${accountCount == 1 ? '' : 's'}. All yours.',
                                   style: PayPinkTheme.body(
                                     color: const Color(0xFFE2B4CB),
-                                    fontSize: 11.5,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
@@ -322,7 +315,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     'View all',
                                     style: PayPinkTheme.body(
                                       color: Colors.white,
-                                      fontSize: 11.5,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -378,7 +371,223 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Recent Activity Header (Moved to top of dashboard)
+          // Monthly Flow Card: "This month, so far" (Dynamic from live ledger)
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'This month, so far',
+                      style: PayPinkTheme.display(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: textInk,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDark ? PayPinkTheme.darkCard : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                        border: isDark ? Border.all(color: PayPinkTheme.darkGlassBorder) : null,
+                      ),
+                      child: Text(
+                        _currentMonthYear,
+                        style: PayPinkTheme.body(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF143823) : PayPinkTheme.greenBg,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.arrow_downward_rounded,
+                              color: isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Money in',
+                                style: PayPinkTheme.body(
+                                  fontSize: 11,
+                                  color: textMuted,
+                                ),
+                              ),
+                              Text(
+                                widget.hideBalances
+                                    ? '\u2022\u2022\u2022\u2022\u2022\u2022'
+                                    : '\u20B1${_formatCurrency(_totalMoneyIn)}',
+                                style: PayPinkTheme.display(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: textInk,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.arrow_upward_rounded,
+                              color: isDark ? const Color(0xFFF6A4C0) : PayPinkTheme.wine,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Money out',
+                                style: PayPinkTheme.body(
+                                  fontSize: 11,
+                                  color: textMuted,
+                                ),
+                              ),
+                              Text(
+                                widget.hideBalances
+                                    ? '\u2022\u2022\u2022\u2022\u2022\u2022'
+                                    : '\u20B1${_formatCurrency(_totalMoneyOut)}',
+                                style: PayPinkTheme.display(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: textInk,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Divider(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line, height: 1),
+                const SizedBox(height: 8),
+                Text(
+                  widget.transactions.isEmpty
+                      ? 'Based on your live account ledger.'
+                      : 'Based on your latest ${widget.transactions.length} recorded transaction${widget.transactions.length == 1 ? '' : 's'}.',
+                  style: PayPinkTheme.body(fontSize: 10, color: textMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Your Accounts Section Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Your accounts',
+                    style: PayPinkTheme.display(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w700,
+                      color: textInk,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isDark ? PayPinkTheme.darkCard : PayPinkTheme.pinkSubtle,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink),
+                    ),
+                    child: Text(
+                      '${widget.accounts != null && widget.accounts!.isNotEmpty ? widget.accounts!.length : 2} linked',
+                      style: PayPinkTheme.body(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => widget.onNavigateTab(1),
+                child: Text(
+                  'Manage \u2192',
+                  style: PayPinkTheme.body(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Dynamic Swipeable Account Cards Carousel (hidden until real accounts load)
+          if (_carouselAccounts.isNotEmpty)
+          AccountCardCarousel(
+            accounts: _carouselAccounts,
+            cardHolder: widget.userFullName?.isNotEmpty == true ? widget.userFullName! : widget.userName,
+            hideBalances: widget.hideBalances,
+            onToggleHideBalances: widget.onToggleHideBalances,
+            onNavigateTab: widget.onNavigateTab,
+            onOpenLoanPayment: _openLoanPaymentSheet,
+            onSelectAccount: (acct) {
+              if (acct.isLoan) {
+                PayPinkBottomSheets.showLoanDetails(context, loan: acct, onPay: _openLoanPaymentSheet);
+                return;
+              }
+              final holder = widget.userFullName?.isNotEmpty == true ? widget.userFullName! : widget.userName;
+              PayPinkBottomSheets.showAccountDetails(
+                context,
+                name: holder.isNotEmpty ? holder : acct.displayName,
+                fullNumber: acct.formattedNumber,
+                balance: acct.currentBalance,
+                type: acct.accountType,
+                status: acct.status,
+                account: acct,
+              );
+            },
+            isDark: isDark,
+          ),
+
+          const SizedBox(height: 20),
+
+          // Recent activity (after accounts, as on the web overview)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -395,7 +604,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Text(
                   'View all \u2192',
                   style: PayPinkTheme.body(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                   ),
@@ -479,7 +688,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       title: Text(
                         tx.title,
-                        style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk).copyWith(
+                        style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700, color: textInk).copyWith(
                           decoration: tx.status == 'REVERSED' ? TextDecoration.lineThrough : null,
                         ),
                       ),
@@ -495,7 +704,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                               tx.isCredit ? 'From: ${tx.counterparty}' : 'Recipient: ${tx.counterparty}',
                               style: PayPinkTheme.body(
-                                fontSize: 9.5,
+                                fontSize: 10,
                                 color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -523,7 +732,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ? '• Refunded'
                                 : (tx.status == 'FAILED_DLQ' ? '• Processing' : 'Completed'),
                             style: PayPinkTheme.body(
-                              fontSize: 9.5,
+                              fontSize: 10,
                               color: tx.status == 'REVERSED' ? PayPinkTheme.amber : (tx.status == 'FAILED_DLQ' ? PayPinkTheme.wine : textMuted),
                               fontWeight: tx.status == 'REVERSED' ? FontWeight.w700 : FontWeight.normal,
                             ),
@@ -553,144 +762,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           const SizedBox(height: 20),
 
-          // Monthly Flow Card: "This month, so far" (Dynamic from live ledger)
-          GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'This month, so far',
-                      style: PayPinkTheme.display(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: textInk,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isDark ? PayPinkTheme.darkCard : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(6),
-                        border: isDark ? Border.all(color: PayPinkTheme.darkGlassBorder) : null,
-                      ),
-                      child: Text(
-                        _currentMonthYear,
-                        style: PayPinkTheme.body(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: textMuted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF143823) : PayPinkTheme.greenBg,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.arrow_downward_rounded,
-                              color: isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Money in',
-                                style: PayPinkTheme.body(
-                                  fontSize: 10.5,
-                                  color: textMuted,
-                                ),
-                              ),
-                              Text(
-                                widget.hideBalances
-                                    ? '\u2022\u2022\u2022\u2022\u2022\u2022'
-                                    : '\u20B1${_formatCurrency(_totalMoneyIn)}',
-                                style: PayPinkTheme.display(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: textInk,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.arrow_upward_rounded,
-                              color: isDark ? const Color(0xFFF6A4C0) : PayPinkTheme.wine,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Money out',
-                                style: PayPinkTheme.body(
-                                  fontSize: 10.5,
-                                  color: textMuted,
-                                ),
-                              ),
-                              Text(
-                                widget.hideBalances
-                                    ? '\u2022\u2022\u2022\u2022\u2022\u2022'
-                                    : '\u20B1${_formatCurrency(_totalMoneyOut)}',
-                                style: PayPinkTheme.display(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: textInk,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Divider(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line, height: 1),
-                const SizedBox(height: 8),
-                Text(
-                  widget.transactions.isEmpty
-                      ? 'Based on your live account ledger.'
-                      : 'Based on your latest ${widget.transactions.length} recorded transaction${widget.transactions.length == 1 ? '' : 's'}.',
-                  style: PayPinkTheme.body(fontSize: 10, color: textMuted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Spending Patterns & Customer 360 Insights Card
+          // Spending pattern card
           GlassCard(
             onTap: () => PayPinkBottomSheets.showHardwareVault(
               context,
@@ -709,9 +781,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              'Spending Patterns',
+                              'Spending pattern',
                               style: PayPinkTheme.display(
-                                fontSize: 13.5,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: textInk,
                               ),
@@ -719,22 +791,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: PayPinkTheme.greenBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Customer 360',
-                        style: PayPinkTheme.body(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: PayPinkTheme.green,
-                        ),
                       ),
                     ),
                   ],
@@ -749,84 +805,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Your Accounts Section Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Your accounts',
-                    style: PayPinkTheme.display(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w700,
-                      color: textInk,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isDark ? PayPinkTheme.darkCard : PayPinkTheme.pinkSubtle,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink),
-                    ),
-                    child: Text(
-                      '${widget.accounts != null && widget.accounts!.isNotEmpty ? widget.accounts!.length : 2} linked',
-                      style: PayPinkTheme.body(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              GestureDetector(
-                onTap: () => widget.onNavigateTab(1),
-                child: Text(
-                  'Manage \u2192',
-                  style: PayPinkTheme.body(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-                  ),
-                ),
-              ),
-            ],
+          // Promotional banner: below the customer's own money and activity
+          PromoBanner(
+            isDark: isDark,
+            onAction: () => widget.onNavigateTab(2),
           ),
           const SizedBox(height: 12),
-
-          // Dynamic Swipeable Account Cards Carousel (hidden until real accounts load)
-          if (_carouselAccounts.isNotEmpty)
-          AccountCardCarousel(
-            accounts: _carouselAccounts,
-            cardHolder: widget.userFullName?.isNotEmpty == true ? widget.userFullName! : widget.userName,
-            hideBalances: widget.hideBalances,
-            onToggleHideBalances: widget.onToggleHideBalances,
-            onNavigateTab: widget.onNavigateTab,
-            onOpenLoanPayment: _openLoanPaymentSheet,
-            onSelectAccount: (acct) {
-              if (acct.isLoan) {
-                PayPinkBottomSheets.showLoanDetails(context, loan: acct, onPay: _openLoanPaymentSheet);
-                return;
-              }
-              final holder = widget.userFullName?.isNotEmpty == true ? widget.userFullName! : widget.userName;
-              PayPinkBottomSheets.showAccountDetails(
-                context,
-                name: holder.isNotEmpty ? holder : acct.displayName,
-                fullNumber: acct.formattedNumber,
-                balance: acct.currentBalance,
-                type: acct.accountType,
-                status: acct.status,
-                account: acct,
-              );
-            },
-            isDark: isDark,
-          ),
-
-          const SizedBox(height: 20),
 
           // Privacy Note Glass Card
           GlassCard(

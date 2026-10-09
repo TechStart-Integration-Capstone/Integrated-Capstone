@@ -25,107 +25,104 @@ class PayPinkTheme {
   static const Color indigo = Color(0xFF4F46E5);
   static const Color indigoBg = Color(0xFFEEF2FF);
 
-  // Glassmorphism tokens
-  static const Color glassWhite = Color(0xB8FFFFFF);
-  static const Color glassCardBg = Color(0xC7FFFFFF);
-  static const Color glassBorder = Color(0xD9FFFFFF);
-  static const Color glassBorderSubtle = Color(0x66FFFFFF);
+  // Web form tokens (frontend/bank/bank.css)
+  static const Color inputBorder = Color(0xFFE1DADD);
+  static const Color placeholder = Color(0xFFB0A6AC);
+  static const Color errorBg = Color(0xFFFCF0EE);
+  static const Color errorBorder = Color(0xFFF0D5D0);
+  static const Color errorText = Color(0xFF9F3C3C);
+  static const Color focusRing = Color(0xFFBD688C);
 
-  // Dark Mode Tokens (Luminous Obsidian Navy & Soft Rose Palette - Matching Design Inspiration)
-  static const Color darkBg = Color(0xFF0B0E17); // Deep Obsidian Midnight Navy
-  static const Color darkPaper = Color(0xFF121622); // Deep Frosted Glass Card Paper
-  static const Color darkCard = Color(0xFF151A29); // Floating Elevated Navy Card
-  static const Color darkInk = Color(0xFFFFFFFF); // Pure Luminous White (Maximum Contrast & Readability)
-  static const Color darkMuted = Color(0xFF9DA4B5); // High Legibility Soft Slate Gray
-  static const Color darkLine = Color(0xFF222A3B); // Subtle Dark Hairline Divider
-  static const Color darkGlassBorder = Color(0x383F4C68); // Translucent Dark Slate Hairline Border
-  static const Color darkGlassCardBg = Color(0xF0121623); // Frosted Obsidian Glass Card Background
+  // Card surface tokens. Flat white with a hairline border, matching the web cards.
+  static const Color glassWhite = Color(0xFFFFFFFF);
+  static const Color glassCardBg = Color(0xFFFFFFFF);
+  static const Color glassBorder = line;
+  static const Color glassBorderSubtle = line;
 
-  // Ambient Background Gradients
+  // Dark mode: a wine-tinted near-black so the brand survives in the dark.
+  static const Color darkBg = Color(0xFF161013);
+  static const Color darkPaper = Color(0xFF1D1519);
+  static const Color darkCard = Color(0xFF241A1F);
+  static const Color darkInk = Color(0xFFF7F1F3);
+  static const Color darkMuted = Color(0xFFA99AA2);
+  static const Color darkLine = Color(0xFF35272E);
+  static const Color darkGlassBorder = Color(0xFF35272E);
+  static const Color darkGlassCardBg = Color(0xFF1D1519);
+
+  // Corner radii, matching the web: inputs/buttons 9, account cards 11–12, panels 14, dialogs 17.
+  static const double radiusSm = 9;
+  static const double radiusMd = 12;
+  static const double radiusLg = 14;
+  static const double radiusXl = 17;
+
+  // Page backgrounds are flat paper, like the web. Kept as gradients so existing callers still work.
   static const LinearGradient lightBgGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      Color(0xFFFFF0F5), // Lavender blush / soft rose petal hint
-      Color(0xFFFFF7F9), // Subtle warm creamy rose
-      Color(0xFFFBF2F6), // Delicate touch of luxury pink
-    ],
-    stops: [0.0, 0.45, 1.0],
+    colors: [paper, paper],
   );
 
   static const LinearGradient darkBgGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      Color(0xFF0F1422), // Luminous obsidian slate
-      Color(0xFF0B0E17), // Deep midnight obsidian navy
-    ],
+    colors: [darkBg, darkBg],
   );
 
   static const LinearGradient cardPinkGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [pink, wine],
+    colors: [Color(0xFF7A2A4E), wine],
   );
 
-  // Distinct Account Card Color Gradients with Lower-Half Gradient Black (MOB-103)
-  // Card 1: Checking Account (Default) — Signature PayPink Vibrant Rose to Gradient Black
+  // Account card colors follow the web's account-symbol palette (wine, rose, sage, sand)
+  // with a gentle two-stop tone shift instead of the old fade-to-black.
   static const LinearGradient cardCheckingGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFFE11D48), Color(0xFFDB2777), Color(0xFF220E18), Color(0xFF09090B)],
-    stops: [0.0, 0.38, 0.72, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF7A2A4E), wine],
   );
 
-  // Card 2: Savings Account — Soft Blush / Pastel Rose to Gradient Black
   static const LinearGradient cardSavingsGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFFFDA4AF), Color(0xFFFB7185), Color(0xFF221118), Color(0xFF09090B)],
-    stops: [0.0, 0.38, 0.72, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF7E8A6A), Color(0xFF5C6649)],
   );
 
-  // Last Card: Pinkish Beige (Desert Rose / Champagne Blush Nude to Gradient Black)
   static const LinearGradient cardPinkishBeigeGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFFD8ABA0), Color(0xFFBA8677), Color(0xFF261414), Color(0xFF09090B)],
-    stops: [0.0, 0.38, 0.72, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFAE9270), Color(0xFF85694C)],
   );
 
-  // Card 3: Alternative / Third Card / Reserve — Electric Fuchsia & Magenta Pink to Gradient Black
   static const LinearGradient cardFuchsiaGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFFE879F9), Color(0xFFC026D3), Color(0xFF1F0A24), Color(0xFF09090B)],
-    stops: [0.0, 0.38, 0.72, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF9A5373), Color(0xFF6E3550)],
   );
 
-  // Card 4: Loan Account / Credit — Deep Obsidian Wine to Gradient Black
   static const LinearGradient cardLoanGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [Color(0xFF881337), Color(0xFF4C0519), Color(0xFF18181B), Color(0xFF09090B)],
-    stops: [0.0, 0.38, 0.72, 1.0],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [wineDark, Color(0xFF29242A)],
   );
 
-  static String get fontFamily =>
-      GoogleFonts.plusJakartaSans().fontFamily ?? 'Plus Jakarta Sans';
+  static String get fontFamily => GoogleFonts.dmSans().fontFamily ?? 'DM Sans';
 
   static ThemeData get lightTheme => ThemeData(
-        textTheme: GoogleFonts.plusJakartaSansTextTheme(),
+        textTheme: GoogleFonts.dmSansTextTheme(),
         brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFFFF5F8),
+        scaffoldBackgroundColor: paper,
         colorScheme: ColorScheme.fromSeed(
           seedColor: wine,
+          primary: wine,
           brightness: Brightness.light,
-          surface: const Color(0xFFFFF5F8),
+          surface: paper,
         ),
         useMaterial3: true,
       );
 
   static ThemeData get darkTheme => ThemeData(
-        textTheme: GoogleFonts.plusJakartaSansTextTheme(ThemeData.dark().textTheme),
+        textTheme: GoogleFonts.dmSansTextTheme(ThemeData.dark().textTheme),
         brightness: Brightness.dark,
         scaffoldBackgroundColor: darkBg,
         colorScheme: ColorScheme.fromSeed(
@@ -136,7 +133,17 @@ class PayPinkTheme {
         useMaterial3: true,
       );
 
-  // Typography with Google Fonts Plus Jakarta Sans
+  // Bundled weights: Manrope 400–800, DM Sans 400–700 (assets/fonts). Clamp so we never
+  // ask google_fonts for a weight that isn't on disk.
+  static FontWeight _clamp(FontWeight w, FontWeight min, FontWeight max) {
+    if (w.value < min.value) return min;
+    if (w.value > max.value) return max;
+    return w;
+  }
+
+  static const List<FontFeature> tabularFigures = [FontFeature.tabularFigures()];
+
+  // Headings and amounts: Manrope, like the web's --display.
   static TextStyle display({
     double fontSize = 16,
     FontWeight fontWeight = FontWeight.w700,
@@ -145,16 +152,17 @@ class PayPinkTheme {
     double? height,
     FontStyle? fontStyle,
   }) {
-    return GoogleFonts.plusJakartaSans(
+    return GoogleFonts.manrope(
       fontSize: fontSize,
-      fontWeight: fontWeight,
+      fontWeight: _clamp(fontWeight, FontWeight.w400, FontWeight.w800),
       color: color,
       letterSpacing: letterSpacing,
       height: height,
-      fontStyle: fontStyle,
+      fontFeatures: tabularFigures,
     );
   }
 
+  // Body copy: DM Sans, like the web's --font.
   static TextStyle body({
     double fontSize = 14,
     FontWeight fontWeight = FontWeight.w400,
@@ -162,15 +170,31 @@ class PayPinkTheme {
     double? height,
     TextDecoration? decoration,
   }) {
-    return GoogleFonts.plusJakartaSans(
+    return GoogleFonts.dmSans(
       fontSize: fontSize,
-      fontWeight: fontWeight,
+      fontWeight: _clamp(fontWeight, FontWeight.w400, FontWeight.w700),
       color: color,
       height: height,
       decoration: decoration,
     );
   }
 
+  // Small uppercase label, the web's `.eyebrow`. Use instead of mono for labels.
+  static TextStyle eyebrow({
+    double fontSize = 10,
+    FontWeight fontWeight = FontWeight.w700,
+    Color color = muted,
+    double? letterSpacing,
+  }) {
+    return GoogleFonts.dmSans(
+      fontSize: fontSize,
+      fontWeight: _clamp(fontWeight, FontWeight.w400, FontWeight.w700),
+      color: color,
+      letterSpacing: letterSpacing ?? 1.6,
+    );
+  }
+
+  // Monospace is reserved for account numbers and reference IDs.
   static TextStyle mono({
     double fontSize = 11,
     FontWeight fontWeight = FontWeight.w500,
@@ -185,61 +209,42 @@ class PayPinkTheme {
     );
   }
 
+  // The web's card: white, 1px hairline, barely-there shadow.
   static BoxDecoration glassCardDecoration({
     Color bg = glassCardBg,
-    double radius = 20,
+    double radius = radiusLg,
     Color? borderColor,
   }) {
     return BoxDecoration(
       color: bg,
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: borderColor ?? glassBorder, width: 1.2),
-      boxShadow: [
-        BoxShadow(
-          color: wine.withValues(alpha: 0.08),
-          blurRadius: 24,
-          offset: const Offset(0, 10),
-        ),
-        const BoxShadow(
-          color: Color(0x55FFFFFF),
-          blurRadius: 0,
-          spreadRadius: 1,
-        ),
+      border: Border.all(color: borderColor ?? glassBorder),
+      boxShadow: const [
+        BoxShadow(color: Color(0x074C1937), blurRadius: 20, offset: Offset(0, 6)),
       ],
     );
   }
 
-  static BoxDecoration wineHeroDecoration({double radius = 24}) {
+  // The web's `.balance-card`: flat wine, no heavy drop shadow.
+  static BoxDecoration wineHeroDecoration({double radius = radiusLg}) {
     return BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [Color(0xFF5B162F), Color(0xFF3D0E1F), Color(0xFF280814)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
+      color: wine,
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: const Color(0xFF7A2444).withValues(alpha: 0.5), width: 1.2),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.45),
-          blurRadius: 28,
-          offset: const Offset(0, 14),
-        ),
-      ],
     );
   }
 }
 
-/// Custom painter for fintech concentric ripple rings overlay on Hero Card
+/// Faint concentric rings on the balance card, matching the web's `.balance-card:after`.
 class ConcentricRingsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.05)
+      ..color = Colors.white.withValues(alpha: 0.08)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
-    final center = Offset(size.width * 0.85, size.height * 0.2);
-    for (double r = 40; r <= 240; r += 35) {
+    final center = Offset(size.width + 10, -10);
+    for (final r in [145.0, 185.0, 226.0]) {
       canvas.drawCircle(center, r, paint);
     }
   }

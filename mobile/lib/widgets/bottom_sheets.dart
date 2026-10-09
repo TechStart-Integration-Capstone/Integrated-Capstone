@@ -59,7 +59,7 @@ class PayPinkBottomSheets {
               const SizedBox(height: 8),
               Text(
                 'Savings earn 1% below ₱1,000, 2.5% below ₱10,000 and 4% from ₱10,000, on the whole balance. Interest accrues daily and is added on the last day of each month.',
-                style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted, height: 1.4),
+                style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted, height: 1.4),
               ),
             ],
             const SizedBox(height: 20),
@@ -293,7 +293,7 @@ class PayPinkBottomSheets {
                 children: [
                   Text(
                     'Save your frequent payees as Favorites for quick and secure 1-tap remittances.',
-                    style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted),
+                    style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.muted),
                   ),
                   const SizedBox(height: 14),
 
@@ -582,7 +582,7 @@ class PayPinkBottomSheets {
                             const SizedBox(height: 2),
                             Text(
                               '15-min instant window closed. Open a support dispute investigation.',
-                              style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
+                              style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.muted),
                             ),
                           ],
                         ),
@@ -623,7 +623,7 @@ class PayPinkBottomSheets {
                   children: [
                     Text(
                       'TRANSACTION STATUS',
-                      style: PayPinkTheme.mono(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                      style: PayPinkTheme.eyebrow(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
                     ),
                     const SizedBox(height: 10),
                     _buildLifecycleStep(1, 'Request Submitted', 'Payment request processed securely', isDone: true),
@@ -756,7 +756,7 @@ Thank you for banking with PayPink!
               ),
               Text(
                 desc,
-                style: PayPinkTheme.body(fontSize: 9, color: PayPinkTheme.muted),
+                style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.muted),
               ),
               const SizedBox(height: 4),
             ],
@@ -850,7 +850,7 @@ Thank you for banking with PayPink!
                               const SizedBox(height: 4),
                               Text(
                                 n['time'] ?? '',
-                                style: PayPinkTheme.body(fontSize: 9, color: PayPinkTheme.muted),
+                                style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.muted),
                               ),
                             ],
                           ),
@@ -905,7 +905,7 @@ Thank you for banking with PayPink!
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _SheetContainer(
-        title: 'Customer 360 & Vault',
+        title: 'Security & device',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -939,7 +939,7 @@ Thank you for banking with PayPink!
             const SizedBox(height: 14),
             Text(
               'Your PayPink account is secured with end-to-end encryption, 6-digit MPIN authentication, and automated fraud monitoring.',
-              style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted, height: 1.4),
+              style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.muted, height: 1.4),
             ),
             const SizedBox(height: 14),
             const _DetailRow(label: 'Account Tier', value: 'Level 3 Fully Verified', valueColor: PayPinkTheme.green, isBold: true),
@@ -1181,7 +1181,7 @@ Thank you for banking with PayPink!
                   const Icon(Icons.qr_code_2_rounded, size: 120, color: PayPinkTheme.wine),
                   Text(
                     'PAYPINK·PH·5046',
-                    style: PayPinkTheme.mono(fontSize: 9, color: PayPinkTheme.muted),
+                    style: PayPinkTheme.mono(fontSize: 10, color: PayPinkTheme.muted),
                   ),
                 ],
               ),
@@ -1344,7 +1344,7 @@ class _DetailRow extends StatelessWidget {
                       color: valueColor ?? textInk,
                     )
                   : PayPinkTheme.body(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
                       color: valueColor ?? textInk,
                     ),
