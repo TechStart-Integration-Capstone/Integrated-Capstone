@@ -12,6 +12,7 @@ import 'screens/login_register_screen.dart';
 import 'screens/pin_auth_screen.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'services/account_service.dart';
 import 'services/secure_token_storage.dart';
 import 'widgets/bottom_sheets.dart';
@@ -265,23 +266,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     }
     return 'P';
   }
-  // In-App Notifications state
-  final List<Map<String, dynamic>> _notifications = [
-    {
-      'id': 1,
-      'title': 'Welcome gift received',
-      'message': '₱50.00 credited to Everyday account •••• 5046.',
-      'time': 'Just now',
-      'unread': true,
-    },
-    {
-      'id': 2,
-      'title': 'Account Protected',
-      'message': 'Biometric & 6-Digit MPIN security active.',
-      'time': '10 mins ago',
-      'unread': false,
-    },
-  ];
+  // In-app notifications, derived from server transactions (same rules as the web app).
+  List<Map<String, dynamic>> _notifications = [];
+  List<TransactionItem> _serverTransactions = [];
+  Set<String> _readNotificationIds = {};
+  Set<String> _hiddenNotificationIds = {};
 
   final List<TransactionItem> _transactions = [];
 
@@ -291,7 +280,33 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   @override
   void initState() {
     super.initState();
+    _loadNotificationState();
     _loadLiveDatabaseData();
+  }
+
+  Future<void> _loadNotificationState() async {
+    final read = await NotificationService.loadIds(widget.currentUser, 'read');
+    final hidden = await NotificationService.loadIds(widget.currentUser, 'hidden');
+    if (!mounted) return;
+    setState(() {
+      _readNotificationIds = read;
+      _hiddenNotificationIds = hidden;
+      _rebuildNotifications();
+    });
+  }
+
+  void _rebuildNotifications() {
+    _notifications = NotificationService.fromTransactions(
+      _serverTransactions,
+      read: _readNotificationIds,
+      hidden: _hiddenNotificationIds,
+    );
+  }
+
+  void _persistNotificationState() {
+    final current = NotificationService.fromTransactions(_serverTransactions).map((n) => n['id'] as String);
+    NotificationService.saveIds(widget.currentUser, 'read', _readNotificationIds, current);
+    NotificationService.saveIds(widget.currentUser, 'hidden', _hiddenNotificationIds, current);
   }
 
   void _loadLiveDatabaseData({bool preserveLocalTransactions = true, bool bypassCache = false}) async {
@@ -347,6 +362,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           _userProfile = profile.copyWith(accounts: mergedAccounts);
         }
       }
+
+      _serverTransactions = txs;
+      _rebuildNotifications();
 
       if (txs.isNotEmpty) {
         if (!preserveLocalTransactions || _transactions.isEmpty) {
@@ -500,16 +518,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       }
       _transactions.insert(0, newTx);
 
-      _notifications.insert(
-        0,
-        {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'title': 'Transfer Successful',
-          'message': 'Sent ₱${amount.toStringAsFixed(2)} to $recipient. Ref: $cleanRefId',
-          'time': 'Just now',
-          'unread': true,
-        },
-      );
 
       _currentIndex = 0; // Return to Dashboard overview where Recent Activity is at the top
     });
@@ -518,96 +526,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
     // Bypass client-side caching to retrieve fresh balances directly from Azure SQL
     _loadLiveDatabaseData(preserveLocalTransactions: true, bypassCache: true);
-  }
-
-  void _handleTransactionReversal(TransactionItem tx) {
-    if (!tx.isReversible && tx.status.toUpperCase() == 'REVERSED') {
-      _triggerStatusToast('Transaction has already been reversed.', '⚠️');
-      return;
-    }
-
-    final refundAmount = tx.amount;
-    final now = DateTime.now();
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
-    final ampm = now.hour >= 12 ? 'PM' : 'AM';
-    final timeStr = '${hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $ampm';
-    final dateStr = '${months[now.month - 1]} ${now.day}, ${now.year} · $timeStr';
-
-    // 1. Refund the debited source account in _userProfile
-    if (_userProfile != null && _userProfile!.accounts.isNotEmpty) {
-      final srcClean = (tx.sourceAccount ?? tx.account).replaceAll(RegExp(r'\D'), '');
-      final destClean = (tx.recipientAccount ?? tx.counterparty ?? '').replaceAll(RegExp(r'\D'), '');
-
-      final updatedAccounts = _userProfile!.accounts.map((acct) {
-        final acctClean = acct.accountNumber.replaceAll(RegExp(r'\D'), '');
-
-        // Refund sender account
-        if (acctClean == srcClean || (acct.last4.isNotEmpty && srcClean.contains(acct.last4)) || acctClean.endsWith(acct.last4)) {
-          return acct.copyWith(
-            currentBalance: acct.currentBalance + refundAmount,
-          );
-        }
-
-        // If target was owned account, revert the credit
-        if (destClean.isNotEmpty && (acctClean == destClean || (acct.last4.isNotEmpty && destClean.contains(acct.last4)))) {
-          return acct.copyWith(
-            currentBalance: (acct.currentBalance - refundAmount).clamp(0.0, double.infinity),
-          );
-        }
-
-        return acct;
-      }).toList();
-
-      _userProfile = _userProfile!.copyWith(accounts: updatedAccounts);
-    }
-
-    // 2. Mark original transaction as REVERSED
-    setState(() {
-      final idx = _transactions.indexWhere((t) => t.id == tx.id);
-      if (idx != -1) {
-        _transactions[idx] = tx.copyWith(
-          status: 'REVERSED',
-        );
-      }
-
-      // If there was an internal companion credit, mark it reversed too
-      final crIdx = _transactions.indexWhere((t) => t.id == '${tx.id}-CR');
-      if (crIdx != -1) {
-        _transactions[crIdx] = _transactions[crIdx].copyWith(status: 'REVERSED');
-      }
-
-      // 3. Prepend an explicit Reversal credit entry to activity
-      final reversalCreditTx = TransactionItem(
-        id: 'REV-${tx.id}',
-        title: 'Reversal: ${tx.title}',
-        date: dateStr,
-        account: tx.account,
-        amount: refundAmount,
-        isCredit: true,
-        transactionType: 'TRANSFER_IN',
-        counterparty: 'PayPink 15-Min Reversal Service',
-        status: 'Completed',
-        timestamp: now,
-        sourceAccount: 'PayPink Reversal System',
-        recipientAccount: tx.account,
-      );
-      _transactions.insert(0, reversalCreditTx);
-
-      // 4. Add notification
-      _notifications.insert(
-        0,
-        {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'title': 'Transfer Reversed',
-          'message': '₱${refundAmount.toStringAsFixed(2)} has been refunded to ${tx.account}. Ref: REV-${tx.id}',
-          'time': 'Just now',
-          'unread': true,
-        },
-      );
-    });
-
-    _triggerStatusToast('Transfer reversed! ₱${refundAmount.toStringAsFixed(2)} refunded to ${tx.account}', '↩');
   }
 
   void _handleLoanPaymentSuccess(double amount, String fundingAccount, String loanAccount) {
@@ -657,16 +575,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
     setState(() {
       _transactions.insert(0, newTx);
-      _notifications.insert(
-        0,
-        {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'title': 'Loan Payment Received',
-          'message': '₱${amount.toStringAsFixed(2)} applied toward personal loan balance.',
-          'time': 'Just now',
-          'unread': true,
-        },
-      );
       _currentIndex = 0;
     });
 
@@ -676,16 +584,19 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   void _markAllNotificationsRead() {
     setState(() {
-      for (var n in _notifications) {
-        n['unread'] = false;
-      }
+      _readNotificationIds.addAll(_notifications.map((n) => n['id'] as String));
+      _rebuildNotifications();
     });
+    _persistNotificationState();
   }
 
-  void _dismissNotification(int id) {
+  void _dismissNotification(String id) {
     setState(() {
-      _notifications.removeWhere((n) => n['id'] == id);
+      _readNotificationIds.add(id);
+      _hiddenNotificationIds.add(id);
+      _rebuildNotifications();
     });
+    _persistNotificationState();
   }
 
   @override
@@ -713,7 +624,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         accounts: _userProfile?.accounts,
         totalBalance: _userProfile?.totalBalance,
         onLoanPaymentSuccess: _handleLoanPaymentSuccess,
-        onReverseTransaction: _handleTransactionReversal,
         onRefreshData: () => _loadLiveDatabaseData(bypassCache: true),
       ),
       AccountsScreen(
@@ -735,7 +645,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         transactions: _transactions,
         customerName: resolvedFullName,
         primaryAccountNumber: primaryAccountNum,
-        onReverseTransaction: _handleTransactionReversal,
+        accounts: _userProfile?.accounts ?? const [],
       ),
     ];
 

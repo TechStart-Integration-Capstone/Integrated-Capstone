@@ -131,15 +131,12 @@ void main() {
 
     // Verify card face and value swap
     expect(find.text('LEVI VIERNES'), findsWidgets);
-    expect(find.text('Freeze'), findsOneWidget);
     expect(find.text('Details'), findsOneWidget);
     expect(find.text('Pay & Send'), findsOneWidget);
 
-    // Tap Freeze and verify toggle to Unfreeze
-    await tester.tap(find.text('Freeze'));
-    await tester.pumpAndSettle();
-    expect(find.text('Unfreeze'), findsOneWidget);
-    expect(find.text('LOCKED'), findsOneWidget);
+    // Freeze is server-controlled: there is no local toggle, and an ACTIVE account shows ACTIVE.
+    expect(find.text('Freeze'), findsNothing);
+    expect(find.text('ACTIVE'), findsOneWidget);
   });
 
   testWidgets('TransactionsScreen displays connected account history, PayPink filter, and transaction items', (WidgetTester tester) async {

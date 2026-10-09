@@ -9,7 +9,7 @@ import '../services/account_service.dart';
 import '../widgets/spending_chart.dart';
 import '../widgets/account_card_carousel.dart';
 import '../widgets/promo_banner.dart';
-import '../services/statement_service.dart';
+import '../widgets/transaction_report_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool hideBalances;
@@ -21,7 +21,6 @@ class DashboardScreen extends StatefulWidget {
   final double? totalBalance;
   final Function(double amount, String fromAccount, String loanAccount)? onLoanPaymentSuccess;
   final String? userFullName;
-  final Function(TransactionItem tx)? onReverseTransaction;
   final VoidCallback? onRefreshData;
 
   const DashboardScreen({
@@ -35,7 +34,6 @@ class DashboardScreen extends StatefulWidget {
     this.accounts,
     this.totalBalance,
     this.onLoanPaymentSuccess,
-    this.onReverseTransaction,
     this.onRefreshData,
   });
 
@@ -93,8 +91,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Real accounts and loans only; a customer without a loan gets no loan card.
   List<BankAccount> get _carouselAccounts => List<BankAccount>.from(widget.accounts ?? const <BankAccount>[]);
 
-  void _openLoanPaymentSheet() {
-    final loan = _liveLoanAccount;
+  List<BankAccount> get _missedLoans =>
+      (widget.accounts ?? const <BankAccount>[]).where((a) => a.hasMissedAutoDebit).toList();
+
+  Widget _buildMissedAutoDebitBanner(bool isDark) {
+    final missed = _missedLoans;
+    final total = missed.fold<double>(0, (sum, l) => sum + (l.missedAutoDebitAmount ?? 0));
+    final who = missed.length == 1 ? 'your loan' : '${missed.length} loans';
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(15, 13, 12, 13),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF3A1E22) : const Color(0xFFFBEFED),
+          border: Border.all(color: isDark ? const Color(0xFF5A2D33) : const Color(0xFFF1D2CD)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.account_balance_wallet_outlined, size: 18, color: isDark ? const Color(0xFFF2B8B5) : const Color(0xFF7A2E2A)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Loan payment not collected',
+                    style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: isDark ? const Color(0xFFF2B8B5) : const Color(0xFF7A2E2A)),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'We couldn’t auto-debit ${formatPeso(total)} for $who — not enough balance. '
+                    'Top up before tonight’s run or pay now.',
+                    style: PayPinkTheme.body(fontSize: 12, height: 1.5, color: isDark ? const Color(0xFFE7C2C0) : const Color(0xFF8A4A45)),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 38,
+                    child: FilledButton(
+                      onPressed: () => _openLoanPaymentSheet(target: missed.first),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: PayPinkTheme.wine,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PayPinkTheme.radiusSm)),
+                      ),
+                      child: Text('Pay now', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openLoanPaymentSheet({BankAccount? target}) {
+    final loan = target ?? _liveLoanAccount;
     if (loan == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -134,29 +188,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
 
+  /// Server-generated transaction report (same PDF as the web app).
   void _exportStatement() {
-    final activeAccount = (widget.accounts != null && widget.accounts!.isNotEmpty)
-        ? widget.accounts!.first
-        : BankAccount(
-            accountId: 1,
-            accountNumber: '001396394080',
-            accountType: 'CHECKING',
-            currency: 'PHP',
-            currentBalance: widget.totalBalance ?? 74950.00,
-            status: 'ACTIVE',
-          );
-
-    final holderName = widget.userFullName?.isNotEmpty == true
-        ? widget.userFullName!
-        : (widget.userName.isNotEmpty ? widget.userName : 'PayPink Client');
-
-    StatementService.generateAndExportStatement(
-      context: context,
-      customerName: holderName,
-      accountNumber: activeAccount.formattedNumber,
-      accountType: activeAccount.displayName,
-      currentBalance: activeAccount.currentBalance,
-      transactions: widget.transactions,
+    TransactionReportSheet.show(
+      context,
+      accounts: (widget.accounts ?? const <BankAccount>[]).where((a) => !a.isLoan).toList(),
     );
   }
 
@@ -189,6 +225,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: PayPinkTheme.body(fontSize: 13, color: textMuted),
           ),
           const SizedBox(height: 12),
+
+          // Missed loan auto-debit alert (web: loans.js loanAlertsBanner)
+          if (_missedLoans.isNotEmpty) ...[
+            _buildMissedAutoDebitBanner(isDark),
+            const SizedBox(height: 12),
+          ],
 
           // Hero Wine Balance Card with Concentric Ripple Rings
           Container(
@@ -751,9 +793,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         account: tx.account,
                         counterparty: tx.counterparty ?? tx.recipientAccount,
                         status: tx.status,
-                        canReverse: false,
-                        reversalMinutesRemaining: 0,
-                        onReverse: null,
                       ),
                     ),
                   );

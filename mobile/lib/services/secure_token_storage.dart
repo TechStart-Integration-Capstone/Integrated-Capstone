@@ -63,6 +63,10 @@ class SecureTokenStorage {
     } catch (_) {}
   }
 
+  /// Small non-secret app preferences (e.g. notification read state), stored per user.
+  static Future<String?> readValue(String key) => _read(key);
+  static Future<void> writeValue(String key, String value) => _write(key, value);
+
   static Future<void> saveToken(String token) async {
     await _write(_tokenKey, token);
   }

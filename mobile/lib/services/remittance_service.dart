@@ -11,15 +11,28 @@ class RemittanceResult {
   final bool success;
   final String message;
   final String? referenceId;
-  /// 'COMPLETED', 'RESERVED', or 'FAILED'
+  /// 'COMPLETED', 'PROCESSING' (core banking still posting), 'PENDING' (PESONet batch), or 'FAILED'
   final String status;
+  /// Bank transfers only: who and which bank the server resolved the account to.
+  final String? recipientName;
+  final String? bank;
 
   RemittanceResult({
     required this.success,
     required this.message,
     this.referenceId,
     this.status = 'COMPLETED',
+    this.recipientName,
+    this.bank,
   });
+}
+
+/// An account in the partner-bank directory (InstaPay/PESONet recipients).
+class ExternalRecipient {
+  final String bank;
+  final String name;
+  final String number;
+  const ExternalRecipient({required this.bank, required this.name, required this.number});
 }
 
 class RemittanceService {
@@ -95,15 +108,15 @@ class RemittanceService {
             body['transactionId'] ??
             body['referenceId'] ??
             'TRF-${DateTime.now().millisecondsSinceEpoch}';
-        final isReserved = response.statusCode == 202;
+        final isProcessing = response.statusCode == 202;
 
         return RemittanceResult(
           success: true,
-          message: isReserved
-              ? 'Transfer reserved. You can cancel or send now within the grace window.'
+          message: isProcessing
+              ? 'Core banking is still posting this transfer.'
               : 'Transfer completed atomically via API Gateway.',
           referenceId: refId.toString(),
-          status: isReserved ? 'RESERVED' : 'COMPLETED',
+          status: isProcessing ? 'PROCESSING' : 'COMPLETED',
         );
       }
 
@@ -137,7 +150,6 @@ class RemittanceService {
               'targetAccountId': creditAcct,
               'amount': amount,
               'currency': 'PHP',
-              'skipClientWindow': true,
             }),
           )
           .timeout(ApiConfig.requestTimeout);
@@ -151,15 +163,15 @@ class RemittanceService {
             body['transactionId'] ??
             body['referenceId'] ??
             'TRF-${DateTime.now().millisecondsSinceEpoch}';
-        final isReserved = remResponse.statusCode == 202;
+        final isProcessing = remResponse.statusCode == 202;
 
         return RemittanceResult(
           success: true,
-          message: isReserved
-              ? 'Transfer reserved. You can cancel or send now within the grace window.'
+          message: isProcessing
+              ? 'Core banking is still posting this transfer.'
               : 'Transfer completed atomically via API Gateway.',
           referenceId: refId.toString(),
-          status: isReserved ? 'RESERVED' : 'COMPLETED',
+          status: isProcessing ? 'PROCESSING' : 'COMPLETED',
         );
       } else {
         circuitBreaker.recordFailure();
@@ -192,84 +204,98 @@ class RemittanceService {
     }
   }
 
-  /// Cancels a RESERVED transfer within its grace window.
-  /// POST /api/v1/remittance/{referenceNo}/cancel
-  static Future<RemittanceResult> cancel(String referenceNo) async {
+  /// Sends money to another bank over InstaPay (instant, up to ₱50,000) or PESONet
+  /// (batch). Same request as the web app (frontend/bank/external.js):
+  /// POST /api/v1/auth/banking/external/transfers.
+  /// [sourceAccountId] is the numeric account ID, not the account number.
+  static Future<RemittanceResult> submitExternalTransfer({
+    required int sourceAccountId,
+    required String destinationAccountNumber,
+    required double amount,
+    required String rail,
+  }) async {
+    final normalizedRail = rail.toUpperCase();
+    if (normalizedRail == 'INSTAPAY' && amount > 50000) {
+      return RemittanceResult(
+        success: false,
+        message: 'InstaPay allows up to ₱50,000 per transfer. Choose PESONet for a larger amount.',
+      );
+    }
+    final idempotencyKey = ApiClient.generateIdempotencyKey();
     try {
       final token = await SecureTokenStorage.getToken() ?? '';
-      final url = Uri.parse('${ApiConfig.baseUrl}/remittance/$referenceNo/cancel');
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      ).timeout(ApiConfig.requestTimeout);
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/auth/banking/external/transfers'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'sourceAccountId': sourceAccountId,
+              'destinationAccountNumber': destinationAccountNumber.replaceAll(RegExp(r'\s'), ''),
+              'amount': double.parse(amount.toStringAsFixed(2)),
+              'rail': normalizedRail,
+              'idempotencyKey': 'PAY-$idempotencyKey'.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), ''),
+            }),
+          )
+          .timeout(ApiConfig.requestTimeout);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final status = (body['status'] ?? 'COMPLETED').toString().toUpperCase();
+        final pending = status == 'PENDING';
         return RemittanceResult(
-          success: true,
-          message: 'Transfer cancelled. Held funds have been released.',
-          referenceId: referenceNo,
-          status: 'CANCELLED',
+          success: status != 'FAILED',
+          message: pending
+              ? 'PESONet transfer submitted. It will be credited in the next clearing batch.'
+              : 'Sent via ${normalizedRail == 'PESONET' ? 'PESONet' : 'InstaPay'}.',
+          referenceId: body['reference']?.toString(),
+          status: pending ? 'PENDING' : status,
+          recipientName: body['recipientName']?.toString(),
+          bank: body['bank']?.toString(),
         );
       }
       final errorMsg = _extractErrorMessage(response.body);
       return RemittanceResult(
         success: false,
-        message: errorMsg.isNotEmpty ? errorMsg : 'Could not cancel transfer.',
-        referenceId: referenceNo,
+        message: errorMsg.isNotEmpty ? errorMsg : 'Transfer failed with status ${response.statusCode}',
         status: 'FAILED',
       );
     } catch (e) {
-      debugPrint('[RemittanceService] cancel error: $e');
+      debugPrint('[RemittanceService] external transfer error: $e');
       return RemittanceResult(
         success: false,
-        message: 'Unable to cancel transfer. Please check your connection.',
-        referenceId: referenceNo,
+        message: 'Unable to process transfer. Please check your internet connection and try again.',
         status: 'FAILED',
       );
     }
   }
 
-  /// Skips the remaining grace window and settles immediately.
-  /// POST /api/v1/remittance/{referenceNo}/send-now
-  static Future<RemittanceResult> sendNow(String referenceNo) async {
+  /// Partner-bank recipient directory used by InstaPay/PESONet transfers.
+  /// GET /api/v1/auth/banking/external/recipients
+  static Future<List<ExternalRecipient>> fetchExternalRecipients() async {
     try {
       final token = await SecureTokenStorage.getToken() ?? '';
-      final url = Uri.parse('${ApiConfig.baseUrl}/remittance/$referenceNo/send-now');
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/auth/banking/external/recipients'),
+        headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
       ).timeout(ApiConfig.requestTimeout);
-
       if (response.statusCode == 200) {
-        return RemittanceResult(
-          success: true,
-          message: 'Transfer sent immediately.',
-          referenceId: referenceNo,
-          status: 'COMPLETED',
-        );
+        final list = jsonDecode(response.body);
+        if (list is List) {
+          return list.whereType<Map>().map((r) => ExternalRecipient(
+                bank: r['bank']?.toString() ?? '',
+                name: r['name']?.toString() ?? '',
+                number: r['number']?.toString() ?? '',
+              )).toList();
+        }
       }
-      final errorMsg = _extractErrorMessage(response.body);
-      return RemittanceResult(
-        success: false,
-        message: errorMsg.isNotEmpty ? errorMsg : 'Could not send transfer immediately.',
-        referenceId: referenceNo,
-        status: 'FAILED',
-      );
     } catch (e) {
-      debugPrint('[RemittanceService] sendNow error: $e');
-      return RemittanceResult(
-        success: false,
-        message: 'Unable to send transfer. Please check your connection.',
-        referenceId: referenceNo,
-        status: 'FAILED',
-      );
+      debugPrint('[RemittanceService] external recipients error: $e');
     }
+    return const [];
   }
 
   /// Polls the transfer status. Used by the periodic timer on the pending UI.
@@ -288,11 +314,11 @@ class RemittanceService {
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return (body['status'] ?? 'RESERVED').toString().toUpperCase();
+        return (body['status'] ?? 'PROCESSING').toString().toUpperCase();
       }
     } catch (e) {
       debugPrint('[RemittanceService] getStatus error: $e');
     }
-    return 'RESERVED'; // keep polling on transient errors
+    return 'PROCESSING'; // keep polling on transient errors
   }
 }

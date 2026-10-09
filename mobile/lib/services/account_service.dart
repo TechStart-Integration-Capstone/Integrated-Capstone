@@ -30,6 +30,10 @@ class BankAccount {
   final String? repaymentAccountNumber;
   final double? penaltyDue;
   final int? termMonths;
+  /// Amount of the last nightly auto-debit that failed for lack of funds, while that
+  /// failure still applies (same rule as the web `missedAutoDebit` in loans.js).
+  final double? missedAutoDebitAmount;
+  final String? missedAutoDebitDate;
 
   BankAccount({
     required this.accountId,
@@ -46,7 +50,11 @@ class BankAccount {
     this.repaymentAccountNumber,
     this.penaltyDue,
     this.termMonths,
+    this.missedAutoDebitAmount,
+    this.missedAutoDebitDate,
   });
+
+  bool get hasMissedAutoDebit => isLoan && missedAutoDebitAmount != null;
 
   bool get isChecking =>
       accountType.contains('CHECKING') || accountType.contains('EVERYDAY');
@@ -149,6 +157,8 @@ class BankAccount {
       repaymentAccountNumber: repaymentAccountNumber ?? this.repaymentAccountNumber,
       penaltyDue: penaltyDue ?? this.penaltyDue,
       termMonths: termMonths ?? this.termMonths,
+      missedAutoDebitAmount: missedAutoDebitAmount,
+      missedAutoDebitDate: missedAutoDebitDate,
     );
   }
 
@@ -199,6 +209,19 @@ class BankAccount {
     final outstanding = _toDouble(json['outstandingPrincipal']) ?? 0.0;
     final penalty = _toDouble(json['penaltyDue']) ?? 0.0;
     final nextAmount = _toDouble(nextDue?['amount']);
+    final status = json['status']?.toString() ?? 'ACTIVE';
+
+    // Installments are collected by the nightly EOD job. A short balance leaves the loan
+    // flagged INSUFFICIENT_FUNDS until the amount is paid. Mirrors web loans.js missedAutoDebit().
+    final last = json['lastAutoDebit'] is Map ? json['lastAutoDebit'] as Map : null;
+    final lastDate = last?['date']?.toString();
+    final nextDueDate = nextDue?['dueDate']?.toString();
+    final missed = last != null &&
+        last['status']?.toString() == 'INSUFFICIENT_FUNDS' &&
+        status != 'CLOSED' &&
+        (status == 'OVERDUE' ||
+            penalty > 0 ||
+            (nextDueDate != null && lastDate != null && nextDueDate.compareTo(lastDate) <= 0));
 
     return BankAccount(
       accountId: loanId ?? 0,
@@ -206,7 +229,7 @@ class BankAccount {
       accountType: 'LOAN_ACCOUNT',
       currency: 'PHP',
       currentBalance: outstanding,
-      status: json['status']?.toString() ?? 'ACTIVE',
+      status: status,
       outstandingDebt: outstanding,
       // Same suggestion as the web app: next installment plus any late penalty.
       minimumPayment: nextAmount == null ? (penalty > 0 ? penalty : null) : nextAmount + penalty,
@@ -216,6 +239,8 @@ class BankAccount {
       repaymentAccountNumber: json['accountNo']?.toString(),
       penaltyDue: penalty,
       termMonths: int.tryParse(json['termMonths']?.toString() ?? ''),
+      missedAutoDebitAmount: missed ? _toDouble(last['amount']) : null,
+      missedAutoDebitDate: missed ? formatDueDate(lastDate) : null,
     );
   }
 }
@@ -918,7 +943,6 @@ class AccountService {
         results = results.where((tx) {
           if (ft == 'CREDIT' || ft == 'IN') return tx.isCredit;
           if (ft == 'DEBIT' || ft == 'OUT') return !tx.isCredit;
-          if (ft == 'REVERSAL') return tx.status.toUpperCase() == 'REVERSED' || tx.status.toLowerCase().contains('refund');
           if (ft == 'CHECKING') return tx.isCheckingRelated;
           if (ft == 'SAVINGS') return tx.isSavingsRelated;
           if (ft == 'PAYPINK') return tx.isPayPinkRelated;
@@ -1035,7 +1059,7 @@ class AccountService {
         isCredit: isCredit,
         transactionType: rawType,
         counterparty: counterpartyDisplay,
-        status: status.contains('FAIL') ? 'FAILED' : (status.contains('PEND') ? 'PENDING' : (status.contains('REV') ? 'REVERSED' : 'Completed')),
+        status: status.contains('FAIL') ? 'FAILED' : (status.contains('PEND') ? 'PENDING' : (status.contains('PROCESS') ? 'PROCESSING' : (status.contains('CANC') ? 'CANCELLED' : (status.contains('REV') ? 'REVERSED' : 'Completed')))),
         timestamp: parsedTime,
         sourceAccount: item['sourceAccount']?.toString() ?? item['accountNumber']?.toString() ?? acct,
         recipientAccount: cpAcct ?? cpName,
