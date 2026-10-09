@@ -50,5 +50,35 @@ class GatewayRoutesTest {
         assertThat((List<Object>) loans.get("predicates")).containsExactly("Path=/api/v1/loans/**");
         assertThat((List<Object>) loans.get("filters")).contains("StripPrefix=2");
         assertThat(routed("/api/v1/loans/applications")).isTrue();
+        assertThat(routed("/api/v1/loans/1/repayments")).isTrue();
+    }
+
+    @Test
+    @DisplayName("MOB-504: /api/v1/loans/pay has no route; repayments go through /api/v1/loans/{loanId}/repayments")
+    void loansPayRoute_isNotRoutedDirectly() throws Exception {
+        boolean hasLoansPayId = routes().stream().anyMatch(r -> "mobile-loans-pay".equals(r.get("id")));
+        assertThat(hasLoansPayId).isFalse();
+    }
+
+    @Test
+    @DisplayName("MOB-505: /api/v1/transactions maps to auth-service banking transactions before transaction-queries")
+    @SuppressWarnings("unchecked")
+    void transactionsRoute_ordersMobileBeforeQueries() throws Exception {
+        List<Map<String, Object>> routeList = routes();
+        int mobileIndex = -1;
+        int queryIndex = -1;
+        for (int i = 0; i < routeList.size(); i++) {
+            String id = (String) routeList.get(i).get("id");
+            if ("mobile-transactions".equals(id)) mobileIndex = i;
+            if ("transaction-queries".equals(id)) queryIndex = i;
+        }
+
+        assertThat(mobileIndex).isGreaterThanOrEqualTo(0);
+        assertThat(queryIndex).isGreaterThanOrEqualTo(0);
+        assertThat(mobileIndex).isLessThan(queryIndex);
+
+        Map<String, Object> mobileTx = routeList.get(mobileIndex);
+        assertThat((String) mobileTx.get("uri")).endsWith(":8081");
+        assertThat((List<Object>) mobileTx.get("predicates")).contains("Path=/api/v1/transactions");
     }
 }

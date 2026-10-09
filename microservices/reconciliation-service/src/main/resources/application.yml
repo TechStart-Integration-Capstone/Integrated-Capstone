@@ -15,10 +15,10 @@ spring:
     # docker-compose passes ORACLE_DATASOURCE_* env vars which map to this prefix via
     # the environment overrides in AzureSqlDataSourceConfig (@ConfigurationProperties).
     azure-sql:
-      jdbc-url: ${ORACLE_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      jdbc-url: ${SPRING_DATASOURCE_AZURE_SQL_JDBC_URL:${SPRING_DATASOURCE_URL:${ORACLE_DATASOURCE_URL:${AZURE_SQL_JDBC_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}}}}
       driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
-      username: ${ORACLE_DATASOURCE_USERNAME:sa}
-      password: ${ORACLE_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
+      username: ${SPRING_DATASOURCE_AZURE_SQL_USERNAME:${SPRING_DATASOURCE_USERNAME:${ORACLE_DATASOURCE_USERNAME:${AZURE_SQL_USERNAME:sa}}}}
+      password: ${SPRING_DATASOURCE_AZURE_SQL_PASSWORD:${SPRING_DATASOURCE_PASSWORD:${ORACLE_DATASOURCE_PASSWORD:${AZURE_SQL_PASSWORD:PayPink2.0_StrongPass!}}}}
       hikari:
         maximum-pool-size: 10
         pool-name: ReconAzureSqlPool

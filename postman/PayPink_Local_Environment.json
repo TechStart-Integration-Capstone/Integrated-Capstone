@@ -21,8 +21,26 @@
       "enabled": true
     },
     {
+      "key": "customer_username",
+      "value": "lviernes",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "customer_password",
+      "value": "password123",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "admin_username",
+      "value": "admin",
+      "type": "default",
+      "enabled": true
+    },
+    {
       "key": "admin_password",
-      "value": "",
+      "value": "Admin@PayPink2026!",
       "type": "secret",
       "enabled": true
     },

@@ -31,11 +31,11 @@ class ApiConfig {
   }
 
   // Gateway Endpoint paths
-  static const String loginPath = '/auth/login';
+  static const String loginPath = '/auth/banking/login';
   static const String accountsPath = '/accounts';
   static const String transfersPath = '/transfers';
   static const String loanPayPath = '/loans/pay';
-  static const String transactionsPath = '/transactions';
+  static const String transactionsPath = '/transactions/activity';
 
   static const Duration requestTimeout = Duration(seconds: 10);
 }
