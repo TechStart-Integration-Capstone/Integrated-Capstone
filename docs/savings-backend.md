@@ -124,6 +124,7 @@ Base: `/api/v1/accounts/savings`
 |---|---|
 | `GET /` | Own goals, confirmed core amounts, personal/group totals and goal counts |
 | `POST /goals` | Create a zero-balance personal goal |
+| `GET /goals/{goalId}/funding` | Own eligible account's live funding breakdown and maximum contribution |
 | `PUT /goals/{goalId}` | Edit own personal goal; target cannot fall below saved amount |
 | `PUT /goals/{goalId}/schedule` | Set/disable optional auto-contribution |
 | `POST /operations` | Allocate/release, including multi-goal Smart Split |
@@ -176,6 +177,21 @@ Metadata creation is not idempotent: after an uncertain create response, refresh
 goal/circle list before offering another create attempt.
 
 ### Allocate, release or Smart Split
+
+Opening Add money or a PinkCircle contribution fetches `/goals/{goalId}/funding`.
+The owner-checked response includes `accountId`, `accountBalance`, `reservedSavings`
+(all personal goals and own circle allocations in that account), `otherHolds`,
+`availableBalance`, `goalSavedAmount`, `remainingTarget`, and `maximumContribution`.
+Core reads the account and reservations under the same lock used by monetary changes.
+Available funds equal account balance minus all held funds. The maximum is the lesser
+of available funds and the remaining goal/member target, rounded down to centavos.
+The dialog shows this breakdown, offers Add maximum, and blocks excessive or zero
+contributions. An unavailable quote blocks funding; profile/cached amounts are not
+substituted. The quote does not reserve money: confirmation still validates the
+current available balance and goal limits under the core account lock.
+
+Deploying this addition requires rebuilding account-service and t24-adapter JARs,
+then their Docker images and the frontend. It requires no schema migration.
 
 `POST /operations`, header `Idempotency-Key: <client-generated UUID>`:
 ```json
@@ -293,3 +309,13 @@ manual test against SQL Server, the gateway, risk engine and Kafka on the other 
 Disabling the feature stops its public API and workers; it does not release existing
 reservations. Do not drop reservation tables or subtract held balances manually to
 roll back a deployment. Reconcile pending operations and release funds through the core.
+# Savings account breakdown
+
+The overview card uses `GET /api/v1/accounts/savings/balance-summary` for available and total balances across the signed-in customer's PHP accounts. It uses core snapshots rather than treating profile current balances as spendable. Savings must be enabled; failed summary reads display Unavailable, while the separate total remains visible. This endpoint requires the updated account-service and frontend in addition to the core changes below.
+
+Funding snapshots deduct the greater of the stored account held total and the sum of recorded savings reservations plus active transfer holds. This prevents a stale held total from overstating available funds and avoids subtracting savings twice. Under the account write lock, core savings mutations, transfer hold placement/release and posting also preserve this recorded reservation minimum. Existing `t24.SAVINGS_RESERVATION` and `t24.LOCKED_AMOUNT` tables must be present before deploying this core update; no new schema change is needed on an already migrated savings environment.
+
+`GET /api/v1/accounts/savings/accounts/{id}/breakdown` checks the authenticated customer's ownership of an active PHP savings account. It returns a locked core snapshot of total and available balances, personal/circle reservation totals, and only that owner's allocations. My accounts displays these in an account selector and collapsible View allocations panel. Other holds are not displayed in this panel; available balance still respects all actual core holds. Hide balances also masks allocation amounts.
+
+Core regression coverage verifies that a debit exceeding unreserved funds is rejected and succeeds after sufficient savings are released, without consuming remaining goal reservations. Deploy the account-service and t24-adapter JARs/images and frontend together; no new migration is required.
+

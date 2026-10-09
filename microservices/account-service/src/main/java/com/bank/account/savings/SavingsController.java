@@ -10,9 +10,12 @@ import java.util.*;
 @ConditionalOnProperty(name="app.savings.enabled",havingValue="true")
 public class SavingsController {
  private final SavingsService service;
+ @GetMapping("/balance-summary") public Map<String,Object> balanceSummary(@RequestHeader("X-Auth-Customer-Id") Long customer){return service.balanceSummary(customer);}
+ @GetMapping("/accounts/{id}/breakdown") public Map<String,Object> breakdown(@RequestHeader("X-Auth-Customer-Id") Long customer,@PathVariable Long id){return service.breakdown(customer,id);}
  private final SavingsOperations operations;
  public SavingsController(SavingsService service,SavingsOperations operations){this.service=service;this.operations=operations;}
  @GetMapping public Map<String,Object> overview(@RequestHeader("X-Auth-Customer-Id") Long customer){return service.overview(customer);}
+ @GetMapping("/goals/{id}/funding") public Map<String,Object> funding(@RequestHeader("X-Auth-Customer-Id") Long customer,@PathVariable UUID id){return service.funding(customer,id.toString());}
  @PostMapping("/goals") public Map<String,Object> create(@RequestHeader("X-Auth-Customer-Id") Long customer,@Valid @RequestBody SavingsRequests.Goal body){return service.createGoal(customer,body);}
  @PutMapping("/goals/{id}") public void edit(@RequestHeader("X-Auth-Customer-Id") Long customer,@PathVariable UUID id,@Valid @RequestBody SavingsRequests.Edit body){service.edit(customer,id.toString(),body);}
  @PutMapping("/goals/{id}/schedule") public void schedule(@RequestHeader("X-Auth-Customer-Id") Long customer,@PathVariable UUID id,@Valid @RequestBody SavingsRequests.Schedule body){service.schedule(customer,id.toString(),body);}

@@ -78,6 +78,7 @@ public class T24PostingService {
         }
 
         // 4. Check for active hold in LOCKED_AMOUNT
+        accountRepository.protectReservations(debitAccount);
         Optional<LockedAmount> holdOpt = lockedAmountRepository.findByReferenceNo(referenceNo);
         boolean hadHold = false;
         if (holdOpt.isPresent() && LockedAmount.STATUS_ACTIVE.equalsIgnoreCase(holdOpt.get().getStatus())) {

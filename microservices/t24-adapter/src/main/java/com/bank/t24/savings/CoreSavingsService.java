@@ -45,6 +45,7 @@ public class CoreSavingsService {
    if(after.signum()<0 || (!release && after.compareTo(line.target())>0)) throw new ResponseStatusException(UNPROCESSABLE_ENTITY,"Amount exceeds saved funds or goal target");
    changes.put(goal,after); amount=amount.add(line.amount());
   }
+  accounts.protectReservations(account);
   if(!release && account.getAvailableBalance().compareTo(amount)<0) throw new ResponseStatusException(UNPROCESSABLE_ENTITY,"Insufficient available funds");
   if(release && account.getHeldBalance().compareTo(amount)<0) throw new ResponseStatusException(CONFLICT,"Reservation reconciliation required");
   BigDecimal score=risk.approve(account,amount,id), beforeHeld=account.getHeldBalance();
@@ -69,6 +70,24 @@ public class CoreSavingsService {
   var result=new LinkedHashMap<String,BigDecimal>();
   jdbc.query("SELECT goal_id,reserved_amount FROM t24.SAVINGS_RESERVATION WHERE account_id=?",rs->{result.put(rs.getString(1),rs.getBigDecimal(2));},accountId);
   return result;
+ }
+ @Transactional
+ public Map<String,BigDecimal> funding(Long accountId,String goalId) {
+  // Read account and reservations under the same lock used by contributions/transfers.
+  var account=accounts.findByIdForUpdate(accountId).orElseThrow(()->new ResponseStatusException(NOT_FOUND));
+  var reserved=balances(accountId);
+  BigDecimal savings=reserved.values().stream().reduce(BigDecimal.ZERO,BigDecimal::add);
+  BigDecimal effectiveHeld=account.getHeldBalance().max(accounts.recordedHolds(accountId)).max(savings);
+  return Map.of("accountBalance",account.getCurrentBalance(),"reservedSavings",savings,
+   "otherHolds",effectiveHeld.subtract(savings).max(BigDecimal.ZERO),
+   "availableBalance",account.getCurrentBalance().subtract(effectiveHeld).max(BigDecimal.ZERO),
+   "goalSavedAmount",reserved.getOrDefault(goalId,BigDecimal.ZERO));
+ }
+ @Transactional
+ public Map<String,Object> breakdown(Long accountId) {
+  // funding acquires the account lock; retain it through reading all allocations.
+  var funds=funding(accountId,"");
+  return Map.of("funds",funds,"reservations",balances(accountId));
  }
  private String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalStateException(e);}}
  @SuppressWarnings("unchecked") private Map<String,Object> decode(String value){try{return json.readValue(value,Map.class);}catch(Exception e){throw new IllegalStateException(e);}}

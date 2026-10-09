@@ -47,6 +47,28 @@ class SavingsServiceTest {
  }
  SavingsRequests.Goal goal(long account){return new SavingsRequests.Goal(account,"Christmas","HOLIDAY",new BigDecimal("10000.00"),LocalDate.now().plusMonths(6));}
  String create(){return service.createGoal(1L,goal(11)).get("goalId").toString();}
+ @Test void overviewSeparatesTotalFromAvailableAcrossOwnedAccounts() {
+  when(core.breakdown(11L)).thenReturn(new SavingsCoreClient.Breakdown(Map.of("accountBalance",new BigDecimal("20000"),"availableBalance",new BigDecimal("9000")),Map.of()));
+  when(core.breakdown(12L)).thenReturn(new SavingsCoreClient.Breakdown(Map.of("accountBalance",new BigDecimal("5000"),"availableBalance",new BigDecimal("4000")),Map.of()));
+  var result=service.balanceSummary(1L);
+  assertThat((BigDecimal)result.get("totalBalance")).isEqualByComparingTo("25000");
+  assertThat((BigDecimal)result.get("availableBalance")).isEqualByComparingTo("13000");
+  assertThat(result.get("accountCount")).isEqualTo(2);
+  verify(core,never()).breakdown(22L);
+ }
+ @Test void accountBreakdownIsOwnerOnlyAndSeparatesOwnAllocations() {
+  String personal=create(),circle=create();
+  // A linked circle goal represents only this customer's reservation.
+  jdbc.update("INSERT INTO app.PINK_CIRCLE(circle_id,admin_customer_id,name,target_amount,target_date) VALUES('circle-test',1,'Trip',20000,?)",LocalDate.now().plusMonths(6));
+  jdbc.update("UPDATE app.SAVINGS_GOAL SET circle_id=? WHERE goal_id=?","circle-test",circle);
+  when(core.breakdown(11L)).thenReturn(new SavingsCoreClient.Breakdown(Map.of("accountBalance",new BigDecimal("20000"),"reservedSavings",new BigDecimal("11000"),"otherHolds",BigDecimal.ZERO,"availableBalance",new BigDecimal("9000")),Map.of(personal,new BigDecimal("6000"),circle,new BigDecimal("5000"))));
+  var result=service.breakdown(1L,11L);
+  assertThat((BigDecimal)result.get("personalReserved")).isEqualByComparingTo("6000");
+  assertThat((BigDecimal)result.get("circleReserved")).isEqualByComparingTo("5000");
+  assertThat((List<?>)result.get("allocations")).hasSize(2);
+  assertThatThrownBy(()->service.breakdown(2L,11L)).isInstanceOf(ResponseStatusException.class);
+  verify(core,times(1)).breakdown(11L);
+ }
  SavingsRequests.Operation operation(String id){return new SavingsRequests.Operation(11L,"ALLOCATE",List.of(new SavingsRequests.Line(UUID.fromString(id),new BigDecimal("500.00"))));}
  @Test void onlyOwnSavingsAccountCanCreateGoalAndStartsAtZero() {
   String id=create();assertThat(service.overview(1L).get("goalCount")).isEqualTo(1);
@@ -55,6 +77,22 @@ class SavingsServiceTest {
   assertThatThrownBy(()->service.createGoal(1L,goal(22))).isInstanceOf(ResponseStatusException.class);
   assertThatThrownBy(()->service.edit(2L,id,new SavingsRequests.Edit("Changed",BigDecimal.TEN,LocalDate.now()))).isInstanceOf(ResponseStatusException.class);
   verify(core,never()).apply(any());
+ }
+ @Test void fundingUsesLesserOfAvailableFundsAndRemainingPersonalOrCircleTarget() {
+  String goal=create();
+  var snapshot=new HashMap<String,BigDecimal>(Map.of("accountBalance",new BigDecimal("20000"),"reservedSavings",new BigDecimal("11000"),"otherHolds",BigDecimal.ZERO,"availableBalance",new BigDecimal("9000"),"goalSavedAmount",new BigDecimal("5000")));
+  when(core.funding(11L,goal)).thenReturn(snapshot);
+  assertThat(service.funding(1L,goal).get("maximumContribution")).isEqualTo(new BigDecimal("5000.00"));
+  snapshot.put("availableBalance",new BigDecimal("3000.009"));
+  assertThat(service.funding(1L,goal).get("maximumContribution")).isEqualTo(new BigDecimal("3000.00"));
+  snapshot.put("availableBalance",BigDecimal.ZERO);
+  assertThat(service.funding(1L,goal).get("maximumContribution")).isEqualTo(new BigDecimal("0.00"));
+  assertThatThrownBy(()->service.funding(2L,goal)).isInstanceOf(ResponseStatusException.class);
+  verify(core,never()).funding(22L,goal);
+  var circle=service.createCircle(1L,new SavingsRequests.Circle(goal(11),new BigDecimal("4000"),false));
+  String own=circle.get("goalId").toString();snapshot.put("availableBalance",new BigDecimal("9000"));snapshot.put("goalSavedAmount",new BigDecimal("1000"));
+  when(core.funding(11L,own)).thenReturn(snapshot);
+  assertThat(service.funding(1L,own).get("maximumContribution")).isEqualTo(new BigDecimal("3000.00"));
  }
  @Test void circleInvitationsRequireRegisteredUserAndAcceptance() {
   var result=service.createCircle(1L,new SavingsRequests.Circle(goal(11),new BigDecimal("4000"),false));String circle=result.get("circleId").toString();
