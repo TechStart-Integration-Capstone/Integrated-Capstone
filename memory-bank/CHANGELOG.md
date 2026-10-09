@@ -1,4 +1,5 @@
 # Changelog
+<<<<<<< Updated upstream
 - 2026-10-09 — Fix Mobile Docker Build & Resolve Merge Syntax Error:
   - **Syntax Error Fix (`account_service.dart`):** Resolved broken merge syntax error in `fetchProfile()` that caused `flutter build web` compilation failure in CI/CD pipeline.
   - **Docker Build Optimization (`mobile/Dockerfile`, `mobile/.dockerignore`):** Added `mobile/.dockerignore` to prevent copying host `.dart_tool/` and `build/` artifacts into the container; added `--no-wasm-dry-run --no-tree-shake-icons` to `flutter build web` command to prevent OOM termination on the CI/CD runner. Verified with `dart analyze` (0 errors, 0 warnings). — [levi & Antigravity]
@@ -24,6 +25,13 @@
   - **Mobile Account Service Alignment (`account_service.dart`):** Updated `AccountService.fetchProfile()` to call `GET /auth/banking/me` as its first authoritative endpoint—identical to Web Banking SPA—synchronizing all 3 live Azure SQL accounts (`₱235,238.85` total) across Web and Mobile; mapped `STRESS_TEST_ACCOUNT` to `Everyday Account` display name.
   - **Transparent Error Handling (`auth_service.dart`):** Removed silent mock offline token generation (`jwt_local_demo_token`) in `AuthService.login` catch block; returns explicit 503 error when cloud gateway is unreachable to eliminate silent fallback to old hardcoded mock balances.
   - **Docker & Teammate Onboarding Templates (`mobile/Dockerfile`, `.env.example`, `docker/.env.example`):** Added `--dart-define=API_BASE_URL` to `mobile/Dockerfile` web build; checked in tracked `.env.example` templates pointing to `paypink-sql.database.windows.net` to prevent unseeded local SQL container fallbacks. — [levi & Antigravity]
+=======
+- 2026-10-09 — Self-Contained Offline Fonts for Mobile Web (`mobile/pubspec.yaml`, `mobile/assets/fonts/`):
+  - Bundled true offline TTF font files for all typography styles used across PayPink mobile theme: `PlusJakartaSans` (ExtraLight, Light, Regular, Medium, SemiBold, Bold, ExtraBold, Italic) and `JetBrainsMono` (Regular, Medium, SemiBold, Bold, ExtraBold). Registered `- assets/fonts/` in `mobile/pubspec.yaml` asset manifest.
+  - Resolved root cause of blank white screen when running Docker mobile web (`http://localhost:3002/`): `GoogleFonts.config.allowRuntimeFetching = false` previously threw an uncaught exception on startup because the fonts were not bundled in assets and could not be fetched over the network.
+  - Rebuilt Docker container `docker-mobile-app` (`docker compose -f docker/docker-compose.yml up -d --build mobile-app`). Verified 0 browser console exceptions and 100% full screen UI rendering via headless browser automated test; verified all 17 mobile test suites pass (`flutter test`) and static analysis remains at 0 errors (`flutter analyze`). — [dom]
+
+>>>>>>> Stashed changes
 - 2026-10-09 — Merge Conflict Resolution in `mobile/lib/services/account_service.dart`:
   - Resolved merge conflict between `main` branch updates (loan-service `fetchLoans()` aggregation, RFC-7807 problem details parsing, and `ProfileUnavailableException`) and Member 5 mobile hardening (resilient `/accounts/me`, `/auth/banking/me`, `/accounts/customer/$customerId`, and `/accounts` cascading fallbacks, admin `/accounts/customers` elimination, centralized `ApiClient.extractErrorMessage` integration). Preserved both functionalities with 100% test coverage: all 17 mobile tests pass (`account_model_test.dart` and `widget_test.dart`), `flutter analyze` has 0 issues, and all 24 gateway unit tests pass. — [dom]
 
