@@ -616,6 +616,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text('Remaining loan balance', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
+                  if (loan.paymentsLeftLabel != null) ...[
+                    const SizedBox(height: 4),
+                    Text(loan.paymentsLeftLabel!, style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: brandWine)),
+                  ],
                 ],
               ),
               if (loan.dueDate != null || loan.minimumPayment != null)
