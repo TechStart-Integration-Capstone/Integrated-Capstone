@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
@@ -6,6 +7,7 @@ import '../widgets/bottom_sheets.dart';
 import '../widgets/pin_auth_sheet.dart';
 import '../services/remittance_service.dart';
 import '../services/account_service.dart';
+import '../widgets/pin_auth_sheet.dart';
 
 class RemittanceScreen extends StatefulWidget {
   final Function(double amount, String refId, String source, String recipient) onTransferSuccess;
@@ -29,8 +31,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   final TextEditingController _amountController = TextEditingController(text: '');
   final TextEditingController _recipientController = TextEditingController();
 
-  double _riskScore = 0.12;
-  bool get isHighRisk => _riskScore > 0.85;
   String? _verifiedName;
 
   String _transferRail = 'InstaPay';
@@ -75,11 +75,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }
 
   void _updateCalculations() {
-    final amt = double.tryParse(_amountController.text) ?? 0.0;
-
     setState(() {
-      _riskScore = RemittanceService.evaluateRisk(amt);
-
       final cleanRec = _recipientController.text.replaceAll(' ', '');
       if (cleanRec.length >= 8) {
         if (cleanRec.endsWith('8')) {
@@ -465,16 +461,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       return;
     }
 
-    if (_riskScore > 0.85) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: PayPinkTheme.red,
-          content: Text('Transfer blocked by Fraud Screening Model (> 0.85)'),
-        ),
-      );
-      return;
-    }
-
     final srcAcc = _getAccount(_sourceAccount);
     final srcDisplayName = srcAcc?.displayName ?? 'Checking Account';
     final srcLast4 = _sourceAccount.length >= 4 ? _sourceAccount.substring(_sourceAccount.length - 4) : _sourceAccount;
@@ -622,6 +608,14 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }
 
   void _executeTransferWithPin(double amt, String fromAcc, String toAcc) async {
+    final pinOk = await PinAuthSheet.show(
+      context,
+      title: 'Authorize Transfer',
+      description: 'Enter your 6-digit MPIN to authorize transfer of ₱${amt.toStringAsFixed(2)}',
+      amount: amt,
+    );
+    if (!pinOk) return;
+
     final cleanDest = _selectedModeIndex == 0
         ? _ownTargetAccount
         : _recipientController.text.replaceAll(' ', '');
@@ -634,7 +628,16 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
 
     if (!mounted) return;
 
-    if (result.success) {
+    if (result.success && result.status == 'RESERVED') {
+      // 202 — enter saga grace window
+      final ref = result.referenceId ?? '';
+      setState(() {
+        _pendingReferenceNo = ref;
+        _isSagaPending = true;
+        _sagaErrorMessage = null;
+      });
+      _startStatusPolling(ref, amt, fromAcc, toAcc);
+    } else if (result.success) {
       final cleanRef = result.referenceId != null && result.referenceId!.isNotEmpty
           ? result.referenceId!
           : 'TXN-2026-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
@@ -646,6 +649,96 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
           content: Text(result.message),
         ),
       );
+    }
+  }
+
+  // ── MOB-305: Saga 202 grace-window helpers ────────────────────────────────
+
+  void _startStatusPolling(String ref, double amt, String fromAcc, String toAcc) {
+    _pendingAmt = amt;
+    _pendingFromAcc = fromAcc;
+    _pendingToAcc = toAcc;
+    _statusPollTimer?.cancel();
+    _statusPollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      final status = await RemittanceService.getStatus(ref);
+      if (!mounted) { timer.cancel(); return; }
+      if (status == 'COMPLETED' || status == 'POSTED') {
+        timer.cancel();
+        setState(() {
+          _isSagaPending = false;
+          _pendingReferenceNo = null;
+          _pendingAmt = null;
+          _pendingFromAcc = null;
+          _pendingToAcc = null;
+        });
+        _showScreenshotReceiptDialog(amt, ref, fromAcc, toAcc);
+      } else if (status == 'FAILED' || status == 'CANCELLED') {
+        timer.cancel();
+        setState(() {
+          _isSagaPending = false;
+          _pendingReferenceNo = null;
+          _pendingAmt = null;
+          _pendingFromAcc = null;
+          _pendingToAcc = null;
+          _sagaErrorMessage = status == 'CANCELLED'
+              ? 'Transfer was cancelled.'
+              : 'Transfer failed. Please try again.';
+        });
+      }
+    });
+  }
+
+  Future<void> _onSagaCancel() async {
+    final ref = _pendingReferenceNo;
+    if (ref == null) return;
+    _statusPollTimer?.cancel();
+    final result = await RemittanceService.cancel(ref);
+    if (!mounted) return;
+    setState(() {
+      _isSagaPending = false;
+      _pendingReferenceNo = null;
+      _pendingAmt = null;
+      _pendingFromAcc = null;
+      _pendingToAcc = null;
+      _sagaErrorMessage = result.success ? null : result.message;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      backgroundColor: result.success ? PayPinkTheme.green : PayPinkTheme.red,
+      content: Text(result.message),
+    ));
+  }
+
+  Future<void> _onSagaSendNow() async {
+    final ref = _pendingReferenceNo;
+    final amt = _pendingAmt;
+    final fromAcc = _pendingFromAcc;
+    final toAcc = _pendingToAcc;
+    if (ref == null) return;
+    _statusPollTimer?.cancel();
+    final result = await RemittanceService.sendNow(ref);
+    if (!mounted) return;
+    if (result.success) {
+      setState(() {
+        _isSagaPending = false;
+        _pendingReferenceNo = null;
+        _pendingAmt = null;
+        _pendingFromAcc = null;
+        _pendingToAcc = null;
+      });
+      if (amt != null && fromAcc != null && toAcc != null) {
+        _showScreenshotReceiptDialog(amt, ref, fromAcc, toAcc);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          backgroundColor: PayPinkTheme.green,
+          content: Text(result.message),
+        ));
+      }
+    } else {
+      setState(() { _sagaErrorMessage = result.message; });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: PayPinkTheme.red,
+        content: Text(result.message),
+      ));
     }
   }
 
@@ -938,6 +1031,99 @@ Thank you for banking with PayPink!
     );
   }
 
+  // ── MOB-305: Saga pending screen ─────────────────────────────────────────
+  Widget _buildSagaPendingScreen({
+    required bool isDark,
+    required Color textInk,
+    required Color textMuted,
+    required Color textLine,
+  }) {
+    final ref = _pendingReferenceNo ?? '';
+    final shortRef = ref.length > 16 ? ref.substring(ref.length - 16) : ref;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 24),
+          const CircularProgressIndicator(color: PayPinkTheme.wine, strokeWidth: 2.5),
+          const SizedBox(height: 24),
+          Text(
+            'Transfer Reserved',
+            style: PayPinkTheme.display(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: textInk,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your transfer is in a 15-second grace window.\nYou can cancel or send it right now.',
+            style: PayPinkTheme.body(fontSize: 13, color: textMuted),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? PayPinkTheme.darkCard : PayPinkTheme.paper,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: textLine),
+            ),
+            child: Text(
+              'Ref: $shortRef',
+              style: PayPinkTheme.mono(fontSize: 12, color: textMuted),
+            ),
+          ),
+          if (_sagaErrorMessage != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _sagaErrorMessage!,
+              style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.red),
+              textAlign: TextAlign.center,
+            ),
+          ],
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _onSagaCancel,
+                  icon: const Icon(Icons.cancel_outlined, size: 18),
+                  label: const Text('Cancel'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: textInk,
+                    side: BorderSide(color: textLine),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _onSagaSendNow,
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('Send Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: PayPinkTheme.wine,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -945,6 +1131,16 @@ Thank you for banking with PayPink!
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
     final cardBg = isDark ? PayPinkTheme.darkCard : Colors.white;
+
+    // MOB-305: show saga pending screen while RESERVED
+    if (_isSagaPending && _pendingReferenceNo != null) {
+      return _buildSagaPendingScreen(
+        isDark: isDark,
+        textInk: textInk,
+        textMuted: textMuted,
+        textLine: textLine,
+      );
+    }
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -1340,22 +1536,20 @@ Thank you for banking with PayPink!
                 ),
                 const SizedBox(height: 16),
 
-                // Security & Protection status
+                // Security & Protection status — static badge (server-side risk engine handles fraud screening)
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isDark ? PayPinkTheme.darkPaper.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isHighRisk ? PayPinkTheme.red.withValues(alpha: 0.4) : textLine,
-                    ),
+                    border: Border.all(color: textLine),
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        isHighRisk ? Icons.warning_amber_rounded : Icons.shield_rounded,
+                      const Icon(
+                        Icons.shield_rounded,
                         size: 20,
-                        color: isHighRisk ? PayPinkTheme.red : PayPinkTheme.green,
+                        color: PayPinkTheme.green,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -1363,18 +1557,16 @@ Thank you for banking with PayPink!
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isHighRisk ? 'Security Alert: Limit Exceeded' : 'Protected by PayPink Fraud Shield',
+                              'Protected by PayPink Fraud Shield',
                               style: PayPinkTheme.body(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: isHighRisk ? PayPinkTheme.red : textInk,
+                                color: textInk,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              isHighRisk
-                                  ? 'Transfer exceeds single-transaction risk SLA.'
-                                  : 'Real-time encryption & step-up MPIN verification active.',
+                              'Real-time encryption & step-up MPIN verification active.',
                               style: PayPinkTheme.body(fontSize: 10, color: textMuted),
                             ),
                           ],

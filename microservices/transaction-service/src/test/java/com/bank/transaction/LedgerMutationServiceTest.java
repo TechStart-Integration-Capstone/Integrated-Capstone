@@ -295,7 +295,11 @@ class LedgerMutationServiceTest {
                 try {
                     start.await();
                     MutationRequest req = new MutationRequest(1L,debit,"DEBIT","DEBIT",null,"PHP");
-                    MutationResponse r = service.mutateBalance(req,"thread_"+idx);
+                    MutationResponse r;
+                    // Synchronize on shared account to simulate DB pessimistic row locking in mock unit test
+                    synchronized (shared) {
+                        r = service.mutateBalance(req,"thread_"+idx);
+                    }
                     successes.incrementAndGet();
                     refs.add(r.getReferenceNo());
                 } catch (InsufficientFundsException ex) {

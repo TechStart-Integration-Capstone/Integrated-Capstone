@@ -416,10 +416,9 @@ class AccountService {
         idempotencyKey: idempotencyKey,
         body: {
           'sourceAccountId': sourceAccount.accountId,
-          'destinationAccountNumber': destinationAccountNumber.replaceAll(' ', '').trim(),
+          'targetAccountId': destinationAccountNumber.replaceAll(' ', '').trim(),
           'amount': amount,
           'currency': 'PHP',
-          'idempotencyKey': idempotencyKey,
         },
       );
 
