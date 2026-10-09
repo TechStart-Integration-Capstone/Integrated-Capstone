@@ -38,7 +38,7 @@ class DevHttpOverrides extends HttpOverrides {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
+  GoogleFonts.config.allowRuntimeFetching = true;
   await di.initServiceLocator();
   if (!kIsWeb) {
     HttpOverrides.global = DevHttpOverrides();
@@ -713,6 +713,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         totalBalance: _userProfile?.totalBalance,
         onLoanPaymentSuccess: _handleLoanPaymentSuccess,
         onReverseTransaction: _handleTransactionReversal,
+        onRefreshData: () => _loadLiveDatabaseData(bypassCache: true),
       ),
       AccountsScreen(
         hideBalances: _hideBalances,

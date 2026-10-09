@@ -13,7 +13,7 @@ COPY pubspec.yaml pubspec.lock ./
 RUN flutter pub get
 
 COPY . .
-RUN flutter build web --release --dart-define=API_BASE_URL=http://paypink-levi-westus2.westus2.cloudapp.azure.com:8080/api/v1
+RUN flutter build web --release --no-wasm-dry-run --no-tree-shake-icons
 
 # Stage 2: Serve compiled web artifact using lightweight Nginx Alpine
 FROM nginx:1.25-alpine

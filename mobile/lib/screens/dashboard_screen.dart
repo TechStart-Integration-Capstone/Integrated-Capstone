@@ -3,6 +3,7 @@ import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
 import '../widgets/loan_payment_sheet.dart';
+import '../widgets/loan_application_sheet.dart';
 import 'transactions_screen.dart';
 import '../services/account_service.dart';
 import '../widgets/spending_chart.dart';
@@ -21,6 +22,7 @@ class DashboardScreen extends StatefulWidget {
   final Function(double amount, String fromAccount, String loanAccount)? onLoanPaymentSuccess;
   final String? userFullName;
   final Function(TransactionItem tx)? onReverseTransaction;
+  final VoidCallback? onRefreshData;
 
   const DashboardScreen({
     super.key,
@@ -34,6 +36,7 @@ class DashboardScreen extends StatefulWidget {
     this.totalBalance,
     this.onLoanPaymentSuccess,
     this.onReverseTransaction,
+    this.onRefreshData,
   });
 
   @override
@@ -94,9 +97,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final loan = _liveLoanAccount;
     if (loan == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           backgroundColor: PayPinkTheme.wine,
-          content: Text('You don’t have a loan to pay right now.'),
+          content: const Text('You don’t have an active loan. Would you like to apply?'),
+          action: SnackBarAction(
+            label: 'Apply Now',
+            textColor: Colors.white,
+            onPressed: _openLoanApplicationSheet,
+          ),
         ),
       );
       return;
@@ -107,9 +115,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       accounts: widget.accounts ?? [],
       onPaymentSuccess: (amount, fundingAccount, newLoanBal) {
         widget.onLoanPaymentSuccess?.call(amount, fundingAccount.accountNumber, loan.accountNumber);
+        widget.onRefreshData?.call();
       },
     );
   }
+
+  void _openLoanApplicationSheet() {
+    LoanApplicationSheet.show(
+      context,
+      accounts: widget.accounts ?? [],
+      onLoanAccepted: () {
+        widget.onRefreshData?.call();
+        widget.onNavigateTab(0); // Refresh Overview tab
+      },
+    );
+  }
+
 
 
 
@@ -343,9 +364,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _buildQuickAction(
                 context,
-                icon: Icons.swap_horiz_rounded,
-                label: 'Transfer',
-                onTap: () => widget.onNavigateTab(2), // Between accounts
+                icon: Icons.account_balance_wallet_rounded,
+                label: 'Apply Loan',
+                onTap: _openLoanApplicationSheet,
               ),
               _buildQuickAction(
                 context,

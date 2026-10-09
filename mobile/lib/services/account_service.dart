@@ -340,8 +340,107 @@ class TransferReceipt {
   });
 }
 
+/// Model for loan eligibility details returned from GET /api/v1/loans/eligibility
+class LoanEligibility {
+  final bool eligible;
+  final double creditLimit;
+  final double outstanding;
+  final double available;
+  final String? reason;
+
+  LoanEligibility({
+    required this.eligible,
+    required this.creditLimit,
+    required this.outstanding,
+    required this.available,
+    this.reason,
+  });
+
+  factory LoanEligibility.fromJson(Map<String, dynamic> json) {
+    return LoanEligibility(
+      eligible: json['eligible'] == true,
+      creditLimit: (json['creditLimit'] as num?)?.toDouble() ?? 0.0,
+      outstanding: (json['outstanding'] as num?)?.toDouble() ?? 0.0,
+      available: (json['available'] as num?)?.toDouble() ?? 0.0,
+      reason: json['reason']?.toString(),
+    );
+  }
+}
+
+/// Model for loan offer returned from POST /api/v1/loans/applications
+class LoanOffer {
+  final String referenceNo;
+  final String status;
+  final String decision; // APPROVED, COUNTER_OFFER, DECLINED
+  final int creditScore;
+  final String? band;
+  final String expiresAt;
+  final String? declineReason;
+  final double? amount;
+  final int? termMonths;
+  final double? annualRate;
+  final double? monthlyInstallment;
+  final double? totalRepayment;
+  final double? totalInterest;
+
+  LoanOffer({
+    required this.referenceNo,
+    required this.status,
+    required this.decision,
+    required this.creditScore,
+    this.band,
+    required this.expiresAt,
+    this.declineReason,
+    this.amount,
+    this.termMonths,
+    this.annualRate,
+    this.monthlyInstallment,
+    this.totalRepayment,
+    this.totalInterest,
+  });
+
+  factory LoanOffer.fromJson(Map<String, dynamic> json) {
+    final offerObj = json['offer'] is Map<String, dynamic> ? json['offer'] as Map<String, dynamic> : null;
+    return LoanOffer(
+      referenceNo: json['referenceNo']?.toString() ?? json['applicationReference']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      decision: json['decision']?.toString() ?? json['status']?.toString() ?? '',
+      creditScore: (json['creditScore'] as num?)?.toInt() ?? 0,
+      band: json['band']?.toString(),
+      expiresAt: json['expiresAt']?.toString() ?? '',
+      declineReason: json['declineReason']?.toString(),
+      amount: offerObj != null ? (offerObj['amount'] as num?)?.toDouble() : (json['amount'] as num?)?.toDouble(),
+      termMonths: offerObj != null ? (offerObj['termMonths'] as num?)?.toInt() : (json['termMonths'] as num?)?.toInt(),
+      annualRate: offerObj != null ? (offerObj['annualRate'] as num?)?.toDouble() : (json['annualRate'] as num?)?.toDouble(),
+      monthlyInstallment: offerObj != null ? (offerObj['monthlyInstallment'] as num?)?.toDouble() : (json['monthlyInstallment'] as num?)?.toDouble(),
+      totalRepayment: offerObj != null ? (offerObj['totalRepayment'] as num?)?.toDouble() : (json['totalRepayment'] as num?)?.toDouble(),
+      totalInterest: offerObj != null ? (offerObj['totalInterest'] as num?)?.toDouble() : (json['totalInterest'] as num?)?.toDouble(),
+    );
+  }
+}
+
+
 class AccountService {
   static final ApiClient _api = ApiClient();
+
+  static Future<UserProfile> _attachLoansToProfile(UserProfile profile) async {
+    try {
+      final loans = await fetchLoans();
+      if (loans.isNotEmpty) {
+        final existingNums = profile.accounts.map((a) => a.accountNumber).toSet();
+        final combined = List<BankAccount>.from(profile.accounts);
+        for (final l in loans) {
+          if (!existingNums.contains(l.accountNumber)) {
+            combined.add(l);
+          }
+        }
+        return profile.copyWith(accounts: combined);
+      }
+    } catch (e) {
+      debugPrint('[AccountService] error attaching loans: $e');
+    }
+    return profile;
+  }
 
   /// GET /api/v1/accounts/me (Protected) — the caller's profile and deposit accounts, keyed by the JWT,
   /// plus active loans from GET /api/v1/loans. Throws [ProfileUnavailableException] when the
@@ -372,7 +471,7 @@ class AccountService {
           if (profile.accounts.isNotEmpty) {
             await SecureTokenStorage.cacheBalance(profile.totalBalance);
           }
-          return profile;
+          return await _attachLoansToProfile(profile);
         }
       }
 
@@ -389,7 +488,7 @@ class AccountService {
           if (profile.accounts.isNotEmpty) {
             await SecureTokenStorage.cacheBalance(profile.totalBalance);
           }
-          return profile;
+          return await _attachLoansToProfile(profile);
         }
       }
 
@@ -404,26 +503,18 @@ class AccountService {
         if (decoded is List) {
           final accounts = decoded
               .whereType<Map<String, dynamic>>()
-              .where((a) {
-                if (customerId != null) {
-                  final aCustId = a['customerId'];
-                  return aCustId != null && aCustId.toString() == customerId.toString();
-                }
-                return true;
-              })
-              .map(BankAccount.fromJson)
+              .map((a) => BankAccount.fromJson(a))
               .toList();
-
           if (accounts.isNotEmpty) {
-            final profile = UserProfile(
+            final userProfile = UserProfile(
               firstName: savedName.split(' ').first,
               fullName: savedName,
               username: savedUser,
               email: '$savedUser@paypink.ph',
               accounts: accounts,
             );
-            await SecureTokenStorage.cacheBalance(profile.totalBalance);
-            return profile;
+            await SecureTokenStorage.cacheBalance(userProfile.totalBalance);
+            return await _attachLoansToProfile(userProfile);
           }
         }
       }
@@ -492,6 +583,64 @@ class AccountService {
     final owed = rows.where((r) => !r.isPaid).fold(loan.penaltyDue ?? 0.0, (sum, r) => sum + r.remaining);
     return double.parse(owed.toStringAsFixed(2));
   }
+
+  /// GET /api/v1/loans/eligibility — Fetch customer loan borrowing limit & eligibility
+  static Future<LoanEligibility?> fetchLoanEligibility() async {
+    try {
+      final resp = await _api.get('/loans/eligibility');
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic>) {
+          return LoanEligibility.fromJson(data);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AccountService] fetchLoanEligibility error: $e');
+    }
+    return null;
+  }
+
+  /// POST /api/v1/loans/applications — Apply for a personal loan
+  static Future<LoanOffer> applyForLoan({
+    required String accountNo,
+    required double amount,
+    required int termMonths,
+  }) async {
+    final body = {
+      'accountNo': accountNo,
+      'amount': amount,
+      'termMonths': termMonths,
+    };
+    final idempKey = ApiClient.generateIdempotencyKey();
+    final resp = await _api.post(
+      '/loans/applications',
+      body: body,
+      idempotencyKey: idempKey,
+    );
+    if (resp.statusCode == 200 || resp.statusCode == 201) {
+      final data = jsonDecode(resp.body);
+      return LoanOffer.fromJson(data);
+    } else {
+      final msg = ApiClient.extractErrorMessage(resp.statusCode, resp.body);
+      throw Exception(msg.isNotEmpty ? msg : 'Loan application failed (${resp.statusCode}).');
+    }
+  }
+
+  /// POST /api/v1/loans/applications/{referenceNo}/accept — Accept loan offer & receive disbursement
+  static Future<bool> acceptLoanOffer(String referenceNo) async {
+    final idempKey = 'accept-$referenceNo';
+    final resp = await _api.post(
+      '/loans/applications/$referenceNo/accept',
+      idempotencyKey: idempKey,
+    );
+    if (resp.statusCode == 200 || resp.statusCode == 201) {
+      return true;
+    } else {
+      final msg = ApiClient.extractErrorMessage(resp.statusCode, resp.body);
+      throw Exception(msg.isNotEmpty ? msg : 'Failed to accept loan offer (${resp.statusCode}).');
+    }
+  }
+
 
   /// Requirement 1 & 3: POST /api/v1/transfers (Protected)
   /// Requires X-Idempotency-Key header. Source must be Checking or Savings.
