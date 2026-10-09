@@ -177,10 +177,17 @@ class AuthService {
         );
       }
     } catch (e) {
-      debugPrint('[AuthService] Login network failure: $e');
+      debugPrint('[AuthService] Login failure: $e');
+      final errStr = e.toString();
+      final isNetwork = errStr.contains('ClientException') ||
+          errStr.contains('SocketException') ||
+          errStr.contains('Failed to fetch') ||
+          errStr.contains('Connection refused');
       return AuthResult(
         success: false,
-        message: 'Unable to connect to PayPink Gateway at ${ApiConfig.baseUrl}. Please check your connection.',
+        message: isNetwork
+            ? 'Unable to connect to PayPink Gateway at ${ApiConfig.baseUrl}. Please check your connection.'
+            : 'Authentication error: $errStr',
         statusCode: 503,
       );
     }
