@@ -85,12 +85,11 @@ class RemittanceService {
 
     // If Circuit Breaker is OPEN, fail-fast gracefully
     if (circuitBreaker.isOpen) {
-      return _executeFallbackSimulation(
-        debitAcct: debitAcct,
-        creditAcct: creditAcct,
-        amount: amount,
+      return RemittanceResult(
+        success: false,
+        message: 'Transfer failed: Circuit breaker is OPEN. Service temporarily unavailable.',
         riskScore: riskScore,
-        reason: 'Circuit breaker is OPEN. Service temporarily unavailable.',
+        isOfflineFallback: false,
       );
     }
 

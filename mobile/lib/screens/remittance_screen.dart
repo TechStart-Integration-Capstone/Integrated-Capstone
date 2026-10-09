@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
+import '../widgets/pin_auth_sheet.dart';
 import '../services/remittance_service.dart';
 import '../services/account_service.dart';
 
@@ -21,7 +22,7 @@ class RemittanceScreen extends StatefulWidget {
 }
 
 class _RemittanceScreenState extends State<RemittanceScreen> {
-  int _selectedModeIndex = 0; // 0: My own, 1: Another PayPink, 2: Outside
+  int _selectedModeIndex = 0; // 0: My Accounts, 1: Another PayPink, 2: Outside
   String _sourceAccount = '';
   String _ownTargetAccount = '';
 
@@ -32,15 +33,13 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   bool get isHighRisk => _riskScore > 0.85;
   String? _verifiedName;
 
-  bool _isStandingInstruction = false;
-  String _standingFrequency = 'Monthly';
   String _transferRail = 'InstaPay';
   String _destinationBank = 'BDO';
 
   final List<Map<String, String>> _favorites = [
-    {'name': 'Carlos Mendoza', 'number': '001 1 2234567 8', 'avatar': 'CM', 'bank': 'PayPink'},
-    {'name': 'Maria Santos', 'number': '001 1 9876543 2', 'avatar': 'MS', 'bank': 'PayPink'},
-    {'name': 'David Lee', 'number': '001 1 4567890 1', 'avatar': 'DL', 'bank': 'PayPink'},
+    {'name': 'Carlos Mendoza', 'number': '001381233467', 'avatar': 'CM', 'bank': 'PayPink'},
+    {'name': 'Maria Santos', 'number': '001181233469', 'avatar': 'MS', 'bank': 'PayPink'},
+    {'name': 'Gabriel Lim', 'number': '001381239988', 'avatar': 'GL', 'bank': 'PayPink'},
   ];
 
   @override
@@ -305,7 +304,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
             ),
           ),
 
-          // Quick One-Tap Swap Button
+          // Account Swap Arrow Button
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Stack(
@@ -316,32 +315,23 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                   onTap: _swapOwnAccounts,
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isDark
-                            ? [PayPinkTheme.wine, const Color(0xFF6A1A3A)]
-                            : [PayPinkTheme.wine, const Color(0xFF8B2550)],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
+                      color: isDark ? PayPinkTheme.wine : PayPinkTheme.pinkSubtle,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: textLine),
                       boxShadow: [
                         BoxShadow(
-                          color: PayPinkTheme.wine.withValues(alpha: 0.35),
-                          blurRadius: 8,
+                          color: PayPinkTheme.wine.withValues(alpha: 0.15),
+                          blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.swap_vert_rounded, color: Colors.white, size: 16),
-                        const SizedBox(width: 5),
-                        Text(
-                          'One-Tap Swap',
-                          style: PayPinkTheme.body(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white),
-                        ),
-                      ],
+                    child: Icon(
+                      Icons.swap_vert_rounded,
+                      color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                      size: 18,
                     ),
                   ),
                 ),
@@ -593,10 +583,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     Divider(color: textLine, height: 16),
                     _confirmRow('Clearing Rail', _transferRail == 'InstaPay' ? 'InstaPay (Realtime)' : 'PESONet (Batch EOD Cutoff)', isDark: isDark),
                   ],
-                  if (_isStandingInstruction) ...[
-                    Divider(color: textLine, height: 16),
-                    _confirmRow('Standing Schedule', 'Recurring ($_standingFrequency) · Next: Oct 15', valColor: PayPinkTheme.wine, isDark: isDark),
-                  ],
                   Divider(color: textLine, height: 16),
                   _confirmRow('Fee', '₱0.00 (Free)', valColor: PayPinkTheme.green, isDark: isDark),
                   Divider(color: textLine, height: 16),
@@ -609,9 +595,17 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
-                onPressed: () {
+                onPressed: () async {
                   Navigator.pop(ctx);
-                  _executeTransferWithPin(amt, fromAcc, toAcc);
+                  final pinVerified = await PinAuthSheet.show(
+                    context,
+                    title: 'Authorize Remittance',
+                    description: 'Confirm transfer of ₱${amt.toStringAsFixed(2)} to $toAcc',
+                    amount: amt,
+                  );
+                  if (pinVerified) {
+                    _executeTransferWithPin(amt, fromAcc, toAcc);
+                  }
                 },
                 icon: const Icon(Icons.send_rounded, size: 18),
                 label: const Text('Confirm & Send Transfer'),
@@ -1074,7 +1068,7 @@ Thank you for banking with PayPink!
                   ),
                   child: Row(
                     children: [
-                      _buildTabBtn('Between My Accounts', 0, isDark: isDark),
+                      _buildTabBtn('My Accounts', 0, isDark: isDark),
                       _buildTabBtn('Another PayPink', 1, isDark: isDark),
                       _buildTabBtn('Outside PayPink', 2, isDark: isDark),
                     ],
@@ -1143,7 +1137,7 @@ Thank you for banking with PayPink!
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Frequent Beneficiaries', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: textInk)),
+                      Text('Favorites', style: PayPinkTheme.body(fontSize: 11.5, fontWeight: FontWeight.w700, color: textInk)),
                       GestureDetector(
                         onTap: () => PayPinkBottomSheets.showBeneficiaryManager(
                           context,
@@ -1156,7 +1150,7 @@ Thank you for banking with PayPink!
                           },
                         ),
                         child: Text(
-                          'Manage Directory →',
+                          'Favorites →',
                           style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine),
                         ),
                       ),
@@ -1400,103 +1394,6 @@ Thank you for banking with PayPink!
                     const SizedBox(width: 8),
                     _buildAmtChip('+₱50', 50, isDark: isDark),
                   ],
-                ),
-                const SizedBox(height: 14),
-
-                // Standing Instructions (Recurring Transfer) Switch & Setup
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: _isStandingInstruction
-                        ? (isDark ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle)
-                        : cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _isStandingInstruction ? PayPinkTheme.wine.withValues(alpha: 0.5) : textLine,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.event_repeat_rounded,
-                                size: 18,
-                                color: _isStandingInstruction ? (isDark ? PayPinkTheme.pink : PayPinkTheme.wine) : textMuted,
-                              ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Standing Instruction',
-                                    style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk),
-                                  ),
-                                  Text(
-                                    'Automate recurring schedule',
-                                    style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          Switch.adaptive(
-                            value: _isStandingInstruction,
-                            activeTrackColor: PayPinkTheme.wine,
-                            onChanged: (val) => setState(() => _isStandingInstruction = val),
-                          ),
-                        ],
-                      ),
-                      if (_isStandingInstruction) ...[
-                        const SizedBox(height: 8),
-                        Divider(color: textLine, height: 1),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Frequency', style: PayPinkTheme.body(fontSize: 10.5, fontWeight: FontWeight.w600, color: textInk)),
-                            Row(
-                              children: ['Weekly', '15th & 30th', 'Monthly'].map((freq) {
-                                final isSelected = _standingFrequency == freq;
-                                return GestureDetector(
-                                  onTap: () => setState(() => _standingFrequency = freq),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(left: 6),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? PayPinkTheme.wine : cardBg,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: isSelected ? PayPinkTheme.wine : textLine),
-                                    ),
-                                    child: Text(
-                                      freq,
-                                      style: PayPinkTheme.body(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: isSelected ? Colors.white : textInk,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Next Execution Date', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
-                            Text('Oct 15, 2026 (Auto EOD cutoff)', style: PayPinkTheme.mono(fontSize: 9.5, fontWeight: FontWeight.w700, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine)),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 16),
 

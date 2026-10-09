@@ -159,7 +159,7 @@ class AuthService {
         );
       }
     } catch (e) {
-      debugPrint('[AuthService] Login network warning (local mode active): $e');
+      debugPrint('[AuthService] Login network warning (local dev fallback active): $e');
       final cleanUser = cleanUsername.isNotEmpty ? cleanUsername : 'lviernes';
       final cleanName = cleanUser == 'lviernes'
           ? 'Levy Viernes'
