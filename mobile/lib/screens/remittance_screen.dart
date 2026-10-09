@@ -7,7 +7,6 @@ import '../widgets/bottom_sheets.dart';
 import '../widgets/pin_auth_sheet.dart';
 import '../services/remittance_service.dart';
 import '../services/account_service.dart';
-import '../widgets/pin_auth_sheet.dart';
 
 class RemittanceScreen extends StatefulWidget {
   final Function(double amount, String refId, String source, String recipient) onTransferSuccess;
@@ -41,6 +40,23 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     {'name': 'Maria Santos', 'number': '001181233469', 'avatar': 'MS', 'bank': 'PayPink'},
     {'name': 'Gabriel Lim', 'number': '001381239988', 'avatar': 'GL', 'bank': 'PayPink'},
   ];
+
+  // Saga state variables
+  bool _isSagaPending = false;
+  String? _pendingReferenceNo;
+  double? _pendingAmt;
+  String? _pendingFromAcc;
+  String? _pendingToAcc;
+  String? _sagaErrorMessage;
+  Timer? _statusPollTimer;
+
+  @override
+  void dispose() {
+    _statusPollTimer?.cancel();
+    _amountController.dispose();
+    _recipientController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
