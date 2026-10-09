@@ -70,6 +70,8 @@ Newest first. One line per change: date, what changed, who.
   - **Stage 3 Production Deployment Migrations:**
     - Added `scripts/migrate_phase10_rbac_roles.sql` to Azure SQL additive migrations loop.
     - Added `scripts/migrate_interest_recovery_postgres.sql` and `scripts/migrate_interest_approval_postgres.sql` to PostgreSQL migrations loop. — [dom]
+- 2026-10-09 — Azure Deployment Guide Teammate Onboarding & Access Documentation:
+  - **Deployment Guide (`docs/AZURE_DEPLOYMENT_GUIDE.md`):** Added a dedicated step-by-step onboarding guide for team members connecting to `vm-paypink`: NSG public IP whitelisting (`az network nsg rule create`), appending public SSH keys (`authorized_keys` / `az vm run-command invoke`), SSH connection commands, and local port forwarding tunnels for Grafana and API Gateway. — [levi]
 - 2026-10-09 — Azure Cloud SQL Hosted Database Alignment & Funds Transfer Resolution:
   - **Azure SQL Cloud PaaS Schema Alignment (`paypink-sql.database.windows.net`):**
     - Resolved Web Banking login 500 error by adding missing `roles` column (`NVARCHAR(255) NOT NULL DEFAULT 'ROLE_CUSTOMER,ROLE_RETAIL_USER'`) to `app.CUSTOMER` on the hosted Azure SQL Database.
