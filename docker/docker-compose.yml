@@ -315,6 +315,9 @@ services:
       - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
       - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
+      - ORACLE_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      - ORACLE_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
+      - ORACLE_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
       - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123

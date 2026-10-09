@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-09 (Clean Architecture, BLoC State Machines, Mobile App cloud connection by [levi, cisko]; Newman auth credentials aligned with seeded Azure SQL users, dual token persistence, and full CI stack coverage by [dom])_
+_Last Updated: 2026-10-09 (Clean Architecture, BLoC State Machines, Mobile App cloud connection by [levi, cisko]; Newman auth credentials aligned with seeded Azure SQL users, dual token persistence, full CI stack coverage, and 20 Newman API contract test resolutions across all 11 microservices by [dom])_
 
 ---
 
