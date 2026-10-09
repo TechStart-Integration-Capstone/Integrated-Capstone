@@ -21,7 +21,11 @@ class LoanPaymentSheet extends StatefulWidget {
     required List<BankAccount> accounts,
     required Function(double amount, BankAccount fundingAccount, double newLoanBalance) onPaymentSuccess,
   }) {
-    final fundingAccounts = accounts.where((a) => a.canBeTransferSource && a.currentBalance > 0).toList();
+    // loan-service always debits the loan's linked deposit account, so that is the only funding option.
+    final linked = loanAccount.repaymentAccountNumber?.replaceAll(' ', '');
+    final fundingAccounts = accounts
+        .where((a) => a.canBeTransferSource && linked != null && a.accountNumber.replaceAll(' ', '') == linked)
+        .toList();
 
     showModalBottomSheet(
       context: context,
@@ -40,26 +44,23 @@ class LoanPaymentSheet extends StatefulWidget {
 }
 
 class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
-  int _selectedOption = 0; // 0: Minimum Due, 1: Total Balance, 2: Custom Amount
-  late BankAccount _selectedFundingAccount;
+  int _selectedOption = 2; // 0: Next Payment, 1: Pay in Full, 2: Custom Amount
+  BankAccount? _selectedFundingAccount;
   final TextEditingController _customAmountController = TextEditingController();
   bool _isProcessing = false;
+  /// Unpaid installments plus penalties from the repayment schedule; null until loaded or if unavailable.
+  double? _amountOwed;
 
   @override
   void initState() {
     super.initState();
     if (widget.eligibleFundingAccounts.isNotEmpty) {
       _selectedFundingAccount = widget.eligibleFundingAccounts.first;
-    } else {
-      _selectedFundingAccount = BankAccount(
-        accountId: 0,
-        accountNumber: 'No Eligible Account',
-        accountType: 'CHECKING_ACCOUNT',
-        currency: 'PHP',
-        currentBalance: 0.0,
-        status: 'ACTIVE',
-      );
     }
+    if (_minDue != null) _selectedOption = 0;
+    AccountService.fetchLoanAmountOwed(widget.loanAccount).then((owed) {
+      if (mounted) setState(() => _amountOwed = owed);
+    });
   }
 
   @override
@@ -68,33 +69,37 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
     super.dispose();
   }
 
-  double get _currentDebt {
-    final debt = widget.loanAccount.outstandingDebt;
-    if (debt != null && debt > 0) return debt;
-    return widget.loanAccount.currentBalance > 0 ? widget.loanAccount.currentBalance : 25000.00;
-  }
+  double get _outstandingPrincipal => widget.loanAccount.outstandingDebt ?? widget.loanAccount.currentBalance;
 
-  double get _minDue {
+  double? get _minDue {
     final minPay = widget.loanAccount.minimumPayment;
-    if (minPay != null && minPay > 0) return minPay;
-    return 2150.00;
+    return (minPay != null && minPay > 0) ? minPay : null;
   }
 
   double get _paymentAmount {
     switch (_selectedOption) {
       case 0:
-        return _minDue;
+        return _minDue ?? 0.0;
       case 1:
-        return _currentDebt;
-      case 2:
-        return double.tryParse(_customAmountController.text) ?? 0.0;
+        return _amountOwed ?? 0.0;
       default:
-        return _minDue;
+        return double.tryParse(_customAmountController.text.replaceAll(',', '')) ?? 0.0;
     }
   }
 
   Future<void> _handleAuthorize() async {
     final amt = _paymentAmount;
+    final fundingAccount = _selectedFundingAccount;
+
+    if (fundingAccount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text('The account linked to this loan isn’t available. Refresh your accounts and try again.'),
+        ),
+      );
+      return;
+    }
 
     if (amt <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -106,11 +111,21 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
       return;
     }
 
-    if (amt > _selectedFundingAccount.currentBalance) {
+    if (_amountOwed != null && amt > _amountOwed!) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: PayPinkTheme.red,
-          content: Text('Insufficient balance in ${_selectedFundingAccount.displayName}. Available: ₱${_selectedFundingAccount.currentBalance.toStringAsFixed(2)}'),
+          content: Text('That’s more than you owe. The most you can pay is ${formatPeso(_amountOwed!)}.'),
+        ),
+      );
+      return;
+    }
+
+    if (amt > fundingAccount.currentBalance) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text('Insufficient balance in ${fundingAccount.displayName}. Available: ${formatPeso(fundingAccount.currentBalance)}'),
         ),
       );
       return;
@@ -119,11 +134,11 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
     setState(() => _isProcessing = true);
 
     try {
-      final newLoanBalance = (_currentDebt - amt).clamp(0.0, double.infinity);
+      // Estimate only; the accounts refresh after payment shows loan-service's real balance.
+      final newLoanBalance = ((_amountOwed ?? _outstandingPrincipal) - amt).clamp(0.0, double.infinity);
 
-      // Perform transfer / loan payment via AccountService
       final receipt = await AccountService.payLoan(
-        sourceAccount: _selectedFundingAccount,
+        sourceAccount: fundingAccount,
         loanAccount: widget.loanAccount,
         amount: amt,
       );
@@ -133,7 +148,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
 
       if (receipt.success) {
         Navigator.pop(context);
-        widget.onPaymentSuccess(amt, _selectedFundingAccount, newLoanBalance);
+        widget.onPaymentSuccess(amt, fundingAccount, newLoanBalance);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -238,29 +253,30 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Outstanding Balance',
+                          'Outstanding Principal',
                           style: PayPinkTheme.body(fontSize: 12, color: textMuted),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: PayPinkTheme.amberBg,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Due: ${widget.loanAccount.dueDate ?? "Oct 28, 2026"}',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: PayPinkTheme.amber,
+                        if (widget.loanAccount.dueDate != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: PayPinkTheme.amberBg,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Due: ${widget.loanAccount.dueDate}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: PayPinkTheme.amber,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '₱${_currentDebt.toStringAsFixed(2)}',
+                      formatPeso(_outstandingPrincipal),
                       style: PayPinkTheme.display(
                         fontSize: 26,
                         fontWeight: FontWeight.w900,
@@ -269,7 +285,12 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Min Due: ₱${_minDue.toStringAsFixed(2)} · Rate: 5.50% p.a.',
+                      [
+                        if (_minDue != null) 'Next payment: ${formatPeso(_minDue!)}',
+                        if (widget.loanAccount.interestRate != null)
+                          'Rate: ${widget.loanAccount.interestRate!.toStringAsFixed(2)}% p.a.',
+                        if (_amountOwed != null) 'Total to pay off: ${formatPeso(_amountOwed!)}',
+                      ].join(' · '),
                       style: PayPinkTheme.body(fontSize: 11, color: textMuted),
                     ),
                   ],
@@ -296,7 +317,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(
-                    'No eligible funding account with sufficient balance available.',
+                    'The account linked to this loan isn’t available. Refresh your accounts and try again.',
                     style: TextStyle(color: PayPinkTheme.red, fontSize: 12),
                   ),
                 )
@@ -331,7 +352,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
                                 ),
                               ),
                               Text(
-                                '₱${acct.currentBalance.toStringAsFixed(2)}',
+                                formatPeso(acct.currentBalance),
                                 style: PayPinkTheme.mono(fontSize: 12, fontWeight: FontWeight.w700, color: textInk),
                               ),
                             ],
@@ -359,10 +380,14 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
 
               Row(
                 children: [
-                  _buildOptionChip(0, 'Min Due\n₱${_minDue.toStringAsFixed(0)}', isDark),
-                  const SizedBox(width: 8),
-                  _buildOptionChip(1, 'Total Balance\n₱${_currentDebt.toStringAsFixed(0)}', isDark),
-                  const SizedBox(width: 8),
+                  if (_minDue != null) ...[
+                    _buildOptionChip(0, 'Next Payment\n${formatPeso(_minDue!)}', isDark),
+                    const SizedBox(width: 8),
+                  ],
+                  if (_amountOwed != null) ...[
+                    _buildOptionChip(1, 'Pay in Full\n${formatPeso(_amountOwed!)}', isDark),
+                    const SizedBox(width: 8),
+                  ],
                   _buildOptionChip(2, 'Custom\nAmount', isDark),
                 ],
               ),
@@ -396,32 +421,35 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
                 const SizedBox(height: 14),
               ],
 
-              // Summary
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark ? PayPinkTheme.darkBg : PayPinkTheme.paper,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Remaining Loan Debt:',
-                      style: PayPinkTheme.body(fontSize: 12, color: textMuted),
-                    ),
-                    Text(
-                      '₱${(_currentDebt - _paymentAmount).clamp(0.0, double.infinity).toStringAsFixed(2)}',
-                      style: PayPinkTheme.mono(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: brandWine,
+              // Summary: only once the real amount owed is known
+              if (_amountOwed != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark ? PayPinkTheme.darkBg : PayPinkTheme.paper,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Left to pay after this:',
+                        style: PayPinkTheme.body(fontSize: 12, color: textMuted),
                       ),
-                    ),
-                  ],
+                      Text(
+                        formatPeso((_amountOwed! - _paymentAmount).clamp(0.0, double.infinity)),
+                        style: PayPinkTheme.mono(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: brandWine,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 22),
+                const SizedBox(height: 22),
+              ] else
+                const SizedBox(height: 8),
 
               // Pay button with PIN authorization
               SizedBox(
@@ -437,7 +465,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
                         )
                       : const Icon(Icons.lock_outline_rounded, size: 20),
                   label: Text(
-                    _isProcessing ? 'Processing Payment...' : 'Authorize Payment (₱${_paymentAmount.toStringAsFixed(2)})',
+                    _isProcessing ? 'Processing Payment...' : 'Authorize Payment (${formatPeso(_paymentAmount)})',
                     style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(
