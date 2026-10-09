@@ -1,6 +1,13 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — Fix Microservice Database Environment Defaults and CI Secrets:
+  - **Docker Compose Fallback Defaults (`docker/docker-compose.yml`):**
+    - Configured bash fallback defaults for `AZURE_SQL_JDBC_URL`, `AZURE_SQL_USERNAME`, and `AZURE_SQL_PASSWORD` across all services (`auth-service`, `account-service`, `transaction-service`, `reconciliation-service`, `outbox-publisher`) and `PAYPINK_GMAIL_APP_PASSWORD` for `notification-service`. This prevents empty-string injection when running without an explicit `.env` file, which previously overrode Spring Boot's internal datasource defaults with `""` and crashed HikariCP with "Failed to determine suitable jdbc url".
+  - **CI Temporary Stack Secrets & Migration Lifecycle (`.github/workflows/pipeline.yml`):**
+    - Populated `/tmp/ci.env` with `AZURE_SQL_JDBC_URL`, `AZURE_SQL_USERNAME`, and `AZURE_SQL_PASSWORD` pointing to the internal `azure-sql:1433` container.
+    - Updated Azure SQL readiness wait to poll `SELECT 1 FROM dbo.ACCOUNT`, verifying that the volume entrypoint setup scripts (`01_schema.sql` through `07_rbac_roles.sql`) have completed before launching applications, avoiding duplicate DDL execution and key collision errors. Added `docker compose ps` diagnostics on probe timeouts. — [dom]
+
 - 2026-10-09 — Microservice Readiness Probing & Postman Assertion Alignment:
   - **CI Temporary Stack Health Probes (`.github/workflows/pipeline.yml`):**
     - Upgraded Stage 2 readiness probe: instead of only checking the lightweight API Gateway actuator, the pipeline now probes all downstream services via their OpenAPI `/v3/api-docs` endpoints (`auth`, `account`, `transaction`, `loan`, `t24`, `risk`) through the Gateway. This prevents race conditions where Newman hits downstream containers while Spring Boot and Tomcat are still initializing.

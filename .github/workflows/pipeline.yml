@@ -126,6 +126,10 @@ jobs:
           POSTGRES_PASSWORD=AuditSecretPassword123
           JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
           MSSQL_MEMORY_LIMIT_MB=2048
+          AZURE_SQL_JDBC_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+          AZURE_SQL_USERNAME=sa
+          AZURE_SQL_PASSWORD=PayPink2.0_StrongPass!
+          PAYPINK_GMAIL_APP_PASSWORD=dummy_ci_secret
           ENVEOF
 
       - name: Start CI datastores
@@ -135,18 +139,18 @@ jobs:
 
       - name: Wait for Azure SQL and datastore readiness
         run: |
-          echo "Waiting for Azure SQL to accept connections..."
+          echo "Waiting for Azure SQL to finish schema initialization and accept connections..."
           SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
-          for i in $(seq 1 40); do
+          for i in $(seq 1 45); do
             if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
               SQLCMD="/opt/mssql-tools/bin/sqlcmd"
             fi
-            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1" >/dev/null 2>&1; then
-              echo "Azure SQL is ready."
+            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1 FROM dbo.ACCOUNT" >/dev/null 2>&1; then
+              echo "Azure SQL is initialized and ready."
               break
             fi
-            if [ "$i" -eq 40 ]; then
-              echo "Azure SQL failed to start after 80s"
+            if [ "$i" -eq 45 ]; then
+              echo "Azure SQL failed to start after 90s"
               docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs azure-sql --tail=40
               exit 1
             fi
@@ -162,28 +166,17 @@ jobs:
             sleep 2
           done
 
-      - name: Seed and migrate Azure SQL
+      - name: Ensure idempotent migrations
         run: |
           SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
           if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
             SQLCMD="/opt/mssql-tools/bin/sqlcmd"
           fi
           PASS="PayPink2.0_StrongPass!"
-
-          SQL_SCRIPTS=(
-            "microservices/transaction-service/src/main/resources/schema-azuresql.sql"
-            "microservices/loan-service/src/main/resources/db/phase6_loans.sql"
-            "scripts/seed_demo_azure_sql.sql"
-            "scripts/migrate_phase1_schema_split.sql"
-            "scripts/migrate_phase2_t24_core.sql"
-            "scripts/migrate_interest_azuresql.sql"
-            "scripts/migrate_phase10_rbac_roles.sql"
-          )
-
-          for f in "${SQL_SCRIPTS[@]}"; do
-            echo "Applying $f to azure-sql-master..."
-            cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b
-          done
+          if [ -f "scripts/migrate_phase10_rbac_roles.sql" ]; then
+            echo "Verifying Phase 10 RBAC roles in azure-sql-master..."
+            cat "scripts/migrate_phase10_rbac_roles.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
+          fi
 
       - name: Start application microservices
         run: |
@@ -229,6 +222,7 @@ jobs:
             done
             if [ "$READY" != "true" ]; then
               echo "Timeout waiting for $ep (last HTTP code: $HTTP_CODE)"
+              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env ps
               docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs --tail=60
               exit 1
             fi

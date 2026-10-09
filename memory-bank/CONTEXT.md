@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, mobile app cloud connection enabled by [levi]; CI/CD Stage 2 downstream microservice readiness probing, Postman contract test assertion alignment, and Newman verification overhaul by [dom])_
+_Last Updated: 2026-10-09 (Docker Compose and CI database environment variable fallbacks, Azure SQL automated setup synchronization, and API Gateway downstream readiness verification by [dom])_
 
 ---
 
