@@ -61,7 +61,6 @@ class TransactionsBloc extends Bloc<TransactionsEvent, TransactionsState> {
         final filtered = current.where((tx) {
           if (event.filterCategory == 'credit' && !tx.isCredit) return false;
           if (event.filterCategory == 'debit' && tx.isCredit) return false;
-          if (event.filterCategory == 'reversal' && tx.status != 'REVERSED' && tx.status != 'FAILED_DLQ') return false;
 
           if (event.query.trim().isNotEmpty) {
             final q = event.query.toLowerCase();

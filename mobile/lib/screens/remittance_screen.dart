@@ -41,7 +41,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   Timer? _lookupDebounce;
 
   String _transferRail = 'InstaPay';
-  String _destinationBank = 'BDO';
+  // Partner-bank directory (server) and the entry matching the typed account number.
+  List<ExternalRecipient> _externalRecipients = const [];
+  ExternalRecipient? _externalMatch;
 
   List<Map<String, String>> _favorites = [];
   bool _isLoadingFavorites = false;
@@ -49,9 +51,6 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   // Saga state variables
   bool _isSagaPending = false;
   String? _pendingReferenceNo;
-  double? _pendingAmt;
-  String? _pendingFromAcc;
-  String? _pendingToAcc;
   String? _sagaErrorMessage;
   Timer? _statusPollTimer;
 
@@ -62,6 +61,16 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     _initDefaultAccounts();
     _updateCalculations();
     _loadFavorites();
+    _loadExternalRecipients();
+  }
+
+  Future<void> _loadExternalRecipients() async {
+    final list = await RemittanceService.fetchExternalRecipients();
+    if (!mounted) return;
+    setState(() {
+      _externalRecipients = list;
+      _updateCalculations();
+    });
   }
 
   @override
@@ -898,6 +907,10 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       } else {
         _recipientError = null;
       }
+      if (_selectedModeIndex == 2) {
+        final number = _recipientController.text.replaceAll(RegExp(r'\s'), '');
+        _externalMatch = _externalRecipients.where((r) => r.number == number).firstOrNull;
+      }
     });
   }
 
@@ -1312,6 +1325,25 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         }
       }
     }
+    // Bank transfers: the recipient must be in the partner directory, and InstaPay caps at ₱50,000.
+    if (_selectedModeIndex == 2) {
+      String? error;
+      if (_externalMatch == null) {
+        error = 'Account not found. Check the account number.';
+      } else if (_transferRail == 'InstaPay' && amt > 50000) {
+        error = 'InstaPay allows up to ₱50,000 per transfer. Choose PESONet for a larger amount.';
+      } else if (_getAccount(_sourceAccount) == null) {
+        error = 'Choose one of your accounts to send from.';
+      }
+      if (error != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: PayPinkTheme.red, content: Text(error)),
+        );
+        return;
+      }
+    }
+
     final srcAcc = _getAccount(_sourceAccount);
     final srcDisplayName = srcAcc?.displayName ?? 'Checking Account';
     final srcLast4 = _sourceAccount.length >= 4 ? _sourceAccount.substring(_sourceAccount.length - 4) : _sourceAccount;
@@ -1331,7 +1363,10 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     } else {
       final recNumber = _recipientController.text.trim();
       final recLast4 = recNumber.length >= 4 ? recNumber.substring(recNumber.length - 4) : recNumber;
-      toAccountName = '$_destinationBank Account (•••• $recLast4)';
+      final match = _externalMatch;
+      toAccountName = match != null
+          ? '${match.name} · ${match.bank} (•••• $recLast4)'
+          : 'Bank account (•••• $recLast4)';
     }
 
     if (mounted) {
@@ -1467,16 +1502,31 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         ? _ownTargetAccount
         : _recipientController.text.replaceAll(' ', '');
 
-    final result = await RemittanceService.submitRemittance(
-      sourceAccountId: _sourceAccount,
-      destinationAccountNumber: cleanDest,
-      amount: amt,
-    );
+    // Bank transfers go over InstaPay/PESONet, exactly like the web app.
+    final source = _getAccount(_sourceAccount);
+    final result = _selectedModeIndex == 2 && source != null
+        ? await RemittanceService.submitExternalTransfer(
+            sourceAccountId: source.accountId,
+            destinationAccountNumber: cleanDest,
+            amount: amt,
+            rail: _transferRail,
+          )
+        : await RemittanceService.submitRemittance(
+            sourceAccountId: _sourceAccount,
+            destinationAccountNumber: cleanDest,
+            amount: amt,
+          );
 
     if (!mounted) return;
 
-    if (result.success && result.status == 'RESERVED') {
-      // 202 — enter saga grace window
+    if (result.success && result.status == 'PENDING') {
+      // PESONet settles in the next clearing batch; the money is already debited.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: PayPinkTheme.wineDark, content: Text(result.message)),
+      );
+      _showScreenshotReceiptDialog(amt, result.referenceId ?? '', fromAcc, toAcc);
+    } else if (result.success && result.status == 'PROCESSING') {
+      // 202: core banking is still posting. Poll until it settles; there is no cancel window.
       final ref = result.referenceId ?? '';
       setState(() {
         _pendingReferenceNo = ref;
@@ -1499,94 +1549,33 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     }
   }
 
-  // ── MOB-305: Saga 202 grace-window helpers ────────────────────────────────
+  // ── 202 PROCESSING: follow the transfer until core banking settles it ──────
 
   void _startStatusPolling(String ref, double amt, String fromAcc, String toAcc) {
-    _pendingAmt = amt;
-    _pendingFromAcc = fromAcc;
-    _pendingToAcc = toAcc;
     _statusPollTimer?.cancel();
     _statusPollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       final status = await RemittanceService.getStatus(ref);
       if (!mounted) { timer.cancel(); return; }
-      if (status == 'COMPLETED' || status == 'POSTED') {
+      if (status == 'COMPLETED' || status == 'POSTED' || status == 'SUCCESS') {
         timer.cancel();
         setState(() {
           _isSagaPending = false;
           _pendingReferenceNo = null;
-          _pendingAmt = null;
-          _pendingFromAcc = null;
-          _pendingToAcc = null;
         });
         _showScreenshotReceiptDialog(amt, ref, fromAcc, toAcc);
-      } else if (status == 'FAILED' || status == 'CANCELLED') {
+      } else if (status == 'FAILED' || status == 'CANCELLED' || status == 'REVERSED' || status == 'REJECTED') {
         timer.cancel();
         setState(() {
           _isSagaPending = false;
           _pendingReferenceNo = null;
-          _pendingAmt = null;
-          _pendingFromAcc = null;
-          _pendingToAcc = null;
-          _sagaErrorMessage = status == 'CANCELLED'
-              ? 'Transfer was cancelled.'
-              : 'Transfer failed. Please try again.';
+          _sagaErrorMessage = null;
         });
-      }
-    });
-  }
-
-  Future<void> _onSagaCancel() async {
-    final ref = _pendingReferenceNo;
-    if (ref == null) return;
-    _statusPollTimer?.cancel();
-    final result = await RemittanceService.cancel(ref);
-    if (!mounted) return;
-    setState(() {
-      _isSagaPending = false;
-      _pendingReferenceNo = null;
-      _pendingAmt = null;
-      _pendingFromAcc = null;
-      _pendingToAcc = null;
-      _sagaErrorMessage = result.success ? null : result.message;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      backgroundColor: result.success ? PayPinkTheme.green : PayPinkTheme.red,
-      content: Text(result.message),
-    ));
-  }
-
-  Future<void> _onSagaSendNow() async {
-    final ref = _pendingReferenceNo;
-    final amt = _pendingAmt;
-    final fromAcc = _pendingFromAcc;
-    final toAcc = _pendingToAcc;
-    if (ref == null) return;
-    _statusPollTimer?.cancel();
-    final result = await RemittanceService.sendNow(ref);
-    if (!mounted) return;
-    if (result.success) {
-      setState(() {
-        _isSagaPending = false;
-        _pendingReferenceNo = null;
-        _pendingAmt = null;
-        _pendingFromAcc = null;
-        _pendingToAcc = null;
-      });
-      if (amt != null && fromAcc != null && toAcc != null) {
-        _showScreenshotReceiptDialog(amt, ref, fromAcc, toAcc);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: PayPinkTheme.green,
-          content: Text(result.message),
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text('Transfer failed and was reversed. The held amount is back in your account.'),
         ));
       }
-    } else {
-      setState(() { _sagaErrorMessage = result.message; });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: PayPinkTheme.red,
-        content: Text(result.message),
-      ));
-    }
+    });
   }
 
   void _showScreenshotReceiptDialog(double amt, String refId, String fromAcc, String toAcc) {
@@ -1606,7 +1595,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
 
     final transferType = _selectedModeIndex == 0
         ? 'Own Accounts Transfer'
-        : (_selectedModeIndex == 1 ? 'PayPink P2P Transfer' : 'InstaPay Bank Transfer');
+        : (_selectedModeIndex == 1 ? 'PayPink P2P Transfer' : '$_transferRail Bank Transfer');
 
     showDialog(
       context: context,
@@ -1868,7 +1857,7 @@ Thank you for banking with PayPink!
     );
   }
 
-  // ── MOB-305: Saga pending screen ─────────────────────────────────────────
+  // ── Processing screen (no cancel window) ──────────────────────────────────
   Widget _buildSagaPendingScreen({
     required bool isDark,
     required Color textInk,
@@ -1887,7 +1876,7 @@ Thank you for banking with PayPink!
           const CircularProgressIndicator(color: PayPinkTheme.wine, strokeWidth: 2.5),
           const SizedBox(height: 24),
           Text(
-            'Transfer Reserved',
+            'Processing your transfer',
             style: PayPinkTheme.display(
               fontSize: 22,
               fontWeight: FontWeight.w800,
@@ -1897,7 +1886,7 @@ Thank you for banking with PayPink!
           ),
           const SizedBox(height: 8),
           Text(
-            'Your transfer is in a 15-second grace window.\nYou can cancel or send it right now.',
+            'Core banking is taking a little longer than usual.\nYour receipt will appear here as soon as it posts.',
             style: PayPinkTheme.body(fontSize: 13, color: textMuted),
             textAlign: TextAlign.center,
           ),
@@ -1922,40 +1911,6 @@ Thank you for banking with PayPink!
               textAlign: TextAlign.center,
             ),
           ],
-          const SizedBox(height: 32),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _onSagaCancel,
-                  icon: const Icon(Icons.cancel_outlined, size: 18),
-                  label: const Text('Cancel'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: textInk,
-                    side: BorderSide(color: textLine),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _onSagaSendNow,
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text('Send Now'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: PayPinkTheme.wine,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -1969,7 +1924,7 @@ Thank you for banking with PayPink!
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
     final cardBg = isDark ? PayPinkTheme.darkCard : Colors.white;
 
-    // MOB-305: show saga pending screen while RESERVED
+    // Show the processing screen while core banking finishes a 202 PROCESSING transfer
     if (_isSagaPending && _pendingReferenceNo != null) {
       return _buildSagaPendingScreen(
         isDark: isDark,
@@ -2188,36 +2143,7 @@ Thank you for banking with PayPink!
                   ],
                   const SizedBox(height: 12),
                   if (_selectedModeIndex == 2) ...[
-                    Text('Destination Institution', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: textLine),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _destinationBank,
-                          isExpanded: true,
-                          dropdownColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
-                          style: PayPinkTheme.body(fontSize: 13, color: textInk),
-                          items: [
-                            DropdownMenuItem(value: 'BDO', child: Text('BDO Unibank', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
-                            DropdownMenuItem(value: 'BPI', child: Text('Bank of the Philippine Islands (BPI)', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
-                            DropdownMenuItem(value: 'UnionBank', child: Text('UnionBank of the Philippines', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
-                            DropdownMenuItem(value: 'GCash', child: Text('GCash / G-Xchange Inc.', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
-                            DropdownMenuItem(value: 'Maya', child: Text('Maya Philippines', style: PayPinkTheme.body(fontSize: 13, color: textInk))),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) setState(() => _destinationBank = val);
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text('Clearing Rail & Settlement', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
+                    Text('Choose how you want to transfer', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: textInk)),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -2262,7 +2188,7 @@ Thank you for banking with PayPink!
                                 children: [
                                   Text('PESONet', style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk)),
                                   const SizedBox(height: 2),
-                                  Text('Batch EOD cutoff · Unlimited', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
+                                  Text('Next clearing batch · Larger amounts', style: PayPinkTheme.body(fontSize: 10, color: textMuted)),
                                 ],
                               ),
                             ),
@@ -2327,6 +2253,30 @@ Thank you for banking with PayPink!
                         ),
                       ],
                     ),
+                  ],
+                  // Bank transfers: name and bank come from the partner directory (web: external.js lookup)
+                  if (_selectedModeIndex == 2) ...[
+                    const SizedBox(height: 8),
+                    Builder(builder: (_) {
+                      final number = _recipientController.text.replaceAll(RegExp(r'\s'), '');
+                      final match = _externalMatch;
+                      final String message;
+                      final Color color;
+                      if (match != null) {
+                        message = 'Account found: ${match.name} · ${match.bank}';
+                        color = PayPinkTheme.green;
+                      } else if (number.length >= 12) {
+                        message = 'Account not found. Check the account number.';
+                        color = PayPinkTheme.red;
+                      } else {
+                        message = 'Enter the full 12-digit account number to find the recipient.';
+                        color = textMuted;
+                      }
+                      return Semantics(
+                        liveRegion: true,
+                        child: Text(message, style: PayPinkTheme.body(fontSize: 12, color: color, fontWeight: match != null ? FontWeight.w600 : FontWeight.w400)),
+                      );
+                    }),
                   ],
                   if (_selectedModeIndex == 1 && _verifiedName != null && _recipientError == null) ...[
                     const SizedBox(height: 8),

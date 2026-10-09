@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
-import '../services/statement_service.dart';
+import '../widgets/transaction_report_sheet.dart';
+import '../services/account_service.dart';
 
 class TransactionItem {
   final String id;
@@ -34,21 +35,6 @@ class TransactionItem {
     this.sourceAccount,
     this.recipientAccount,
   }) : ofscore = ofscore ?? 'TXN-REF-$id';
-
-  bool get isReversible {
-    if (isCredit) return false;
-    if (status.toUpperCase() == 'REVERSED' || status.toLowerCase().contains('refund')) return false;
-    if (timestamp == null) return false;
-    final diff = DateTime.now().difference(timestamp!);
-    return diff.inMinutes < 15 && !diff.isNegative;
-  }
-
-  int get reversalMinutesRemaining {
-    if (timestamp == null) return 0;
-    final diff = DateTime.now().difference(timestamp!);
-    final left = 15 - diff.inMinutes;
-    return left > 0 ? left : 0;
-  }
 
   TransactionItem copyWith({
     String? id,
@@ -134,7 +120,7 @@ class TransactionsScreen extends StatefulWidget {
   final VoidCallback? onRefresh;
   final String? customerName;
   final String? primaryAccountNumber;
-  final Function(TransactionItem tx)? onReverseTransaction;
+  final List<BankAccount> accounts;
 
   const TransactionsScreen({
     super.key,
@@ -142,7 +128,7 @@ class TransactionsScreen extends StatefulWidget {
     this.onRefresh,
     this.customerName,
     this.primaryAccountNumber,
-    this.onReverseTransaction,
+    this.accounts = const [],
   });
 
   @override
@@ -151,7 +137,7 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   String _searchQuery = '';
-  String _filter = 'all'; // 'all', 'credit', 'debit', 'reversal', 'checking', 'savings', 'paypink', 'loan'
+  String _filter = 'all'; // 'all', 'credit', 'debit', 'checking', 'savings', 'paypink', 'loan'
 
 
 
@@ -166,7 +152,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     var filtered = widget.transactions.where((tx) {
       if (_filter == 'credit' && !tx.isCredit) return false;
       if (_filter == 'debit' && tx.isCredit) return false;
-      if (_filter == 'reversal' && tx.status.toUpperCase() != 'REVERSED' && tx.status != 'Refunded') return false;
       if (_filter == 'checking' && !tx.isCheckingRelated) return false;
       if (_filter == 'savings' && !tx.isSavingsRelated) return false;
       if (_filter == 'paypink' && !tx.isPayPinkRelated) return false;
@@ -205,17 +190,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 children: [
                   IconButton(
                     icon: Icon(Icons.picture_as_pdf_rounded, color: brandWine, size: 21),
-                    tooltip: 'Export Statement (PDF)',
-                    onPressed: () {
-                      StatementService.generateAndExportStatement(
-                        context: context,
-                        customerName: widget.customerName?.isNotEmpty == true ? widget.customerName! : 'PayPink Client',
-                        accountNumber: widget.primaryAccountNumber ?? '001 1 5046 8001',
-                        accountType: 'All Accounts Activity',
-                        currentBalance: widget.transactions.isNotEmpty ? widget.transactions.first.amount : 50.0,
-                        transactions: widget.transactions,
-                      );
-                    },
+                    tooltip: 'Generate transaction report',
+                    onPressed: () => TransactionReportSheet.show(
+                      context,
+                      accounts: widget.accounts.where((a) => !a.isLoan).toList(),
+                    ),
                   ),
                   if (widget.onRefresh != null)
                     IconButton(
@@ -275,7 +254,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       const SizedBox(width: 8),
                       _buildFilterChip('Money out', 'debit', isDark),
                       const SizedBox(width: 8),
-                      _buildFilterChip('Reversals', 'reversal', isDark),
                       const SizedBox(width: 8),
                       _buildFilterChip('Checking', 'checking', isDark),
                       const SizedBox(width: 8),
@@ -425,9 +403,6 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           account: tx.account,
                           counterparty: tx.counterparty ?? tx.recipientAccount,
                           status: tx.status,
-                          canReverse: false,
-                          reversalMinutesRemaining: 0,
-                          onReverse: null,
                         );
                       },
                     ),

@@ -510,9 +510,6 @@ class PayPinkBottomSheets {
     String? account,
     String? counterparty,
     String? status,
-    bool canReverse = false,
-    int reversalMinutesRemaining = 0,
-    VoidCallback? onReverse,
   }) {
     final isReversed = status?.toUpperCase() == 'REVERSED' || status == 'Refunded';
 
@@ -559,55 +556,6 @@ class PayPinkBottomSheets {
                 ),
               ),
               const SizedBox(height: 16),
-              if (!isCredit && !isReversed) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: PayPinkTheme.pinkSubtle,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: PayPinkTheme.pink.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Request Reversal / Dispute',
-                              style: PayPinkTheme.display(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '15-min instant window closed. Open a support dispute investigation.',
-                              style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.muted),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: PayPinkTheme.wine,
-                              content: Text('Reversal ticket #REV-${refId.replaceAll(RegExp(r"\D"), "")} filed with PayPink 24/7 Support.'),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.support_agent_rounded, size: 15, color: PayPinkTheme.wine),
-                        label: Text(
-                          'Request',
-                          style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
 
               // Real-Time Transaction Monitoring / Lifecycle Stepper
               Container(
@@ -770,7 +718,7 @@ Thank you for banking with PayPink!
     BuildContext context, {
     required List<Map<String, dynamic>> notifications,
     required VoidCallback onMarkAllRead,
-    required Function(int) onDismiss,
+    required Function(String) onDismiss,
   }) {
     showModalBottomSheet(
       context: context,
