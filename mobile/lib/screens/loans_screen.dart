@@ -105,24 +105,28 @@ class _LoansScreenState extends State<LoansScreen> {
     final muted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
     final loans = _loans;
 
-    return Scaffold(
-      backgroundColor: isDark ? PayPinkTheme.darkBg : PayPinkTheme.paper,
-      appBar: AppBar(
-        backgroundColor: isDark ? PayPinkTheme.darkBg : PayPinkTheme.paper,
-        surfaceTintColor: Colors.transparent,
-        foregroundColor: ink,
-        title: Text('Loans', style: PayPinkTheme.display(fontSize: 20, fontWeight: FontWeight.w700, color: ink)),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: RefreshIndicator(
-              color: PayPinkTheme.wine,
-              onRefresh: _reload,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
+    final bg = isDark ? PayPinkTheme.darkBg : PayPinkTheme.paper;
+
+    return Container(
+      color: bg,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              foregroundColor: ink,
+              title: Text('Loans', style: PayPinkTheme.display(fontSize: 20, fontWeight: FontWeight.w700, color: ink)),
+            ),
+            body: SafeArea(
+              top: false,
+              child: RefreshIndicator(
+                color: PayPinkTheme.wine,
+                onRefresh: _reload,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
                 children: [
                   Text('Pay, track and apply for loans in one place.', style: PayPinkTheme.body(fontSize: 13, color: muted)),
                   const SizedBox(height: 18),
@@ -157,8 +161,9 @@ class _LoansScreenState extends State<LoansScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _sectionTitle(String title, String? trailing, Color ink, Color muted) => Row(
         children: [

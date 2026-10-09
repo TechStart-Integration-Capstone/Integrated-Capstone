@@ -57,4 +57,24 @@ void main() {
     expect(find.text('Apply for a loan'), findsOneWidget);
     expect(find.text('Pay'), findsNothing);
   });
+
+  testWidgets('Loans hub AppBar and content are constrained to 440px on wide viewports', (tester) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(MaterialApp(home: LoansScreen(initialAccounts: [savings, loan])));
+    await tester.pump();
+
+    final appBarFinder = find.byType(AppBar);
+    expect(appBarFinder, findsOneWidget);
+    final appBarSize = tester.getSize(appBarFinder);
+    expect(appBarSize.width, lessThanOrEqualTo(440.0));
+
+    final appBarTopLeft = tester.getTopLeft(appBarFinder);
+    expect(appBarTopLeft.dx, greaterThanOrEqualTo(250.0));
+  });
 }

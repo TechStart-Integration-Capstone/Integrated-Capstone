@@ -2,6 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-09 (Fixed Loans hub AppBar alignment on wide screens: wrapped Scaffold in Center and ConstrainedBox(maxWidth: 440) inside full-bleed background Container so back arrow and title align with mobile cards; 37/37 tests pass by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Mobile Loans hub: one Loans button opens a screen with pay, details and apply; 30/30 tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Loan payments left shown on web and mobile from the repayment schedule; web Pay dialog adds Next payment / Full balance / Another amount; 28/28 mobile tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Restored mobile-app service in docker/docker-compose.yml, preventing Azure VM CD deployment from tearing down the container with --remove-orphans and restoring live availability on http://paypink.westus2.cloudapp.azure.com:3002)_
