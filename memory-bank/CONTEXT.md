@@ -40,6 +40,12 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### Customer bug fixes in progress (2026-10-09)
+
+- Fix 1: transaction-service no longer releases a hold a second time when committing a core-posted remittance. Remaining savings/transfer reservations are owned by T24. All 29 targeted saga/recovery/hold tests passed. Local only, transaction-service rebuild required; no database changes or deployment.
+- Fix 2 complete: PESONet batch settlement uses available balance and preserves the held-balance snapshot across payments. All 18 banking transfer integration tests passed, including holds placed after submission and multiple payments in one batch. Local only; auth-service rebuild required, no migration or deployment.
+- Current authorized scope ends at fix 2. Remaining customer review findings (3–18) have not been started.
+
 ### Savings contribution limits (2026-10-09)
 
 - Overview card now labels Available balance and explains "After reservations for goals, PinkCircles, and pending transactions." Total balance remains beneath it. The owner-scoped `/api/v1/accounts/savings/balance-summary` aggregates live core snapshots across PHP accounts; failed reads show Unavailable. Verified: 14 savings service tests and browser checks passed. Local only; account-service and frontend rebuild required alongside the pending core reservation fixes.

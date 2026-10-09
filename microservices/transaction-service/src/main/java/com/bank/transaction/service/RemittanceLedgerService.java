@@ -399,9 +399,8 @@ public class RemittanceLedgerService {
             targetBefore = targetAfter.subtract(amount);
             log.info("[ledger-service] T24 Core posting authoritative (ftRef={}): source={} -> {}, target={} -> {}",
                     ftReference, sourceBefore, sourceAfter, targetBefore, targetAfter);
-            // Release held_balance on dbo.ACCOUNT to ensure local hold reservation is cleared and available balance is accurate
-            String releaseHeldSql = "UPDATE dbo.ACCOUNT SET held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END WHERE account_id = ?";
-            jdbcTemplate.update(releaseHeldSql, amount, amount, currentSource.id());
+            // Core posting already settled this transfer's hold. Remaining holds belong to
+            // savings or other transfers and must not be released by the read-model commit.
         } else {
             // Fallback: local database balance update
             sourceBefore = currentSource.balance();

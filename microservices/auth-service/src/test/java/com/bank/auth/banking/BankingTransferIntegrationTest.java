@@ -118,6 +118,30 @@ class BankingTransferIntegrationTest {
         assertThat(count("OUTBOX_EVENT")).isEqualTo(1);
     }
 
+    @Test void pesonetPreservesFundsReservedAfterSubmission() {
+        external.transfer("owner",new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("40"),"PESONET","reserved_payment_01"));
+        jdbc.update("UPDATE ACCOUNT SET held_balance=20 WHERE account_id=1");
+        jdbc.update("UPDATE LEDGER_TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
+        external.settleBatch();
+        assertThat(balance(1)).isEqualByComparingTo("50");
+        assertThat(external.history("owner").get(0).status()).isEqualTo("FAILED");
+        assertThat(count("OUTBOX_EVENT")).isZero();
+        assertThat(jdbc.queryForObject("SELECT held_balance FROM ACCOUNT WHERE account_id=1",BigDecimal.class)).isEqualByComparingTo("20");
+    }
+
+    @Test void pesonetPreservesReservationsAcrossEveryPaymentInBatch() {
+        external.transfer("owner",new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("20"),"PESONET","reserved_payment_01"));
+        external.transfer("owner",new ExternalTransferService.Request(1L,"009876543210",new BigDecimal("20"),"PESONET","reserved_payment_02"));
+        jdbc.update("UPDATE ACCOUNT SET held_balance=20 WHERE account_id=1");
+        jdbc.update("UPDATE LEDGER_TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
+        external.settleBatch();
+        external.settleBatch();
+        assertThat(balance(1)).isEqualByComparingTo("30");
+        assertThat(external.history("owner")).extracting(ExternalTransferService.Receipt::status).containsExactlyInAnyOrder("COMPLETED","FAILED");
+        assertThat(count("OUTBOX_EVENT")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT held_balance FROM ACCOUNT WHERE account_id=1",BigDecimal.class)).isEqualByComparingTo("20");
+    }
+
     @BeforeEach void prepare() {
         reset(banking);
         Customer owner = mock(Customer.class); when(owner.getCustomerId()).thenReturn(42L);

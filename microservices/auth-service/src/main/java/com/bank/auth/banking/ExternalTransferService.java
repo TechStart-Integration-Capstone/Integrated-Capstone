@@ -135,7 +135,7 @@ public class ExternalTransferService {
                     jdbc.update("UPDATE LEDGER_TRANSACTION SET status='SUCCESS' WHERE reference_no=?",reference);
                     continue;
                 }
-                if (!"ACTIVE".equals(source.status()) || !"PHP".equals(source.currency()) || source.balance().compareTo(amount)<0) {
+                if (!"ACTIVE".equals(source.status()) || !"PHP".equals(source.currency()) || source.availableBalance().compareTo(amount)<0) {
                     jdbc.update("UPDATE LEDGER_TRANSACTION SET status='FAILED' WHERE reference_no=?",reference);
                     jdbc.update("INSERT INTO AUDIT_LOG (customer_id,action,entity,details) VALUES (?,'PESONET_FAILED','ACCOUNT',?)",source.customerId(),"Account unavailable or insufficient funds at processing time; reference "+reference);
                     continue;
@@ -144,7 +144,7 @@ public class ExternalTransferService {
                 jdbc.update("UPDATE ACCOUNT SET current_balance=? WHERE account_id=?",after,id);
                 ledger.post(source,amount,after,"DEBIT",type,reference);
                 jdbc.update("UPDATE LEDGER_TRANSACTION SET status='SUCCESS' WHERE reference_no=?",reference);
-                source=new BankingLedger.Account(source.id(),source.customerId(),source.number(),source.currency(),after,source.status());
+                source=new BankingLedger.Account(source.id(),source.customerId(),source.number(),source.currency(),after,source.heldBalance(),source.status());
             }
         }
     }

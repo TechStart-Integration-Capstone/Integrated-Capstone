@@ -1,4 +1,12 @@
 # Changelog
+- 2026-10-09 — Customer bug fix 2: PESONet respects held funds (`auth-service`) — [dom]
+  - Settlement checks available balance and retains held balance between successive batch debits. Added database regressions for holds placed after submission and reservations across multiple batch payments.
+  - Validation complete: all 18 `BankingTransferIntegrationTest` tests passed with zero failures/errors, including both new reservation regressions. Confirmed the completed test report when resuming fix 2 only; source and tests were unchanged since that run. Local only; auth-service rebuild required, no migration or deployment.
+
+- 2026-10-09 — Customer bug fix 1: preserve reservations after core posting (`transaction-service`) — [dom]
+  - Removed the second held-balance subtraction from `RemittanceLedgerService.commitLedgerMutation` after T24 has already settled the hold. Added a regression covering PHP 21,100 of unrelated reservations.
+  - Validation: 29 transaction-service saga/recovery/hold tests passed. Local source change only; no migration or deployment.
+
 - 2026-10-09 — Fix Loans Hub AppBar Mobile Container Alignment (`loans_screen.dart`, `loans_screen_test.dart`):
   - **Mobile Frame Alignment on Wide Screens (`loans_screen.dart`):** Resolved layout defect where opening the Loans hub on desktop/tablet/wide screens rendered the `AppBar` (back arrow `←` and `Loans` title) unconstrained at `x = 0` on the far left edge of the browser viewport while the body content was centered in a 440px container. Moved `Center` and `ConstrainedBox(maxWidth: 440)` to wrap the `Scaffold` directly inside a full-bleed background `Container`, ensuring the `AppBar` and back navigation arrow align directly on top of the mobile content card.
   - **Wide Viewport Automated Test (`loans_screen_test.dart`):** Added automated widget test verifying that on wide viewports (1000px width), the `AppBar` is constrained to `<= 440px` and centered (`dx >= 250px`). All 37/37 mobile tests pass clean (`flutter test`). Rebuilt Flutter Web release bundle and deployed to Docker container `mobile-app` (`http://localhost:3002`). — [dom & Antigravity]
