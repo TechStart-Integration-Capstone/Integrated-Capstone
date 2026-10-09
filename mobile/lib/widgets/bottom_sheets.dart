@@ -220,14 +220,14 @@ class PayPinkBottomSheets {
           String selectedBank = 'PayPink';
 
           return _SheetContainer(
-            title: 'Manage Beneficiaries',
+            title: 'Favorites',
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Save your frequent payees for quick and secure 1-tap remittances.',
+                    'Save your frequent payees as Favorites for quick and secure 1-tap remittances.',
                     style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted),
                   ),
                   const SizedBox(height: 14),
@@ -302,77 +302,105 @@ class PayPinkBottomSheets {
                   }),
 
                   const SizedBox(height: 12),
-                  // Add Beneficiary Button / Collapsible Box
+                  // Add Favorite Button / Dialog
                   OutlinedButton.icon(
                     onPressed: () {
+                      String? dialogError;
                       showDialog(
                         context: context,
-                        builder: (dialogCtx) => AlertDialog(
-                          title: Text('Add New Beneficiary', style: PayPinkTheme.display(fontSize: 16)),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextField(
-                                controller: nameController,
-                                decoration: const InputDecoration(labelText: 'Recipient Full Name'),
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: numberController,
-                                decoration: const InputDecoration(labelText: 'Account Number'),
-                              ),
-                              const SizedBox(height: 10),
-                              DropdownButtonFormField<String>(
-                                initialValue: selectedBank,
-                                items: const [
-                                  DropdownMenuItem(value: 'PayPink', child: Text('PayPink')),
-                                  DropdownMenuItem(value: 'BDO', child: Text('BDO')),
-                                  DropdownMenuItem(value: 'BPI', child: Text('BPI')),
-                                  DropdownMenuItem(value: 'UnionBank', child: Text('UnionBank')),
-                                  DropdownMenuItem(value: 'GCash', child: Text('GCash')),
-                                  DropdownMenuItem(value: 'Maya', child: Text('Maya')),
+                        builder: (dialogCtx) => StatefulBuilder(
+                          builder: (context, setDialogState) {
+                            return AlertDialog(
+                              title: Text('Add New Favorite', style: PayPinkTheme.display(fontSize: 16)),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextField(
+                                    controller: nameController,
+                                    decoration: const InputDecoration(labelText: 'Recipient Full Name'),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  TextField(
+                                    controller: numberController,
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    decoration: InputDecoration(
+                                      labelText: '12-Digit PayPink Account Number',
+                                      hintText: 'e.g. 001381233467',
+                                      errorText: dialogError,
+                                    ),
+                                    onChanged: (_) {
+                                      if (dialogError != null) {
+                                        setDialogState(() => dialogError = null);
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 10),
+                                  DropdownButtonFormField<String>(
+                                    initialValue: selectedBank,
+                                    items: const [
+                                      DropdownMenuItem(value: 'PayPink', child: Text('PayPink')),
+                                      DropdownMenuItem(value: 'BDO', child: Text('BDO')),
+                                      DropdownMenuItem(value: 'BPI', child: Text('BPI')),
+                                      DropdownMenuItem(value: 'UnionBank', child: Text('UnionBank')),
+                                      DropdownMenuItem(value: 'GCash', child: Text('GCash')),
+                                      DropdownMenuItem(value: 'Maya', child: Text('Maya')),
+                                    ],
+                                    onChanged: (val) {
+                                      if (val != null) selectedBank = val;
+                                    },
+                                    decoration: const InputDecoration(labelText: 'Destination Bank'),
+                                  ),
                                 ],
-                                onChanged: (val) {
-                                  if (val != null) selectedBank = val;
-                                },
-                                decoration: const InputDecoration(labelText: 'Destination Bank'),
                               ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(dialogCtx),
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                if (nameController.text.isNotEmpty && numberController.text.isNotEmpty) {
-                                  final initials = nameController.text
-                                      .trim()
-                                      .split(' ')
-                                      .take(2)
-                                      .map((s) => s.isNotEmpty ? s[0].toUpperCase() : '')
-                                      .join();
-                                  onAddBeneficiary({
-                                    'name': nameController.text.trim(),
-                                    'number': numberController.text.trim(),
-                                    'avatar': initials.isEmpty ? 'BP' : initials,
-                                    'bank': selectedBank,
-                                  });
-                                  Navigator.pop(dialogCtx);
-                                  setSheetState(() {});
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(backgroundColor: PayPinkTheme.wine),
-                              child: const Text('Save', style: TextStyle(color: Colors.white)),
-                            ),
-                          ],
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogCtx),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    final name = nameController.text.trim();
+                                    final rawNum = numberController.text.trim();
+                                    final cleanDigits = rawNum.replaceAll(RegExp(r'\D'), '');
+
+                                    if (name.isEmpty) {
+                                      setDialogState(() => dialogError = 'Please enter recipient name');
+                                      return;
+                                    }
+
+                                    if (selectedBank == 'PayPink' && cleanDigits.length != 12) {
+                                      setDialogState(() => dialogError = 'PayPink account number must be exactly 12 digits');
+                                      return;
+                                    }
+
+                                    final initials = name
+                                        .split(' ')
+                                        .take(2)
+                                        .map((s) => s.isNotEmpty ? s[0].toUpperCase() : '')
+                                        .join();
+
+                                    onAddBeneficiary({
+                                      'name': name,
+                                      'number': cleanDigits.isNotEmpty ? cleanDigits : rawNum,
+                                      'avatar': initials.isEmpty ? 'FAV' : initials,
+                                      'bank': selectedBank,
+                                    });
+                                    Navigator.pop(dialogCtx);
+                                    setSheetState(() {});
+                                  },
+                                  style: ElevatedButton.styleFrom(backgroundColor: PayPinkTheme.wine),
+                                  child: const Text('Save Favorite', style: TextStyle(color: Colors.white)),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       );
                     },
-                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 16, color: PayPinkTheme.wine),
+                    icon: const Icon(Icons.star_outline_rounded, size: 16, color: PayPinkTheme.wine),
                     label: Text(
-                      'Add Beneficiary',
+                      'Add Favorite',
                       style: PayPinkTheme.body(fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
                     ),
                     style: OutlinedButton.styleFrom(

@@ -327,12 +327,11 @@ class AccountService {
       debugPrint('[AccountService] fetchProfile error: $e');
     }
 
-    // Default structure matching the active database schema
     return UserProfile(
-      firstName: savedName.split(' ').first,
-      fullName: savedName,
-      username: savedUser,
-      email: '$savedUser@paypink.ph',
+      firstName: savedName.isNotEmpty ? savedName.split(' ').first : 'Levy',
+      fullName: savedName.isNotEmpty ? savedName : 'Levy Viernes',
+      username: savedUser.isNotEmpty ? savedUser : 'lviernes',
+      email: savedUser.isNotEmpty ? '$savedUser@paypink.ph' : 'lviernes@paypink.ph',
       accounts: [
         BankAccount(
           accountId: 2,
