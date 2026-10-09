@@ -1,4 +1,4 @@
-﻿services:
+services:
   # ==========================================
   # Layer 4: Datastores & In-Memory Matrix
   # ==========================================
@@ -176,9 +176,9 @@
         condition: service_healthy
     # No host port â€” internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
       - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
       - SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.microsoft.sqlserver.jdbc.SQLServerDriver
       - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.SQLServerDialect
@@ -200,9 +200,9 @@
         condition: service_healthy
     # No host port â€” internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     volumes:
@@ -225,9 +225,9 @@
         condition: service_healthy
     # No host port â€” internal only, accessed via api-gateway:8080
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -311,9 +311,9 @@
     ports:
       - "8086:8086"
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
       - POSTGRES_DATASOURCE_URL=jdbc:postgresql://postgresql:5432/ledger_audit_db
       - POSTGRES_DATASOURCE_USERNAME=audit_user
       - POSTGRES_DATASOURCE_PASSWORD=AuditSecretPassword123
@@ -335,9 +335,9 @@
         condition: service_healthy
     # No host port â€” internal only
     environment:
-      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL}
-      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
-      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
+      - SPRING_DATASOURCE_URL=${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+      - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
+      - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - OUTBOX_POLL_INTERVAL_MS=5000
       - OUTBOX_RETRY_INTERVAL_MS=30000

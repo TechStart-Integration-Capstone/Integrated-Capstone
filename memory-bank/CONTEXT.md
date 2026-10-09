@@ -2,8 +2,8 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (JMeter CLI Runners & PowerShell 5.1 Encoding Fix by [dom])_  
-_Last updated: 2026-10-08 (Mobile banking luxury redesign, dynamic live ledger, 15-min instant reversal, dynamic monthly flow)
+_Last Updated: 2026-10-09 (Clean Architecture, BLoC State Machines, Local Dev Connectivity Fallback by [Antigravity])_  
+_Last updated: 2026-10-08 (Mobile banking luxury redesign, dynamic live ledger, 15-min instant reversal, dynamic monthly flow)_
 
 ---
 

@@ -20,12 +20,25 @@ Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host " Building PayPink Microservices JARs" -ForegroundColor Cyan
 Write-Host "=========================================" -ForegroundColor Cyan
 
+$mvnCmd = Get-Command mvn -ErrorAction SilentlyContinue
+if ($null -eq $mvnCmd) {
+    $possibleMvn = "C:\Standard Apps\2. TechStart Installer\apache-maven-3.9.16\bin\mvn.cmd"
+    if (Test-Path $possibleMvn) {
+        $mvnExec = $possibleMvn
+    } else {
+        $mvnExec = "mvn"
+    }
+} else {
+    $mvnExec = "mvn"
+}
+
 foreach ($svc in $services) {
     $dir = Join-Path $root "microservices\$svc"
     Write-Host "`n>>> Building $svc..." -ForegroundColor Yellow
     Push-Location $dir
     try {
-        mvn clean package -s $settings -DskipTests
+        & $mvnExec clean package -s $settings -DskipTests
+
         if ($LASTEXITCODE -ne 0) {
             throw "Build failed for $svc"
         }

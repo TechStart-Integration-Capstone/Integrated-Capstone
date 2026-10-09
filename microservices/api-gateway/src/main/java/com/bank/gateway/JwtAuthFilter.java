@@ -77,6 +77,12 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                 )
                 .build();
 
+        // Bypass authentication for HTTP OPTIONS preflight requests (CORS)
+        if ("OPTIONS".equalsIgnoreCase(sanitizedExchange.getRequest().getMethod().name())) {
+            sanitizedExchange.getResponse().setStatusCode(HttpStatus.OK);
+            return sanitizedExchange.getResponse().setComplete();
+        }
+
         String path = sanitizedExchange.getRequest().getURI().getPath();
 
         // Allow public paths through
