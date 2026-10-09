@@ -378,7 +378,7 @@ PayPink 2.0 operates as an event-driven, domain-partitioned microservices bankin
 
 ## Core Rules and Architectural Boundaries
 
-1. **Mobile Scope (`mobile/`):** The mobile application directory is 100% frozen and untouched. All 6 mobile API contracts must remain strictly backward-compatible.
+1. **Mobile Scope (`mobile/`):** The mobile application directory is 100% frozen and untouched. All 6 mobile API contracts must remain strictly backward-compatible. Exception: the team has opened `mobile/` for the UI and web-alignment backlog in `docs/MOBILE_BACKLOG.md` (MOB-101…MOB-506, split across 5 members). Member 2's tasks (MOB-201…206) are done: the app loads its profile from `GET /api/v1/accounts/me`, loans from `GET /api/v1/loans`, repays via `POST /api/v1/loans/{loanId}/repayments`, and shows errors instead of placeholder balances. It no longer calls `/api/v1/loans/pay`.
 2. **Money Never Moves Without a Risk Score:** Risk score > 0.85 results in rejection before any hold or balance is touched.
 3. **Core Owns Money and Balances:** Microservices do not mutate balances directly in SQL; hold placement and postings are executed by `t24-adapter`.
 4. **Display Balances are Display-Only:** Redis-cached balances are never used for transfer authorization.

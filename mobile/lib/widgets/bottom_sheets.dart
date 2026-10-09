@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import '../theme/paypink_theme.dart';
 import '../screens/pin_auth_screen.dart';
+import '../services/account_service.dart';
 
 class PayPinkBottomSheets {
+  /// Deposit account details. Shows the available balance only, and interest from [account]
+  /// using the bank's real savings tiers (checking accounts earn no interest).
   static void showAccountDetails(
     BuildContext context, {
     required String name,
@@ -13,7 +16,12 @@ class PayPinkBottomSheets {
     required String type,
     required String status,
     String? ledgerId,
+    BankAccount? account,
   }) {
+    final rate = account?.annualInterestRatePercent;
+    final posting = BankAccount.nextInterestPostingDate();
+    final earnsInterest = account?.earnsInterest ?? false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -23,11 +31,19 @@ class PayPinkBottomSheets {
         child: Column(
           children: [
             _DetailRow(label: 'Account Number', value: fullNumber, isMono: true),
-            _DetailRow(label: 'Available Balance', value: '₱${balance.toStringAsFixed(2)}', isBold: true),
-            _DetailRow(label: 'Ledger Balance', value: '₱${balance.toStringAsFixed(2)}'),
-            const _DetailRow(label: 'Amount on Hold / Reserved', value: '₱0.00 (None)', valueColor: PayPinkTheme.green),
-            const _DetailRow(label: 'Interest Accrual Rate', value: '1.50% p.a.'),
-            const _DetailRow(label: 'Interest Posting', value: 'Monthly (Oct 31, 2026)'),
+            _DetailRow(label: 'Available Balance', value: formatPeso(balance), isBold: true),
+            if (account != null && earnsInterest && rate != null) ...[
+              _DetailRow(label: 'Interest Rate', value: '${rate.toStringAsFixed(2)}% p.a.'),
+              _DetailRow(
+                label: 'Interest Earned Per Day',
+                value: '≈ ${formatPeso(account.estimatedDailyInterest)}',
+              ),
+              _DetailRow(
+                label: 'Next Interest Posting',
+                value: BankAccount.formatDueDate(posting.toIso8601String()) ?? '',
+              ),
+            ] else if (account != null && !account.isLoan)
+              const _DetailRow(label: 'Interest', value: 'Not interest-bearing'),
             _DetailRow(
               label: 'Account Holder',
               value: name.isNotEmpty ? name : 'PayPink Client',
@@ -40,6 +56,13 @@ class PayPinkBottomSheets {
               valueColor: PayPinkTheme.green,
               isBold: true,
             ),
+            if (account != null && earnsInterest) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Savings earn 1% below ₱1,000, 2.5% below ₱10,000 and 4% from ₱10,000, on the whole balance. Interest accrues daily and is added on the last day of each month.',
+                style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted, height: 1.4),
+              ),
+            ],
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -71,17 +94,14 @@ class PayPinkBottomSheets {
     );
   }
 
-  /// Loan Product Details Bottom Sheet
+  /// Loan details from loan-service (GET /api/v1/loans). [onPay] opens the payment sheet.
   static void showLoanDetails(
     BuildContext context, {
-    String loanNumber = '001 9 9921 4410',
-    double principal = 50000.00,
-    double remaining = 45000.00,
-    double amortization = 3750.00,
-    String dueDate = 'Oct 25, 2026',
-    double interestRate = 5.50,
-    String term = '12 Months',
+    required BankAccount loan,
+    VoidCallback? onPay,
   }) {
+    final overdue = loan.status.toUpperCase() == 'OVERDUE' || (loan.penaltyDue ?? 0) > 0;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -105,12 +125,12 @@ class PayPinkBottomSheets {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Remaining Balance',
+                        'Outstanding Principal',
                         style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '₱${remaining.toStringAsFixed(2)}',
+                        formatPeso(loan.outstandingDebt ?? loan.currentBalance),
                         style: PayPinkTheme.display(
                           fontSize: 24,
                           fontWeight: FontWeight.w800,
@@ -126,11 +146,11 @@ class PayPinkBottomSheets {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '• Current / Good',
+                      overdue ? '• Overdue' : '• Current',
                       style: PayPinkTheme.body(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: PayPinkTheme.green,
+                        color: overdue ? PayPinkTheme.red : PayPinkTheme.green,
                       ),
                     ),
                   ),
@@ -138,12 +158,19 @@ class PayPinkBottomSheets {
               ),
             ),
             const SizedBox(height: 16),
-            _DetailRow(label: 'Loan Account', value: loanNumber, isMono: true),
-            _DetailRow(label: 'Original Principal', value: '₱${principal.toStringAsFixed(2)}'),
-            _DetailRow(label: 'Monthly Amortization', value: '₱${amortization.toStringAsFixed(2)}', isBold: true),
-            _DetailRow(label: 'Next Due Date', value: dueDate, isBold: true, valueColor: PayPinkTheme.wine),
-            _DetailRow(label: 'Annual Interest Rate', value: '${interestRate.toStringAsFixed(2)}% p.a.'),
-            _DetailRow(label: 'Tenure / Term', value: term),
+            _DetailRow(label: 'Loan Reference', value: loan.accountNumber, isMono: true),
+            if (loan.minimumPayment != null)
+              _DetailRow(label: 'Next Payment', value: formatPeso(loan.minimumPayment!), isBold: true),
+            if (loan.dueDate != null)
+              _DetailRow(label: 'Next Due Date', value: loan.dueDate!, isBold: true, valueColor: PayPinkTheme.wine),
+            if ((loan.penaltyDue ?? 0) > 0)
+              _DetailRow(label: 'Penalty Due', value: formatPeso(loan.penaltyDue!), valueColor: PayPinkTheme.red),
+            if (loan.interestRate != null)
+              _DetailRow(label: 'Annual Interest Rate', value: '${loan.interestRate!.toStringAsFixed(2)}% p.a.'),
+            if (loan.termMonths != null)
+              _DetailRow(label: 'Term', value: '${loan.termMonths} months'),
+            if (loan.repaymentAccountNumber != null)
+              _DetailRow(label: 'Auto-debit From', value: loan.repaymentAccountNumber!, isMono: true),
             const SizedBox(height: 20),
             Row(
               children: [
@@ -151,12 +178,7 @@ class PayPinkBottomSheets {
                   child: OutlinedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          backgroundColor: PayPinkTheme.wine,
-                          content: Text('Amortization schedule downloaded (PDF)'),
-                        ),
-                      );
+                      showLoanSchedule(context, loan: loan);
                     },
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: PayPinkTheme.line),
@@ -169,33 +191,77 @@ class PayPinkBottomSheets {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: PayPinkTheme.wine,
-                          content: Text('Payment of ₱${amortization.toStringAsFixed(2)} scheduled'),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: PayPinkTheme.wine,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text(
-                      'Pay ₱${amortization.toStringAsFixed(0)}',
-                      style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                if (onPay != null) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        onPay();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: PayPinkTheme.wine,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(
+                        'Pay Loan',
+                        style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Repayment schedule from GET /api/v1/loans/{loanId}/schedule.
+  static void showLoanSchedule(BuildContext context, {required BankAccount loan}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SheetContainer(
+        title: 'Repayment Schedule',
+        child: FutureBuilder<List<LoanInstallment>?>(
+          future: AccountService.fetchLoanSchedule(loan),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine)),
+              );
+            }
+            final rows = snapshot.data;
+            if (rows == null) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'We couldn’t load your schedule. Please try again.',
+                  style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.red),
+                ),
+              );
+            }
+            return ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.55),
+              child: ListView(
+                shrinkWrap: true,
+                children: rows
+                    .map((r) => _DetailRow(
+                          label: '#${r.installmentNo} · ${r.dueDate}',
+                          value: '${formatPeso(r.totalDue)} · ${r.statusLabel}',
+                          valueColor: r.isPaid ? PayPinkTheme.green : (r.isOverdue ? PayPinkTheme.red : null),
+                          isSmall: true,
+                        ))
+                    .toList(),
+              ),
+            );
+          },
         ),
       ),
     );

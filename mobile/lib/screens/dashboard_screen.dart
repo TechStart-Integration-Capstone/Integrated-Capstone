@@ -87,40 +87,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  List<BankAccount> get _carouselAccounts {
-    final baseList = widget.accounts != null && widget.accounts!.isNotEmpty
-        ? List<BankAccount>.from(widget.accounts!)
-        : <BankAccount>[];
-    if (baseList.isEmpty) return [];
-    final hasLoan = baseList.any((a) =>
-        a.accountType.toUpperCase().contains('LOAN') ||
-        a.displayName.toLowerCase().contains('loan'));
-    if (!hasLoan) {
-      baseList.add(
-        BankAccount(
-          accountId: 999,
-          accountNumber: '001 9 9921 4410',
-          accountType: 'LOAN_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 25000.0,
-          status: 'ACTIVE',
-          outstandingDebt: 25000.0,
-          minimumPayment: 2150.0,
-        ),
-      );
-    }
-    return baseList;
-  }
+  /// Real accounts and loans only; a customer without a loan gets no loan card.
+  List<BankAccount> get _carouselAccounts => List<BankAccount>.from(widget.accounts ?? const <BankAccount>[]);
 
   void _openLoanPaymentSheet() {
-    final loan = _liveLoanAccount ?? BankAccount(
-      accountId: 999,
-      accountNumber: '001 9 9921 4410',
-      accountType: 'LOAN_ACCOUNT',
-      currency: 'PHP',
-      currentBalance: 25000.0,
-      status: 'ACTIVE',
-    );
+    final loan = _liveLoanAccount;
+    if (loan == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: PayPinkTheme.wine,
+          content: Text('You don’t have a loan to pay right now.'),
+        ),
+      );
+      return;
+    }
     LoanPaymentSheet.show(
       context,
       loanAccount: loan,
@@ -950,7 +930,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Dynamic Swipeable Account Cards Carousel
+          // Dynamic Swipeable Account Cards Carousel (hidden until real accounts load)
+          if (_carouselAccounts.isNotEmpty)
           AccountCardCarousel(
             accounts: _carouselAccounts,
             cardHolder: widget.userFullName?.isNotEmpty == true ? widget.userFullName! : widget.userName,
@@ -959,6 +940,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onNavigateTab: widget.onNavigateTab,
             onOpenLoanPayment: _openLoanPaymentSheet,
             onSelectAccount: (acct) {
+              if (acct.isLoan) {
+                PayPinkBottomSheets.showLoanDetails(context, loan: acct, onPay: _openLoanPaymentSheet);
+                return;
+              }
               final holder = widget.userFullName?.isNotEmpty == true ? widget.userFullName! : widget.userName;
               PayPinkBottomSheets.showAccountDetails(
                 context,
@@ -967,6 +952,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 balance: acct.currentBalance,
                 type: acct.accountType,
                 status: acct.status,
+                account: acct,
               );
             },
             isDark: isDark,

@@ -1,9 +1,15 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'api_config.dart';
 import 'api_client.dart';
 import 'secure_token_storage.dart';
 import '../screens/transactions_screen.dart';
+
+final NumberFormat _pesoFormat = NumberFormat('#,##0.00', 'en_US');
+
+/// Formats an amount as Philippine pesos with comma grouping, e.g. ₱1,500.00.
+String formatPeso(double amount) => '₱${_pesoFormat.format(amount)}';
 
 class BankAccount {
   final int accountId;
@@ -16,7 +22,14 @@ class BankAccount {
   final double? outstandingDebt;
   final double? minimumPayment;
   final String? dueDate;
+  /// Annual rate in percent (7.0 means 7% a year).
   final double? interestRate;
+  /// loan-service loan ID. Repayments must use this, not [accountId].
+  final int? loanId;
+  /// Deposit account loan-service debits for repayments.
+  final String? repaymentAccountNumber;
+  final double? penaltyDue;
+  final int? termMonths;
 
   BankAccount({
     required this.accountId,
@@ -29,6 +42,10 @@ class BankAccount {
     this.minimumPayment,
     this.dueDate,
     this.interestRate,
+    this.loanId,
+    this.repaymentAccountNumber,
+    this.penaltyDue,
+    this.termMonths,
   });
 
   bool get isChecking =>
@@ -73,6 +90,33 @@ class BankAccount {
 
   String get formattedAccountNumber => formattedNumber;
 
+  /// Annual interest rate in percent, matching transaction-service InterestPolicy:
+  /// savings earn 1% below ₱1,000, 2.5% below ₱10,000 and 4% from ₱10,000 on the whole
+  /// balance; loans use their contract rate; checking accounts earn no interest (null).
+  double? get annualInterestRatePercent {
+    if (isLoan) return interestRate;
+    if (!isSavings) return null;
+    if (interestRate != null) return interestRate;
+    if (currentBalance < 1000) return 1.0;
+    if (currentBalance < 10000) return 2.5;
+    return 4.0;
+  }
+
+  bool get earnsInterest => isSavings;
+
+  /// Interest accrued per day at today's balance (actual/365), before monthly posting.
+  double get estimatedDailyInterest {
+    final rate = annualInterestRatePercent;
+    if (!earnsInterest || rate == null || currentBalance <= 0) return 0.0;
+    return currentBalance * rate / 100 / 365;
+  }
+
+  /// Savings interest is posted on the last calendar day of each month.
+  static DateTime nextInterestPostingDate([DateTime? today]) {
+    final now = today ?? DateTime.now();
+    return DateTime(now.year, now.month + 1, 0);
+  }
+
   BankAccount copyWith({
     int? accountId,
     String? accountNumber,
@@ -84,6 +128,10 @@ class BankAccount {
     double? minimumPayment,
     String? dueDate,
     double? interestRate,
+    int? loanId,
+    String? repaymentAccountNumber,
+    double? penaltyDue,
+    int? termMonths,
   }) {
     return BankAccount(
       accountId: accountId ?? this.accountId,
@@ -96,24 +144,36 @@ class BankAccount {
       minimumPayment: minimumPayment ?? this.minimumPayment,
       dueDate: dueDate ?? this.dueDate,
       interestRate: interestRate ?? this.interestRate,
+      loanId: loanId ?? this.loanId,
+      repaymentAccountNumber: repaymentAccountNumber ?? this.repaymentAccountNumber,
+      penaltyDue: penaltyDue ?? this.penaltyDue,
+      termMonths: termMonths ?? this.termMonths,
     );
+  }
+
+  static double? _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value == null) return null;
+    return double.tryParse(value.toString());
+  }
+
+  /// Formats an ISO date (2026-10-28) as "Oct 28, 2026"; returns null when absent.
+  static String? formatDueDate(dynamic value) {
+    final parsed = value == null ? null : DateTime.tryParse(value.toString());
+    if (parsed == null) return value?.toString();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[parsed.month - 1]} ${parsed.day}, ${parsed.year}';
   }
 
   factory BankAccount.fromJson(Map<String, dynamic> json) {
     final type = (json['accountType'] ?? json['type'] ?? 'SAVINGS_ACCOUNT').toString().toUpperCase();
-    final balance = (json['currentBalance'] is num)
-        ? (json['currentBalance'] as num).toDouble()
-        : double.tryParse(json['currentBalance']?.toString() ?? '0.0') ?? 0.0;
+    final balance = _toDouble(json['currentBalance']) ?? 0.0;
 
-    final debt = (json['outstandingDebt'] ?? json['outstandingPrincipal'] ?? json['debt']) != null
-        ? (json['outstandingDebt'] ?? json['outstandingPrincipal'] ?? json['debt'] as num).toDouble()
-        : (type.contains('LOAN') ? balance : null);
-
-    final minPay = (json['minimumPayment'] ?? json['monthlyInstallment'] ?? json['minPayment']) != null
-        ? (json['minimumPayment'] ?? json['monthlyInstallment'] ?? json['minPayment'] as num).toDouble()
-        : (type.contains('LOAN') ? (debt != null ? (debt * 0.05).clamp(500.0, 5000.0) : 1500.0) : null);
-
-    final due = json['dueDate']?.toString() ?? json['maturityDate']?.toString() ?? (type.contains('LOAN') ? 'Oct 28, 2026' : null);
+    // Only values the server sent; never invent a payment amount or due date.
+    final debt = _toDouble(json['outstandingDebt'] ?? json['outstandingPrincipal'] ?? json['debt'])
+        ?? (type.contains('LOAN') ? balance : null);
+    final minPay = _toDouble(json['minimumPayment'] ?? json['monthlyInstallment'] ?? json['minPayment']);
+    final due = formatDueDate(json['dueDate'] ?? json['maturityDate']);
 
     return BankAccount(
       accountId: json['accountId'] is int
@@ -127,9 +187,75 @@ class BankAccount {
       outstandingDebt: debt,
       minimumPayment: minPay,
       dueDate: due,
-      interestRate: (json['interestRate'] is num) ? (json['interestRate'] as num).toDouble() : null,
+      interestRate: _toDouble(json['interestRate']),
     );
   }
+
+  /// Maps a loan-service LoanSummary (GET /api/v1/loans) to a loan card.
+  factory BankAccount.fromLoanJson(Map<String, dynamic> json) {
+    final loanId = int.tryParse(json['loanId']?.toString() ?? '');
+    final nextDue = json['nextDue'] is Map ? json['nextDue'] as Map : null;
+    final outstanding = _toDouble(json['outstandingPrincipal']) ?? 0.0;
+    final penalty = _toDouble(json['penaltyDue']) ?? 0.0;
+    final nextAmount = _toDouble(nextDue?['amount']);
+
+    return BankAccount(
+      accountId: loanId ?? 0,
+      accountNumber: json['referenceNo']?.toString() ?? '',
+      accountType: 'LOAN_ACCOUNT',
+      currency: 'PHP',
+      currentBalance: outstanding,
+      status: json['status']?.toString() ?? 'ACTIVE',
+      outstandingDebt: outstanding,
+      // Same suggestion as the web app: next installment plus any late penalty.
+      minimumPayment: nextAmount == null ? (penalty > 0 ? penalty : null) : nextAmount + penalty,
+      dueDate: formatDueDate(nextDue?['dueDate']),
+      interestRate: _toDouble(json['annualRate']),
+      loanId: loanId,
+      repaymentAccountNumber: json['accountNo']?.toString(),
+      penaltyDue: penalty,
+      termMonths: int.tryParse(json['termMonths']?.toString() ?? ''),
+    );
+  }
+}
+
+/// One row of a loan-service repayment schedule.
+class LoanInstallment {
+  final int installmentNo;
+  final String dueDate;
+  final double totalDue;
+  final double amountPaid;
+  final String status; // PENDING | PAID | OVERDUE
+
+  LoanInstallment({
+    required this.installmentNo,
+    required this.dueDate,
+    required this.totalDue,
+    required this.amountPaid,
+    required this.status,
+  });
+
+  bool get isPaid => status == 'PAID';
+  bool get isOverdue => status == 'OVERDUE';
+  double get remaining => (totalDue - amountPaid).clamp(0.0, double.infinity);
+  String get statusLabel => isPaid ? 'Paid' : (isOverdue ? 'Overdue' : 'Due');
+
+  factory LoanInstallment.fromJson(Map<String, dynamic> json) => LoanInstallment(
+        installmentNo: int.tryParse(json['installmentNo']?.toString() ?? '') ?? 0,
+        dueDate: BankAccount.formatDueDate(json['dueDate']) ?? '',
+        totalDue: BankAccount._toDouble(json['totalDue']) ?? 0.0,
+        amountPaid: BankAccount._toDouble(json['amountPaid']) ?? 0.0,
+        status: json['status']?.toString().toUpperCase() ?? 'PENDING',
+      );
+}
+
+/// Thrown when the customer's accounts cannot be loaded. Screens show an error instead of placeholder balances.
+class ProfileUnavailableException implements Exception {
+  final String message;
+  ProfileUnavailableException([this.message = 'We couldn’t load your accounts. Please try again.']);
+
+  @override
+  String toString() => message;
 }
 
 class UserProfile {
@@ -216,153 +342,108 @@ class TransferReceipt {
 class AccountService {
   static final ApiClient _api = ApiClient();
 
-  /// Requirement 1 & 2: GET /api/v1/accounts (Protected)
-  /// Aggregates and returns the user's Checking, Savings, and Loan accounts.
+  /// GET /api/v1/accounts/me (Protected) — the caller's profile and deposit accounts, keyed by the JWT,
+  /// plus active loans from GET /api/v1/loans. Throws [ProfileUnavailableException] when the
+  /// accounts cannot be loaded; it never returns placeholder balances.
   static Future<UserProfile> fetchProfile({
     String? fallbackUsername,
     bool bypassCache = false,
   }) async {
     final savedUser = await SecureTokenStorage.getUsername() ?? fallbackUsername ?? '';
-    final savedName = await SecureTokenStorage.getFullName() ?? (savedUser.isNotEmpty ? savedUser : 'PayPink Client');
-    int? customerId = await SecureTokenStorage.getCustomerId();
+    final savedName = await SecureTokenStorage.getFullName() ?? savedUser;
 
     final cacheHeaders = bypassCache ? {'Cache-Control': 'no-cache, no-store'} : null;
     final queryParams = bypassCache ? {'_t': DateTime.now().millisecondsSinceEpoch.toString()} : null;
 
+    UserProfile? profile;
     try {
-      // 1. Ensure we have the customerId for this user
-      if (customerId == null) {
-        try {
-          final custsResp = await _api.get(
-            '/accounts/customers',
-            headers: cacheHeaders,
-            queryParams: queryParams,
-          );
-          if (custsResp.statusCode == 200) {
-            final List allCusts = jsonDecode(custsResp.body);
-            for (final c in allCusts) {
-              if (c is Map && c['username']?.toString().toLowerCase() == savedUser.toLowerCase()) {
-                customerId = int.tryParse(c['customerId']?.toString() ?? '');
-                if (customerId != null) {
-                  await SecureTokenStorage.saveUserSession(
-                    username: savedUser,
-                    fullName: c['fullName']?.toString() ?? savedName,
-                    customerId: customerId,
-                  );
-                }
-                break;
-              }
-            }
-          }
-        } catch (_) {}
-      }
-
-      // 2. Query customer-specific endpoint: GET /api/v1/accounts/customer/{customerId}
-      if (customerId != null) {
-        final custResp = await _api.get(
-          '/accounts/customer/$customerId',
-          headers: cacheHeaders,
-          queryParams: queryParams,
-        );
-        if (custResp.statusCode == 200) {
-          final data = jsonDecode(custResp.body);
-          if (data is Map<String, dynamic> && data['accounts'] is List) {
-            final List acctList = data['accounts'];
-            final accounts = acctList.map((a) => BankAccount.fromJson(a as Map<String, dynamic>)).toList();
-            final profile = UserProfile(
-              firstName: (data['firstName']?.toString() ?? savedName).split(' ').first,
-              fullName: data['fullName']?.toString() ?? savedName,
-              username: data['username']?.toString() ?? savedUser,
-              email: data['email']?.toString() ?? '$savedUser@paypink.ph',
-              accounts: accounts,
-            );
-            if (accounts.isNotEmpty) {
-              await SecureTokenStorage.cacheBalance(profile.totalBalance);
-            }
-            return profile;
+      // Same profile the web app reads; /auth/banking/me returns the identical shape.
+      for (final path in const ['/accounts/me', '/auth/banking/me']) {
+        final resp = await _api.get(path, headers: cacheHeaders, queryParams: queryParams);
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          if (data is Map<String, dynamic>) {
+            profile = UserProfile.fromJson(data);
+            break;
           }
         }
-      }
-
-      // 3. Fallback: GET /api/v1/accounts and filter STRICTLY by customerId
-      final response = await _api.get(
-        ApiConfig.accountsPath,
-        headers: cacheHeaders,
-        queryParams: queryParams,
-      );
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is List) {
-          final filtered = decoded.where((a) {
-            if (a is! Map<String, dynamic>) return false;
-            if (customerId != null) {
-              final aCustId = a['customerId'];
-              return aCustId != null && aCustId.toString() == customerId.toString();
-            }
-            return true;
-          }).toList();
-
-          final accounts = filtered.map((a) => BankAccount.fromJson(a as Map<String, dynamic>)).toList();
-          if (accounts.isNotEmpty) {
-            final userProfile = UserProfile(
-              firstName: savedName.split(' ').first,
-              fullName: savedName,
-              username: savedUser,
-              email: '$savedUser@paypink.ph',
-              accounts: accounts,
-            );
-            await SecureTokenStorage.cacheBalance(userProfile.totalBalance);
-            return userProfile;
-          }
-        }
-      }
-
-      // 4. Try /api/v1/auth/banking/me
-      final meResp = await _api.get('/auth/banking/me');
-      if (meResp.statusCode == 200) {
-        final data = jsonDecode(meResp.body);
-        return UserProfile.fromJson(data);
       }
     } catch (e) {
       debugPrint('[AccountService] fetchProfile error: $e');
     }
 
-    // Default structure matching the active database schema
-    return UserProfile(
-      firstName: savedName.split(' ').first,
-      fullName: savedName,
-      username: savedUser,
-      email: '$savedUser@paypink.ph',
+    if (profile == null) {
+      throw ProfileUnavailableException();
+    }
+
+    final fullName = profile.fullName.isNotEmpty ? profile.fullName : savedName;
+    profile = profile.copyWith(
+      fullName: fullName,
+      firstName: profile.firstName.isNotEmpty ? profile.firstName : fullName.split(' ').first,
+      username: profile.username.isNotEmpty ? profile.username : savedUser,
+      // Loans live in loan-service; drop any loan rows here so they are not shown twice.
       accounts: [
-        BankAccount(
-          accountId: 2,
-          accountNumber: '001381233467',
-          accountType: 'CHECKING_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 50000.00,
-          status: 'ACTIVE',
-        ),
-        BankAccount(
-          accountId: 1,
-          accountNumber: '001181233469',
-          accountType: 'SAVINGS_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 125450.00,
-          status: 'ACTIVE',
-        ),
-        BankAccount(
-          accountId: 10,
-          accountNumber: 'LN-20261005-001',
-          accountType: 'LOAN_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 25000.00,
-          status: 'ACTIVE',
-          outstandingDebt: 25000.00,
-          minimumPayment: 2150.00,
-          dueDate: 'Oct 28, 2026',
-        ),
+        ...profile.accounts.where((a) => !a.isLoan),
+        ...await fetchLoans(),
       ],
     );
+
+    if (profile.accounts.isNotEmpty) {
+      await SecureTokenStorage.cacheBalance(profile.totalBalance);
+    }
+    return profile;
+  }
+
+  /// GET /api/v1/loans — the customer's active and overdue loans. Returns an empty list on failure
+  /// so deposit accounts still load; a loan is never invented.
+  static Future<List<BankAccount>> fetchLoans() async {
+    try {
+      final resp = await _api.get('/loans');
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is List) {
+          return data
+              .whereType<Map<String, dynamic>>()
+              .where((l) => const ['ACTIVE', 'OVERDUE'].contains(l['status']?.toString().toUpperCase()))
+              .map(BankAccount.fromLoanJson)
+              .where((l) => l.loanId != null)
+              .toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('[AccountService] fetchLoans error: $e');
+    }
+    return [];
+  }
+
+  /// GET /api/v1/loans/{loanId}/schedule. Returns null if the schedule cannot be loaded.
+  static Future<List<LoanInstallment>?> fetchLoanSchedule(BankAccount loan) async {
+    if (loan.loanId == null) return null;
+    try {
+      final resp = await _api.get('/loans/${loan.loanId}/schedule');
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is Map<String, dynamic> && data['installments'] is List) {
+          return (data['installments'] as List)
+              .whereType<Map<String, dynamic>>()
+              .map(LoanInstallment.fromJson)
+              .toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('[AccountService] fetchLoanSchedule error: $e');
+    }
+    return null;
+  }
+
+  /// Total still owed on a loan: unpaid installments (principal + interest) plus penalties.
+  /// This is the most loan-service accepts in one repayment. Returns null if the schedule
+  /// cannot be loaded.
+  static Future<double?> fetchLoanAmountOwed(BankAccount loan) async {
+    final rows = await fetchLoanSchedule(loan);
+    if (rows == null) return null;
+    final owed = rows.where((r) => !r.isPaid).fold(loan.penaltyDue ?? 0.0, (sum, r) => sum + r.remaining);
+    return double.parse(owed.toStringAsFixed(2));
   }
 
   /// Requirement 1 & 3: POST /api/v1/transfers (Protected)
@@ -489,119 +570,62 @@ class AccountService {
     }
   }
 
-  /// Requirement 1 & 3: POST /api/v1/loans/pay (Protected)
-  /// Deducts funds from Checking or Savings and reduces the outstanding Loan balance.
+  /// POST /api/v1/loans/{loanId}/repayments (Protected), same call as the web app.
+  /// loan-service debits the loan's linked deposit account ([BankAccount.repaymentAccountNumber]);
+  /// [sourceAccount] is that account, used only for the balance check and receipt.
   static Future<TransferReceipt> payLoan({
     required BankAccount sourceAccount,
     required BankAccount loanAccount,
     required double amount,
   }) async {
-    if (!sourceAccount.canBeTransferSource) {
-      return TransferReceipt(
-        success: false,
-        referenceId: '',
-        message: 'You must select a Checking or Savings account to pay your loan.',
-        amount: amount,
-        sourceAccount: sourceAccount.accountNumber,
-        destinationAccount: loanAccount.accountNumber,
-        timestamp: DateTime.now().toIso8601String(),
-      );
-    }
+    TransferReceipt failure(String message) => TransferReceipt(
+          success: false,
+          referenceId: '',
+          message: message,
+          amount: amount,
+          sourceAccount: sourceAccount.accountNumber,
+          destinationAccount: loanAccount.accountNumber,
+          timestamp: DateTime.now().toIso8601String(),
+        );
 
+    if (loanAccount.loanId == null) {
+      return failure('We couldn’t find this loan. Refresh your accounts and try again.');
+    }
     if (amount <= 0) {
-      return TransferReceipt(
-        success: false,
-        referenceId: '',
-        message: 'Payment amount must be greater than zero.',
-        amount: amount,
-        sourceAccount: sourceAccount.accountNumber,
-        destinationAccount: loanAccount.accountNumber,
-        timestamp: DateTime.now().toIso8601String(),
-      );
+      return failure('Payment amount must be greater than zero.');
     }
-
     if (amount > sourceAccount.currentBalance) {
-      return TransferReceipt(
-        success: false,
-        referenceId: '',
-        message: 'Insufficient balance in ${sourceAccount.displayName}. Available: ₱${sourceAccount.currentBalance.toStringAsFixed(2)}.',
-        amount: amount,
-        sourceAccount: sourceAccount.accountNumber,
-        destinationAccount: loanAccount.accountNumber,
-        timestamp: DateTime.now().toIso8601String(),
-      );
+      return failure('Insufficient balance in ${sourceAccount.displayName}. Available: ₱${sourceAccount.currentBalance.toStringAsFixed(2)}.');
     }
 
     final idempotencyKey = ApiClient.generateIdempotencyKey();
 
     try {
       final response = await _api.post(
-        ApiConfig.loanPayPath,
+        '/loans/${loanAccount.loanId}/repayments',
         idempotencyKey: idempotencyKey,
-        body: {
-          'sourceAccountId': sourceAccount.accountId,
-          'loanAccountId': loanAccount.accountId,
-          'amount': amount,
-          'idempotencyKey': idempotencyKey,
-        },
+        body: {'amount': double.parse(amount.toStringAsFixed(2))},
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        final ref = data['referenceNo'] ?? data['referenceId'] ?? 'LRP-${DateTime.now().millisecondsSinceEpoch}';
         return TransferReceipt(
           success: true,
-          referenceId: ref.toString(),
+          referenceId: (data['referenceNo'] ?? '').toString(),
           message: 'Loan payment processed successfully.',
           amount: amount,
           sourceAccount: sourceAccount.accountNumber,
           destinationAccount: loanAccount.accountNumber,
           timestamp: DateTime.now().toIso8601String(),
         );
-      } else {
-        // Fallback to loan-service /loans/{loanId}/repayments
-        final repayResp = await _api.post(
-          '/loans/${loanAccount.accountId}/repayments',
-          idempotencyKey: idempotencyKey,
-          body: {'amount': amount},
-        );
-
-        if (repayResp.statusCode == 200 || repayResp.statusCode == 201) {
-          final data = jsonDecode(repayResp.body);
-          final ref = data['referenceNo'] ?? 'LRP-${DateTime.now().millisecondsSinceEpoch}';
-          return TransferReceipt(
-            success: true,
-            referenceId: ref.toString(),
-            message: 'Loan payment processed successfully.',
-            amount: amount,
-            sourceAccount: sourceAccount.accountNumber,
-            destinationAccount: loanAccount.accountNumber,
-            timestamp: DateTime.now().toIso8601String(),
-          );
-        }
-
-        final err = _extractErrorMessage(response.body);
-        return TransferReceipt(
-          success: false,
-          referenceId: '',
-          message: err.isNotEmpty ? err : 'Loan payment failed (HTTP ${response.statusCode}).',
-          amount: amount,
-          sourceAccount: sourceAccount.accountNumber,
-          destinationAccount: loanAccount.accountNumber,
-          timestamp: DateTime.now().toIso8601String(),
-        );
       }
+
+      final err = _extractErrorMessage(response.body);
+      return failure(err.isNotEmpty ? err : 'Loan payment failed (HTTP ${response.statusCode}). Please try again.');
     } catch (e) {
-      final ref = 'LRP-${DateTime.now().millisecondsSinceEpoch}';
-      return TransferReceipt(
-        success: true,
-        referenceId: ref,
-        message: 'Loan payment recorded and queued for processing.',
-        amount: amount,
-        sourceAccount: sourceAccount.accountNumber,
-        destinationAccount: loanAccount.accountNumber,
-        timestamp: DateTime.now().toIso8601String(),
-      );
+      debugPrint('[AccountService] payLoan error: $e');
+      // No offline "success": we cannot tell whether the bank received the payment.
+      return failure('We couldn’t confirm your loan payment. Check your loan balance before trying again.');
     }
   }
 
@@ -753,7 +777,8 @@ class AccountService {
   static String _extractErrorMessage(String responseBody) {
     try {
       final data = jsonDecode(responseBody);
-      return data['message'] ?? data['error'] ?? '';
+      // loan-service returns RFC 7807 problem details, whose message is in "detail".
+      return (data['message'] ?? data['detail'] ?? data['error'] ?? '').toString();
     } catch (_) {
       return '';
     }
