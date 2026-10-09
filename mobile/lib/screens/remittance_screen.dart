@@ -11,6 +11,8 @@ import '../services/api_config.dart';
 import '../services/secure_token_storage.dart';
 import '../services/remittance_service.dart';
 import '../services/account_service.dart';
+import '../widgets/loading_overlay_wrapper.dart';
+
 
 class RemittanceScreen extends StatefulWidget {
   final Function(double amount, String refId, String source, String recipient) onTransferSuccess;
@@ -49,7 +51,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   bool _isLoadingFavorites = false;
 
   // Saga state variables
+  bool _isSubmitting = false;
   bool _isSagaPending = false;
+
   String? _pendingReferenceNo;
   String? _sagaErrorMessage;
   Timer? _statusPollTimer;
@@ -1574,54 +1578,61 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   /// Submits the transfer. The caller has already verified the MPIN once on the
   /// confirmation sheet, so this must not prompt again.
   void _executeTransfer(double amt, String fromAcc, String toAcc) async {
-    final cleanDest = _selectedModeIndex == 0
-        ? _ownTargetAccount
-        : _recipientController.text.replaceAll(' ', '');
+    setState(() => _isSubmitting = true);
+    try {
+      final cleanDest = _selectedModeIndex == 0
+          ? _ownTargetAccount
+          : _recipientController.text.replaceAll(' ', '');
 
-    // Bank transfers go over InstaPay/PESONet, exactly like the web app.
-    final source = _getAccount(_sourceAccount);
-    final result = _selectedModeIndex == 2 && source != null
-        ? await RemittanceService.submitExternalTransfer(
-            sourceAccountId: source.accountId,
-            destinationAccountNumber: cleanDest,
-            amount: amt,
-            rail: _transferRail,
-          )
-        : await RemittanceService.submitRemittance(
-            sourceAccountId: _sourceAccount,
-            destinationAccountNumber: cleanDest,
-            amount: amt,
-          );
+      // Bank transfers go over InstaPay/PESONet, exactly like the web app.
+      final source = _getAccount(_sourceAccount);
+      final result = _selectedModeIndex == 2 && source != null
+          ? await RemittanceService.submitExternalTransfer(
+              sourceAccountId: source.accountId,
+              destinationAccountNumber: cleanDest,
+              amount: amt,
+              rail: _transferRail,
+            )
+          : await RemittanceService.submitRemittance(
+              sourceAccountId: _sourceAccount,
+              destinationAccountNumber: cleanDest,
+              amount: amt,
+            );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (result.success && result.status == 'PENDING') {
-      // PESONet settles in the next clearing batch; the money is already debited.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: PayPinkTheme.wineDark, content: Text(result.message)),
-      );
-      _showScreenshotReceiptDialog(amt, result.referenceId ?? '', fromAcc, toAcc);
-    } else if (result.success && result.status == 'PROCESSING') {
-      // 202: core banking is still posting. Poll until it settles; there is no cancel window.
-      final ref = result.referenceId ?? '';
-      setState(() {
-        _pendingReferenceNo = ref;
-        _isSagaPending = true;
-        _sagaErrorMessage = null;
-      });
-      _startStatusPolling(ref, amt, fromAcc, toAcc);
-    } else if (result.success) {
-      final cleanRef = result.referenceId != null && result.referenceId!.isNotEmpty
-          ? result.referenceId!
-          : 'TXN-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _showScreenshotReceiptDialog(amt, cleanRef, fromAcc, toAcc);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: PayPinkTheme.red,
-          content: Text(result.message),
-        ),
-      );
+      if (result.success && result.status == 'PENDING') {
+        // PESONet settles in the next clearing batch; the money is already debited.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: PayPinkTheme.wineDark, content: Text(result.message)),
+        );
+        _showScreenshotReceiptDialog(amt, result.referenceId ?? '', fromAcc, toAcc);
+      } else if (result.success && (result.status == 'PROCESSING' || result.status == 'RESERVED')) {
+        // 202: core banking is still posting. Poll until it settles; there is no cancel window.
+        final ref = result.referenceId ?? '';
+        setState(() {
+          _pendingReferenceNo = ref;
+          _isSagaPending = true;
+          _sagaErrorMessage = null;
+        });
+        _startStatusPolling(ref, amt, fromAcc, toAcc);
+      } else if (result.success) {
+        final cleanRef = result.referenceId != null && result.referenceId!.isNotEmpty
+            ? result.referenceId!
+            : 'TXN-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+        _showScreenshotReceiptDialog(amt, cleanRef, fromAcc, toAcc);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: PayPinkTheme.red,
+            content: Text(result.message),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -2058,10 +2069,15 @@ Thank you for banking with PayPink!
       );
     }
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      child: Column(
+    return LoadingOverlayWrapper(
+      isLoading: _isSubmitting,
+      loadingText: 'Processing Transfer...',
+      subText: 'Running real-time risk screening & securing core banking hold.',
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        child: Column(
+
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -2617,8 +2633,10 @@ Thank you for banking with PayPink!
           const SizedBox(height: 90),
         ],
       ),
+    ),
     );
   }
+
 
   Widget _buildAmtChip(String label, double amount, {bool isDark = false}) {
     return GestureDetector(

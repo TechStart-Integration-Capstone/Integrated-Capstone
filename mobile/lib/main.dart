@@ -24,6 +24,8 @@ import 'package:paypink_mobile/src/features/auth/presentation/bloc/auth_bloc.dar
 import 'package:paypink_mobile/src/features/accounts/presentation/bloc/accounts_bloc.dart';
 import 'package:paypink_mobile/src/features/remittance/presentation/bloc/remittance_bloc.dart';
 import 'package:paypink_mobile/src/features/transactions/presentation/bloc/transactions_bloc.dart';
+import 'package:paypink_mobile/src/core/security/session_manager.dart';
+import 'package:paypink_mobile/src/core/widgets/session_lock_wrapper.dart';
 
 
 class DevHttpOverrides extends HttpOverrides {
@@ -184,7 +186,19 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
       theme: PayPinkTheme.lightTheme,
       darkTheme: PayPinkTheme.darkTheme,
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      builder: (context, child) {
+        if (di.sl.isRegistered<SessionManager>()) {
+          return SessionLockWrapper(
+            sessionManager: di.sl<SessionManager>(),
+            currentUsername: _currentUser,
+            child: child ?? const SizedBox.shrink(),
+          );
+        }
+        return child ?? const SizedBox.shrink();
+      },
+
       home: _isLoadingAuth
+
           ? Container(
               decoration: BoxDecoration(
                 gradient: _isDarkMode ? PayPinkTheme.darkBgGradient : PayPinkTheme.lightBgGradient,

@@ -179,6 +179,10 @@ jobs:
             echo "Verifying Phase 10 RBAC roles in azure-sql-master..."
             cat "scripts/migrate_phase10_rbac_roles.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
           fi
+          if [ -f "scripts/migrate_mpin.sql" ]; then
+            echo "Verifying MPIN persistence migration in azure-sql-master..."
+            cat "scripts/migrate_mpin.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
+          fi
 
       - name: Start application microservices
         run: |
@@ -342,7 +346,7 @@ jobs:
           if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -Q "SELECT 1" &>/dev/null; then
             PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n')
           fi
-          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql; do
+          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to azure-sql-master..."
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true

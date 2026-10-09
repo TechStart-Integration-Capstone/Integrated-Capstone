@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/paypink_theme.dart';
 import '../services/account_service.dart';
+import 'loading_overlay_wrapper.dart';
+
 
 /// Dedicated Loan Payment Bottom Sheet
 class LoanPaymentSheet extends StatefulWidget {
@@ -178,8 +180,13 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
     final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+    return LoadingOverlayWrapper(
+      isLoading: _isProcessing,
+      loadingText: 'Processing Loan Payment...',
+      subText: 'Updating loan balance & ledger records with core banking.',
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+
       child: Container(
         padding: const EdgeInsets.only(top: 12, left: 22, right: 22, bottom: 28),
         decoration: BoxDecoration(
@@ -480,8 +487,12 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+
+
 
   Widget _buildOptionChip(int index, String label, bool isDark) {
     final isSelected = _selectedOption == index;

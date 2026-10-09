@@ -105,121 +105,173 @@ class PayPinkBottomSheets {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _SheetContainer(
-        title: 'Personal Loan Details',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: PayPinkTheme.indigoBg,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: PayPinkTheme.indigo.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Outstanding Principal',
-                        style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        formatPeso(loan.outstandingDebt ?? loan.currentBalance),
-                        style: PayPinkTheme.display(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: PayPinkTheme.indigo,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final cardBorder = isDark ? const Color(0xFF422131) : const Color(0xFFF2D6DE);
+        final principalColor = isDark ? const Color(0xFFF7F1F3) : PayPinkTheme.wine;
+        final dueColor = isDark ? const Color(0xFFFB7185) : PayPinkTheme.wine;
+        final scheduleBorder = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+        final scheduleTextColor = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+        final scheduleBg = isDark ? PayPinkTheme.darkCard : Colors.transparent;
+
+        return _SheetContainer(
+          title: 'Personal Loan Details',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? const [Color(0xFF2E1622), Color(0xFF221118), Color(0xFF190C12)]
+                        : const [Color(0xFFFDF2F5), Color(0xFFFAF0F3), Color(0xFFF7EBF0)],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: cardBorder, width: 1.0),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.25)
+                          : const Color(0xFF651C3E).withValues(alpha: 0.05),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Outstanding Principal',
+                          style: PayPinkTheme.body(
+                            fontSize: 11,
+                            color: isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          formatPeso(loan.outstandingDebt ?? loan.currentBalance),
+                          style: PayPinkTheme.display(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: principalColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF2A1620) : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark
+                              ? (overdue ? const Color(0xFF6B2B2F) : const Color(0xFF264C35))
+                              : (overdue ? const Color(0xFFFCDAD7) : const Color(0xFFD1F2D9)),
+                          width: 1,
                         ),
                       ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      overdue ? '• Overdue' : '• Current',
-                      style: PayPinkTheme.body(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: overdue ? PayPinkTheme.red : PayPinkTheme.green,
+                      child: Text(
+                        overdue ? '• Overdue' : '• Current',
+                        style: PayPinkTheme.body(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: overdue
+                              ? (isDark ? const Color(0xFFF87171) : PayPinkTheme.red)
+                              : (isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _DetailRow(label: 'Loan Reference', value: loan.accountNumber, isMono: true),
-            if (loan.minimumPayment != null)
-              _DetailRow(label: 'Next Payment', value: formatPeso(loan.minimumPayment!), isBold: true),
-            if (loan.dueDate != null)
-              _DetailRow(label: 'Next Due Date', value: loan.dueDate!, isBold: true, valueColor: PayPinkTheme.wine),
-            if ((loan.penaltyDue ?? 0) > 0)
-              _DetailRow(label: 'Penalty Due', value: formatPeso(loan.penaltyDue!), valueColor: PayPinkTheme.red),
-            if (loan.interestRate != null)
-              _DetailRow(label: 'Annual Interest Rate', value: '${loan.interestRate!.toStringAsFixed(2)}% p.a.'),
-            if (loan.termMonths != null)
-              _DetailRow(label: 'Term', value: '${loan.termMonths} months'),
-            if (loan.paymentsRemaining != null && loan.paymentsTotal != null)
-              _DetailRow(label: 'Payments Left', value: '${loan.paymentsRemaining} of ${loan.paymentsTotal}', isBold: true),
-            if (loan.payoffAmount != null)
-              _DetailRow(label: 'Total to Pay Off', value: formatPeso(loan.payoffAmount!)),
-            if (loan.repaymentAccountNumber != null)
-              _DetailRow(label: 'Auto-debit From', value: loan.repaymentAccountNumber!, isMono: true),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      showLoanSchedule(context, loan: loan);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: PayPinkTheme.line),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text(
-                      'Schedule',
-                      style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: PayPinkTheme.ink),
-                    ),
-                  ),
+                  ],
                 ),
-                if (onPay != null) ...[
-                  const SizedBox(width: 10),
+              ),
+              const SizedBox(height: 16),
+              _DetailRow(label: 'Loan Reference', value: loan.accountNumber, isMono: true),
+              if (loan.minimumPayment != null)
+                _DetailRow(label: 'Next Payment', value: formatPeso(loan.minimumPayment!), isBold: true),
+              if (loan.dueDate != null)
+                _DetailRow(label: 'Next Due Date', value: loan.dueDate!, isBold: true, valueColor: dueColor),
+              if ((loan.penaltyDue ?? 0) > 0)
+                _DetailRow(
+                  label: 'Penalty Due',
+                  value: formatPeso(loan.penaltyDue!),
+                  valueColor: isDark ? const Color(0xFFF87171) : PayPinkTheme.red,
+                ),
+              if (loan.interestRate != null)
+                _DetailRow(label: 'Annual Interest Rate', value: '${loan.interestRate!.toStringAsFixed(2)}% p.a.'),
+              if (loan.termMonths != null)
+                _DetailRow(label: 'Term', value: '${loan.termMonths} months'),
+              if (loan.paymentsRemaining != null && loan.paymentsTotal != null)
+                _DetailRow(label: 'Payments Left', value: '${loan.paymentsRemaining} of ${loan.paymentsTotal}', isBold: true),
+              if (loan.payoffAmount != null)
+                _DetailRow(label: 'Total to Pay Off', value: formatPeso(loan.payoffAmount!)),
+              if (loan.repaymentAccountNumber != null)
+                _DetailRow(label: 'Auto-debit From', value: loan.repaymentAccountNumber!, isMono: true),
+              const SizedBox(height: 20),
+              Row(
+                children: [
                   Expanded(
-                    child: ElevatedButton(
+                    child: OutlinedButton(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        onPay();
+                        showLoanSchedule(context, loan: loan);
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: PayPinkTheme.wine,
-                        foregroundColor: Colors.white,
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: scheduleBorder),
+                        backgroundColor: scheduleBg,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: Text(
-                        'Pay Loan',
-                        style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                        'Schedule',
+                        style: PayPinkTheme.body(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: scheduleTextColor,
+                        ),
                       ),
                     ),
                   ),
+                  if (onPay != null) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          onPay();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: PayPinkTheme.wine,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          'Pay Loan',
+                          style: PayPinkTheme.body(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ],
-        ),
-      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -229,44 +281,51 @@ class PayPinkBottomSheets {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _SheetContainer(
-        title: 'Repayment Schedule',
-        child: FutureBuilder<List<LoanInstallment>?>(
-          future: AccountService.fetchLoanSchedule(loan),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine)),
-              );
-            }
-            final rows = snapshot.data;
-            if (rows == null) {
-              return Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'We couldn’t load your schedule. Please try again.',
-                  style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.red),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return _SheetContainer(
+          title: 'Repayment Schedule',
+          child: FutureBuilder<List<LoanInstallment>?>(
+            future: AccountService.fetchLoanSchedule(loan),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine)),
+                );
+              }
+              final rows = snapshot.data;
+              if (rows == null) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'We couldn’t load your schedule. Please try again.',
+                    style: PayPinkTheme.body(fontSize: 12, color: isDark ? const Color(0xFFF87171) : PayPinkTheme.red),
+                  ),
+                );
+              }
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.55),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: rows
+                      .map((r) => _DetailRow(
+                            label: '#${r.installmentNo} · ${r.dueDate}',
+                            value: '${formatPeso(r.totalDue)} · ${r.statusLabel}',
+                            valueColor: r.isPaid
+                                ? (isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green)
+                                : (r.isOverdue
+                                    ? (isDark ? const Color(0xFFF87171) : PayPinkTheme.red)
+                                    : (isDark ? const Color(0xFFFB7185) : PayPinkTheme.wine)),
+                            isSmall: true,
+                          ))
+                      .toList(),
                 ),
               );
-            }
-            return ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.55),
-              child: ListView(
-                shrinkWrap: true,
-                children: rows
-                    .map((r) => _DetailRow(
-                          label: '#${r.installmentNo} · ${r.dueDate}',
-                          value: '${formatPeso(r.totalDue)} · ${r.statusLabel}',
-                          valueColor: r.isPaid ? PayPinkTheme.green : (r.isOverdue ? PayPinkTheme.red : null),
-                          isSmall: true,
-                        ))
-                    .toList(),
-              ),
-            );
-          },
-        ),
-      ),
+            },
+          ),
+        );
+      },
     );
   }
 

@@ -56,4 +56,10 @@ void main() {
     expect(await SecureTokenStorage.hasPinFor('LViernes'), isTrue);
     expect(await SecureTokenStorage.hasPinFor('arosales'), isFalse);
   });
+
+  test('MPIN hash parity between mobile client and backend DB SHA-256 format', () async {
+    await SecureTokenStorage.savePin('123456', owner: 'lviernes');
+    expect(await SecureTokenStorage.verifyPin('123456'), isTrue);
+    expect(await SecureTokenStorage.verifyPin('999999'), isFalse);
+  });
 }

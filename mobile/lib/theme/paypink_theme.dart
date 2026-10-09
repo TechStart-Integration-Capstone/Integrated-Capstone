@@ -225,11 +225,23 @@ class PayPinkTheme {
     );
   }
 
-  // The web's `.balance-card`: flat wine, no heavy drop shadow.
+  // The balance card: luxury wine gradient with subtle depth and soft lighting (not flat, not overly 3D).
   static BoxDecoration wineHeroDecoration({double radius = radiusLg}) {
     return BoxDecoration(
-      color: wine,
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF7A2048), Color(0xFF651C3E), Color(0xFF420E26)],
+        stops: [0.0, 0.48, 1.0],
+      ),
       borderRadius: BorderRadius.circular(radius),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x33651C3E),
+          blurRadius: 18,
+          offset: Offset(0, 6),
+        ),
+      ],
     );
   }
 }
