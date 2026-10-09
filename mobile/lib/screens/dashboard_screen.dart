@@ -186,7 +186,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 4),
           Text(
             "Your everyday, at a glance. It's good to have you here.",
-            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+            style: PayPinkTheme.body(fontSize: 13, color: textMuted),
           ),
           const SizedBox(height: 12),
 
@@ -202,7 +202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             width: double.infinity,
             decoration: PayPinkTheme.wineHeroDecoration(),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(PayPinkTheme.radiusLg),
               child: Stack(
                 children: [
                   Positioned.fill(
@@ -279,7 +279,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       : '\u20B1${_formatCurrency(effectiveBalance)}',
                                   style: PayPinkTheme.display(
                                     fontSize: 38,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.white,
                                     letterSpacing: -1.2,
                                   ),
@@ -289,7 +289,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   'Across $accountCount account${accountCount == 1 ? '' : 's'}. All yours.',
                                   style: PayPinkTheme.body(
                                     color: const Color(0xFFE2B4CB),
-                                    fontSize: 11.5,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
@@ -322,7 +322,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     'View all',
                                     style: PayPinkTheme.body(
                                       color: Colors.white,
-                                      fontSize: 11.5,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -395,7 +395,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Text(
                   'View all \u2192',
                   style: PayPinkTheme.body(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                   ),
@@ -479,7 +479,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       title: Text(
                         tx.title,
-                        style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk).copyWith(
+                        style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700, color: textInk).copyWith(
                           decoration: tx.status == 'REVERSED' ? TextDecoration.lineThrough : null,
                         ),
                       ),
@@ -495,7 +495,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                               tx.isCredit ? 'From: ${tx.counterparty}' : 'Recipient: ${tx.counterparty}',
                               style: PayPinkTheme.body(
-                                fontSize: 9.5,
+                                fontSize: 10,
                                 color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -523,7 +523,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ? '• Refunded'
                                 : (tx.status == 'FAILED_DLQ' ? '• Processing' : 'Completed'),
                             style: PayPinkTheme.body(
-                              fontSize: 9.5,
+                              fontSize: 10,
                               color: tx.status == 'REVERSED' ? PayPinkTheme.amber : (tx.status == 'FAILED_DLQ' ? PayPinkTheme.wine : textMuted),
                               fontWeight: tx.status == 'REVERSED' ? FontWeight.w700 : FontWeight.normal,
                             ),
@@ -564,7 +564,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text(
                       'This month, so far',
                       style: PayPinkTheme.display(
-                        fontSize: 13.5,
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: textInk,
                       ),
@@ -613,7 +613,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Text(
                                 'Money in',
                                 style: PayPinkTheme.body(
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   color: textMuted,
                                 ),
                               ),
@@ -655,7 +655,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Text(
                                 'Money out',
                                 style: PayPinkTheme.body(
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   color: textMuted,
                                 ),
                               ),
@@ -690,7 +690,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Spending Patterns & Customer 360 Insights Card
+          // Spending pattern card
           GlassCard(
             onTap: () => PayPinkBottomSheets.showHardwareVault(
               context,
@@ -709,9 +709,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              'Spending Patterns',
+                              'Spending pattern',
                               style: PayPinkTheme.display(
-                                fontSize: 13.5,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: textInk,
                               ),
@@ -719,22 +719,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: PayPinkTheme.greenBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Customer 360',
-                        style: PayPinkTheme.body(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: PayPinkTheme.green,
-                        ),
                       ),
                     ),
                   ],
@@ -775,7 +759,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Text(
                       '${widget.accounts != null && widget.accounts!.isNotEmpty ? widget.accounts!.length : 2} linked',
                       style: PayPinkTheme.body(
-                        fontSize: 9.5,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                       ),
@@ -788,7 +772,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Text(
                   'Manage \u2192',
                   style: PayPinkTheme.body(
-                    fontSize: 11.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                   ),

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -732,7 +731,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: Scaffold(
-            extendBody: true,
+            extendBody: false,
             backgroundColor: Colors.transparent,
             body: SafeArea(
               bottom: false,
@@ -829,7 +828,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                                 child: Text(
                                   _avatarInitials,
                                   style: PayPinkTheme.display(
-                                    fontSize: 10.5,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w800,
                                     color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                   ),
@@ -850,7 +849,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               ),
             ),
 
-            // Dynamic Glassmorphism Floating Bottom Navigation Bar
+            // Bottom tab bar
             bottomNavigationBar: _buildDynamicBottomBar(),
           ),
         ),
@@ -858,46 +857,26 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     );
   }
 
+  // Matches the web's phone tab bar (bank.css @media max-width:680px .sidebar):
+  // flat surface, top hairline, icon over an always-visible label, tinted active tab.
   Widget _buildDynamicBottomBar() {
     final isDark = widget.isDarkMode;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDark ? PayPinkTheme.darkGlassCardBg : Colors.white.withValues(alpha: 0.84),
-              borderRadius: BorderRadius.circular(32),
-              border: Border.all(
-                color: isDark ? PayPinkTheme.darkGlassBorder : Colors.white.withValues(alpha: 0.95),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: (isDark ? Colors.black : PayPinkTheme.wine).withValues(alpha: isDark ? 0.35 : 0.12),
-                  blurRadius: 28,
-                  offset: const Offset(0, 10),
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildDynamicNavItem(0, Icons.grid_view_rounded, 'Overview'),
-                _buildDynamicNavItem(1, Icons.account_balance_wallet_rounded, 'Accounts'),
-                _buildDynamicNavItem(2, Icons.swap_horiz_rounded, 'Transfer'),
-                _buildDynamicNavItem(3, Icons.receipt_long_rounded, 'Activity'),
-              ],
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? PayPinkTheme.darkPaper : Colors.white,
+        border: Border(top: BorderSide(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          child: Row(
+            children: [
+              _buildDynamicNavItem(0, Icons.home_outlined, 'Overview'),
+              _buildDynamicNavItem(1, Icons.account_balance_wallet_outlined, 'Accounts'),
+              _buildDynamicNavItem(2, Icons.swap_horiz_rounded, 'Transfer'),
+              _buildDynamicNavItem(3, Icons.receipt_long_outlined, 'Activity'),
+            ],
           ),
         ),
       ),
@@ -907,61 +886,46 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   Widget _buildDynamicNavItem(int index, IconData icon, String label) {
     final isSelected = _currentIndex == index;
     final isDark = widget.isDarkMode;
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        setState(() => _currentIndex = index);
-      },
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-        padding: EdgeInsets.symmetric(
-          horizontal: isSelected ? 15 : 10,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (isDark ? PayPinkTheme.wineLight : PayPinkTheme.wine)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: PayPinkTheme.wine.withValues(alpha: isDark ? 0.45 : 0.28),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 20,
+    final activeColor = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+    final idleColor = isDark ? PayPinkTheme.darkMuted : const Color(0xFF867B84);
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: label,
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => _currentIndex = index);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(
               color: isSelected
-                  ? Colors.white
-                  : (isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted),
+                  ? (isDark ? PayPinkTheme.wine.withValues(alpha: 0.35) : const Color(0xFFF6EAF0))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
             ),
-            AnimatedCrossFade(
-              firstChild: Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: Text(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 21, color: isSelected ? activeColor : idleColor),
+                const SizedBox(height: 3),
+                Text(
                   label,
                   style: PayPinkTheme.body(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? activeColor : idleColor,
                   ),
                 ),
-              ),
-              secondChild: const SizedBox.shrink(),
-              crossFadeState: isSelected ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              duration: const Duration(milliseconds: 200),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

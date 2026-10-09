@@ -108,13 +108,13 @@ class _PayPinkSpendingChartState extends State<PayPinkSpendingChart> {
             const SizedBox(height: 8),
             Text(
               'No Outflow Spending Yet',
-              style: PayPinkTheme.display(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk),
+              style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
             ),
             const SizedBox(height: 4),
             Text(
               'Your outgoing funds transfers and payments will automatically appear here.',
               textAlign: TextAlign.center,
-              style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
+              style: PayPinkTheme.body(fontSize: 11, color: textMuted),
             ),
           ],
         ),
@@ -172,7 +172,7 @@ class _PayPinkSpendingChartState extends State<PayPinkSpendingChart> {
                         ? _categories[_touchedIndex].label
                         : 'Total Outflow',
                     style: PayPinkTheme.body(
-                      fontSize: 9.5,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: textMuted,
                     ),

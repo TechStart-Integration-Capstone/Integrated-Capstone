@@ -196,7 +196,7 @@ class PayPinkCardFace extends StatelessWidget {
                               child: Text(
                                 card.cardHolder.toUpperCase(),
                                 style: PayPinkTheme.display(
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white.withValues(alpha: 0.85),
                                   letterSpacing: 1.2,
@@ -225,7 +225,7 @@ class PayPinkCardFace extends StatelessWidget {
                                 Text(
                                   'EXP ${card.expiry}',
                                   style: PayPinkTheme.mono(
-                                    fontSize: 9,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.white.withValues(alpha: 0.60),
                                   ),
@@ -476,8 +476,8 @@ class _FrozenBadge extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             'FROZEN',
-            style: PayPinkTheme.mono(
-              fontSize: 8.5,
+            style: PayPinkTheme.eyebrow(
+              fontSize: 10,
               fontWeight: FontWeight.w800,
               color: Colors.white,
             ),
@@ -816,8 +816,8 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
                             const SizedBox(width: 4),
                             Text(
                               isFrozen ? 'LOCKED' : 'ACTIVE',
-                              style: PayPinkTheme.mono(
-                                fontSize: 8.5,
+                              style: PayPinkTheme.eyebrow(
+                                fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 color: isFrozen ? const Color(0xFF0284C7) : PayPinkTheme.green,
                               ),

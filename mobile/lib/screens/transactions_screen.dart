@@ -230,7 +230,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           const SizedBox(height: 4),
           Text(
             'Your latest 200 transactions, with a clearer view of where your money goes.',
-            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+            style: PayPinkTheme.body(fontSize: 13, color: textMuted),
           ),
           const SizedBox(height: 18),
 
@@ -361,7 +361,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         children: [
                           Text(
                             '${tx.account} · ${tx.date}',
-                            style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
+                            style: PayPinkTheme.body(fontSize: 11, color: textMuted),
                           ),
                           if (tx.counterparty != null && tx.counterparty!.isNotEmpty) ...[
                             const SizedBox(height: 1),
@@ -383,7 +383,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           Text(
                             '${tx.isCredit ? '+' : '-'}₱${tx.amount.toStringAsFixed(2)}',
                             style: PayPinkTheme.display(
-                              fontSize: 13.5,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: isReversed
                                   ? textMuted
@@ -398,7 +398,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 ? '• Refunded'
                                 : (isDlq ? '• Processing' : 'Completed'),
                             style: PayPinkTheme.body(
-                              fontSize: 9.5,
+                              fontSize: 10,
                               color: isReversed
                                   ? PayPinkTheme.amber
                                   : (isDlq ? PayPinkTheme.wine : textMuted),

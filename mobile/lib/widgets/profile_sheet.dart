@@ -355,8 +355,8 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         const SizedBox(width: 4),
                         Text(
                           'VERIFIED CUSTOMER · TIER 1',
-                          style: PayPinkTheme.mono(
-                            fontSize: 9,
+                          style: PayPinkTheme.eyebrow(
+                            fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: PayPinkTheme.green,
                           ),
@@ -399,7 +399,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                             child: Text(
                               _isEditing ? 'Cancel' : 'Edit',
                               style: PayPinkTheme.body(
-                                fontSize: 11.5,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                               ),
@@ -411,7 +411,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                     const SizedBox(height: 12),
 
                     // Full Name Field
-                    Text('Full Name', style: PayPinkTheme.body(fontSize: 10.5, color: textMuted)),
+                    Text('Full Name', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
                     const SizedBox(height: 4),
                     TextFormField(
                       controller: _nameController,
@@ -433,7 +433,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                     const SizedBox(height: 10),
 
                     // Email Field
-                    Text('Email Address', style: PayPinkTheme.body(fontSize: 10.5, color: textMuted)),
+                    Text('Email Address', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
                     const SizedBox(height: 4),
                     TextFormField(
                       controller: _emailController,
@@ -509,7 +509,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                       ),
                       title: Text(
                         'Change 6-Digit MPIN',
-                        style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk),
+                        style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
                       ),
                       subtitle: Text(
                         'Update the MPIN used for quick login and step-up transaction signoff.',
@@ -550,7 +550,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                       ),
                       title: Text(
                         isDark ? 'Dark Mode Active' : 'Light Mode Active',
-                        style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w700, color: textInk),
+                        style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: textInk),
                       ),
                       subtitle: Text(
                         'Switch theme between luxury dark and clean pearl light.',
@@ -577,7 +577,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                       ),
                       title: Text(
                         'End Session / Log Out',
-                        style: PayPinkTheme.body(fontSize: 12.5, fontWeight: FontWeight.w700, color: PayPinkTheme.red),
+                        style: PayPinkTheme.body(fontSize: 13, fontWeight: FontWeight.w700, color: PayPinkTheme.red),
                       ),
                       subtitle: Text(
                         'Securely clear local encryption keys and sign out.',

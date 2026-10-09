@@ -54,7 +54,7 @@ class CircuitBreakerScreen extends StatelessWidget {
                 'We could not connect to PayPink services right now. Your account data remains fully protected with automated security guards.',
                 textAlign: TextAlign.center,
                 style: PayPinkTheme.body(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   color: PayPinkTheme.muted,
                   height: 1.5,
                 ),
@@ -84,7 +84,7 @@ class CircuitBreakerScreen extends StatelessWidget {
                       children: [
                         Text(
                           'LAST SAVED BALANCE',
-                          style: PayPinkTheme.mono(
+                          style: PayPinkTheme.eyebrow(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: PayPinkTheme.wine,

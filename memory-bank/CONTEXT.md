@@ -1,7 +1,8 @@
 # PayPink 2.0 — Project Context
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
-_Active Working Branch: main_  
+_Active Working Branch: feature/mobile-web-design-alignment (mobile UI aligned with the customer web app; not yet merged to main)_  
+_Last Updated: 2026-10-09 (Mobile UI aligned with the customer web app: DM Sans/Manrope fonts bundled, flat web-style tokens and cards, login/register rebuilt to mirror the frontend/bank auth panel, web-style bottom tab bar; 17/17 tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Mobile real-time loan origination & instant state refresh implemented: merged fetchLoans() into fetchProfile() UserProfile.accounts, and wired onRefreshData to trigger _loadLiveDatabaseData(bypassCache: true) immediately upon loan acceptance; 17/17 tests pass clean by [dom])_  
 _Last Updated: 2026-10-09 (Corrected Azure FQDN to paypink.westus2.cloudapp.azure.com:8080/api/v1, enabled GoogleFonts runtime fetching, and tuned nginx caching to avoid stale mobile app browser caching)_
 _Last Updated: 2026-10-09 (Self-contained offline fonts bundled in mobile/assets/fonts/ and registered in pubspec.yaml; resolved blank white screen crash on http://localhost:3002 Docker release; 17/17 tests pass by [dom])_  
@@ -337,6 +338,7 @@ All planned phases complete through Phase 10 with CI/CD passing on Java 17 Temur
 - EOD settings were passed in memory without editing Compose/.env; preserve them during future rebuilds or recreate will restore disabled defaults.
 - PostgreSQL GL delivery is asynchronous through remittance.events/ledger.transaction.events and audit-service. Duplicate ledger legs are ignored; database errors propagate to Kafka retries.
 - Mobile app (`mobile/lib/main.dart`, `screens/dashboard_screen.dart`, `screens/remittance_screen.dart`, `services/remittance_service.dart`, `services/account_service.dart`): added global `DevHttpOverrides`, native `TextStyle` font fallbacks, Clean Architecture with BLoC state machines, and dynamically bound live Azure SQL accounts and transaction history across Overview, Accounts, Transfer (Remittance), and Activity (Transactions) screens.
+- Mobile UI / web alignment (2026-10-09, branch `feature/mobile-web-design-alignment`): `PayPinkTheme` mirrors `frontend/bank/bank.css` tokens (DM Sans body, Manrope display, paper `#FAF9F6`, wine `#651C3E`, radii 9/12/14/17, `eyebrow()` labels; monospace only for account numbers/IDs). Fonts bundled in `mobile/assets/fonts/`. Login/register mirrors the web auth panel and shows errors inline; bottom nav mirrors the web phone tab bar. Dark mode uses a wine-tinted palette.
 - Mobile Brand & Validation Hardening (2026-10-09):
   - **MOB-102:** Integrated `PayPinkLogo.markOnly(size: 26)` into transfer receipt dialog.
   - **MOB-103:** Replaced payment network badges (Mastercard/Visa) with PayPink card emblem, configured 3 distinct card gradients (Checking: `#E11D48` to `#DB2777`, Savings: `#FB7185` to `#FDA4AF`, Loan: `#18181B` through `#4C0519` to `#881337`), and rendered custom white PayPink "P" SVG watermark at 60% opacity centered on cards.

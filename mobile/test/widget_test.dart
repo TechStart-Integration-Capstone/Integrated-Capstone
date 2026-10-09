@@ -26,9 +26,11 @@ void main() {
 
     // Verify Login Screen elements
     expect(find.textContaining('PayPink'), findsWidgets);
-    expect(find.text('Sign In'), findsWidgets);
-    expect(find.text('Register'), findsOneWidget);
-    expect(find.text('Username or Account Number'), findsOneWidget);
+    expect(find.text('Welcome back.'), findsOneWidget);
+    expect(find.text('Log in'), findsOneWidget);
+    expect(find.text('Open an account'), findsOneWidget);
+    expect(find.text('Username'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
   });
 
   testWidgets('PayPink Mobile App authenticated mode renders overview and navigation', (WidgetTester tester) async {
