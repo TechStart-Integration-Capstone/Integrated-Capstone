@@ -335,6 +335,7 @@ class UserProfile {
   final String username;
   final String email;
   final List<BankAccount> accounts;
+  final bool hasMpin;
 
   UserProfile({
     required this.firstName,
@@ -342,6 +343,7 @@ class UserProfile {
     required this.username,
     required this.email,
     required this.accounts,
+    this.hasMpin = false,
   });
 
   BankAccount? get checkingAccount =>
@@ -368,6 +370,7 @@ class UserProfile {
     String? username,
     String? email,
     List<BankAccount>? accounts,
+    bool? hasMpin,
   }) {
     return UserProfile(
       firstName: firstName ?? this.firstName,
@@ -375,17 +378,21 @@ class UserProfile {
       username: username ?? this.username,
       email: email ?? this.email,
       accounts: accounts ?? this.accounts,
+      hasMpin: hasMpin ?? this.hasMpin,
     );
   }
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final list = (json['accounts'] as List?) ?? [];
+    final rawHasMpin = json['hasMpin'];
+    final bool hasMpin = rawHasMpin is bool ? rawHasMpin : (rawHasMpin?.toString().toLowerCase() == 'true');
     return UserProfile(
       firstName: json['firstName']?.toString() ?? '',
       fullName: json['fullName']?.toString() ?? '',
       username: json['username']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       accounts: list.map((a) => BankAccount.fromJson(a as Map<String, dynamic>)).toList(),
+      hasMpin: hasMpin,
     );
   }
 }

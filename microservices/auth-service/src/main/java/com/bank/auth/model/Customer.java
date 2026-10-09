@@ -16,6 +16,7 @@ public class Customer {
     @Column(name = "contact_no", nullable = false, length = 30) private String contactNo;
     @Column(name = "status", nullable = false, length = 20) private String status = "ACTIVE";
     @Column(name = "roles", nullable = false, length = 255) private String roles = "ROLE_CUSTOMER,ROLE_RETAIL_USER";
+    @Column(name = "mpin_hash", length = 255) private String mpinHash;
     @Column(name = "created_date", nullable = false, updatable = false) private LocalDateTime createdDate = LocalDateTime.now();
 
     public Customer() {}
@@ -62,5 +63,7 @@ public class Customer {
                 .filter(r -> !r.isEmpty())
                 .toList();
     }
+    public String getMpinHash() { return mpinHash; }
+    public void setMpinHash(String mpinHash) { this.mpinHash = mpinHash; }
     public LocalDateTime getCreatedDate() { return createdDate; }
 }

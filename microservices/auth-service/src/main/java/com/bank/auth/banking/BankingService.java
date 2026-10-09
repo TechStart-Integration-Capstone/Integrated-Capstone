@@ -32,7 +32,11 @@ public class BankingService {
                            BigDecimal amount, String currency, String type, String operation,
                            String reference, String status, LocalDateTime date, String counterpartyName, String counterpartyAccountNumber) {}
     public record Profile(String firstName, String fullName, String username, String email,
-                          List<Account> accounts) {}
+                          List<Account> accounts, boolean hasMpin) {
+        public Profile(String firstName, String fullName, String username, String email, List<Account> accounts) {
+            this(firstName, fullName, username, email, accounts, false);
+        }
+    }
 
     private final CustomerRepository customers;
     private final JdbcTemplate jdbc;
@@ -113,8 +117,77 @@ public class BankingService {
                         + "current_balance, status FROM ACCOUNT WHERE customer_id = ? ORDER BY account_id",
                 (rs, row) -> new Account(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
                         rs.getBigDecimal(5), rs.getString(6)), customer.getCustomerId());
+        boolean hasMpin = customer.getMpinHash() != null && !customer.getMpinHash().isBlank();
+        if (!hasMpin) {
+            try {
+                String dbHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+                hasMpin = dbHash != null && !dbHash.isBlank();
+            } catch (Exception ignored) {}
+        }
         return new Profile(customer.getFirstName(), customer.getFirstName() + " " + customer.getLastName(),
-                customer.getUsername(), customer.getEmail(), accounts);
+                customer.getUsername(), customer.getEmail(), accounts, hasMpin);
+    }
+
+    public static String hashMpin(String pin) {
+        if (pin == null) return "";
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] bytes = md.digest(("paypink_salt_" + pin.trim()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(bytes);
+        } catch (Exception e) {
+            throw new RuntimeException("Error hashing MPIN", e);
+        }
+    }
+
+    @Transactional
+    public void setMpin(String authorization, String mpin, String currentMpin) {
+        Customer customer = authenticatedCustomer(authorization);
+        String existingHash = customer.getMpinHash();
+        if (existingHash == null || existingHash.isBlank()) {
+            try {
+                existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+            } catch (Exception ignored) {}
+        }
+        if (existingHash != null && !existingHash.isBlank() && currentMpin != null && !currentMpin.isBlank()) {
+            String checkHash = hashMpin(currentMpin);
+            if (!existingHash.equalsIgnoreCase(checkHash)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current MPIN is incorrect.");
+            }
+        }
+        String newHash = hashMpin(mpin);
+        customer.setMpinHash(newHash);
+        customers.save(customer);
+        try {
+            jdbc.update("UPDATE CUSTOMER SET mpin_hash = ? WHERE customer_id = ?", newHash, customer.getCustomerId());
+        } catch (Exception ignored) {}
+    }
+
+    @Transactional(readOnly = true)
+    public boolean verifyMpin(String authorization, String mpin) {
+        Customer customer = authenticatedCustomer(authorization);
+        String existingHash = customer.getMpinHash();
+        if (existingHash == null || existingHash.isBlank()) {
+            try {
+                existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+            } catch (Exception ignored) {}
+        }
+        if (existingHash == null || existingHash.isBlank()) {
+            return false;
+        }
+        String checkHash = hashMpin(mpin);
+        return existingHash.equalsIgnoreCase(checkHash);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasMpin(String authorization) {
+        Customer customer = authenticatedCustomer(authorization);
+        String existingHash = customer.getMpinHash();
+        if (existingHash == null || existingHash.isBlank()) {
+            try {
+                existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+            } catch (Exception ignored) {}
+        }
+        return existingHash != null && !existingHash.isBlank();
     }
 
     @Transactional(readOnly = true)

@@ -22,6 +22,7 @@ services:
       - ./../scripts/migrate_phase2_t24_core.sql:/mssql-server-setup-scripts.d/05_t24_core.sql:ro
       - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/06_interest.sql:ro
       - ./../scripts/migrate_phase10_rbac_roles.sql:/mssql-server-setup-scripts.d/07_rbac_roles.sql:ro
+      - ./../scripts/migrate_mpin.sql:/mssql-server-setup-scripts.d/08_mpin.sql:ro
     healthcheck:
       test:
         [

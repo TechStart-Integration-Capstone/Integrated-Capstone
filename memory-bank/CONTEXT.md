@@ -2,6 +2,10 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-10 (Mobile MPIN Database Persistence Audit & CI/CD Pipeline Wiring: resolved silent HTTP 400 rejection via dual-key 'mpin'/'pin' support in BankingController and SecureTokenStorage; wired scripts/migrate_mpin.sql into GitHub Actions pipeline.yml Stages 2 and 3, docker-compose.yml, and schema-azuresql.sql; live Azure SQL persistence verified for lviernes and arosales; 54/54 auth-service tests and 38/38 mobile tests pass clean by [dom & Antigravity])_
+_Last Updated: 2026-10-09 (Reverted web app UI changes to original team baseline, focusing strictly on mobile app dark mode refinements and Azure SQL MPIN database persistence; 38/38 mobile tests pass clean by [dom & Antigravity])_
+_Last Updated: 2026-10-09 (Personal Loan Details modal & Accounts screen theme alignment: purged indigo/blue relics in favor of signature PayPink wine/rose gradient hero cards, adaptive dark mode contrast for due dates, status badges, and Schedule action buttons; 38/38 mobile tests pass by [dom & Antigravity])_
+_Last Updated: 2026-10-09 (Azure SQL MPIN DB persistence & verification across logins/devices via auth-service, Web dark mode toggle aligned with mobile wine theme tokens, and refined fintech gradient balance card; all 54/54 backend and 37/37 mobile tests pass clean by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Fixed Loans hub AppBar alignment on wide screens: wrapped Scaffold in Center and ConstrainedBox(maxWidth: 440) inside full-bleed background Container so back arrow and title align with mobile cards; 37/37 tests pass by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Mobile Loans hub: one Loans button opens a screen with pay, details and apply; 30/30 tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Loan payments left shown on web and mobile from the repayment schedule; web Pay dialog adds Next payment / Full balance / Another amount; 28/28 mobile tests pass by [gillianneysha])_  

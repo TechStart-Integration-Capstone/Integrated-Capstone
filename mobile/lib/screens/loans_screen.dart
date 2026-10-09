@@ -209,11 +209,21 @@ class _LoansScreenState extends State<LoansScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: overdue ? const Color(0xFFFBEFED) : PayPinkTheme.greenBg,
+                  color: isDark
+                      ? (overdue ? const Color(0xFF451A1D) : const Color(0xFF143322))
+                      : (overdue ? const Color(0xFFFBEFED) : PayPinkTheme.greenBg),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(overdue ? 'Overdue' : 'Active',
-                    style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: overdue ? const Color(0xFFA33D39) : PayPinkTheme.green)),
+                child: Text(
+                  overdue ? 'Overdue' : 'Active',
+                  style: PayPinkTheme.body(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isDark
+                        ? (overdue ? const Color(0xFFF87171) : const Color(0xFF4ADE80))
+                        : (overdue ? const Color(0xFFA33D39) : PayPinkTheme.green),
+                  ),
+                ),
               ),
             ],
           ),
