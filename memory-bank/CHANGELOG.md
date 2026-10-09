@@ -1,14 +1,18 @@
 # Changelog
+- 2026-10-09 — Mobile Real-Time Loan Aggregation & Apply Loan Implementation (`account_service.dart`, `loan_application_sheet.dart`, `dashboard_screen.dart`, `main.dart`):
+  - **Mobile Loan Origination Flow (`loan_application_sheet.dart`):** Built dedicated bottom sheet featuring live eligibility check, disbursement account selector, amount & term dropdown (3 to 60 months), instant credit decision/offer card display, and Truth in Lending Act terms agreement modal.
+  - **Loans Aggregation (`account_service.dart`):** Updated `AccountService.fetchProfile()` to asynchronously merge active loans from `fetchLoans()` (`GET /api/v1/loans`) into `UserProfile.accounts`, ensuring loan accounts are recognized across Dashboard, Accounts tab, and Payment sheets.
+  - **Real-Time Instant Refresh (`main.dart`, `dashboard_screen.dart`):** Added 'Apply Loan' quick action button on Overview dashboard and wired `onRefreshData` callback to immediately trigger `_loadLiveDatabaseData(bypassCache: true)` when a loan offer is accepted or a payment is submitted, rendering updated balances and opening `LoanPaymentSheet` without requiring page reloads or app restarts. Verified clean build (`flutter analyze` 0 errors) and 100% test pass rate (`17/17` tests passed). — [dom]
 
 - 2026-10-09 — Azure Gateway FQDN & Font Runtime Fetching Fixes:
   - **Azure FQDN Correction (`api_config.dart`, `mobile/Dockerfile`):** Corrected backend gateway host from non-existent `paypink-levi-westus2.westus2.cloudapp.azure.com` to authoritative cloud host `paypink.westus2.cloudapp.azure.com:8080/api/v1`.
   - **Browser Cache Prevention (`mobile/nginx.conf`):** Added no-cache headers for `index.html` and service workers so browser clients immediately reflect new Flutter builds upon reload.
-  - **Google Fonts Runtime Fetching (`mobile/lib/main.dart`):** Set `GoogleFonts.config.allowRuntimeFetching = true` preventing fatal `GoogleFonts.config.allowRuntimeFetching is false but font PlusJakartaSans-SemiBold was not found in application assets` exception on Flutter Web. — [levi & Antigravity]
-
+  - **Google Fonts Runtime Fetching (`mobile/lib/main.dart`):** Set `GoogleFonts.config.allowRuntimeFetching = true` preventing fatal `GoogleFonts.config.allowRuntimeFetching is false but font PlusJakartaSans-SemiBold was not found in application assets` exception on Flutter Web. — [levi & dom]
 
 - 2026-10-09 — Fix Mobile Docker Build & Resolve Merge Syntax Error:
   - **Syntax Error Fix (`account_service.dart`):** Resolved broken merge syntax error in `fetchProfile()` that caused `flutter build web` compilation failure in CI/CD pipeline.
-  - **Docker Build Optimization (`mobile/Dockerfile`, `mobile/.dockerignore`):** Added `mobile/.dockerignore` to prevent copying host `.dart_tool/` and `build/` artifacts into the container; added `--no-wasm-dry-run --no-tree-shake-icons` to `flutter build web` command to prevent OOM termination on the CI/CD runner. Verified with `dart analyze` (0 errors, 0 warnings). — [levi & Antigravity]
+  - **Docker Build Optimization (`mobile/Dockerfile`, `mobile/.dockerignore`):** Added `mobile/.dockerignore` to prevent copying host `.dart_tool/` and `build/` artifacts into the container; added `--no-wasm-dry-run --no-tree-shake-icons` to `flutter build web` command to prevent OOM termination on the CI/CD runner. Verified with `dart analyze` (0 errors, 0 warnings). — [levi & dom]
+
 
   - **Last Card Theme Refinement (`dynamic_card_deck.dart`, `paypink_theme.dart`):** Styled the last card in an elegant, luxury **Pinkish Beige** palette (Desert Rose & Champagne Blush Nude: `#D8ABA0` to `#BA8677` transitioning to deep warm espresso `#261414` and gradient black `#09090B`); added `isLastCard` property to `PayPinkCardModel` and `_PayPinkCardFacePainter`; updated card title to 'Platinum Reserve' and configured delicate warm blush-cream specular bloom and matching card shadow glow. Verified clean with `flutter analyze` (0 errors, 0 warnings). — [Antigravity]
 
@@ -31,6 +35,7 @@
   - **Mobile Account Service Alignment (`account_service.dart`):** Updated `AccountService.fetchProfile()` to call `GET /auth/banking/me` as its first authoritative endpoint—identical to Web Banking SPA—synchronizing all 3 live Azure SQL accounts (`₱235,238.85` total) across Web and Mobile; mapped `STRESS_TEST_ACCOUNT` to `Everyday Account` display name.
   - **Transparent Error Handling (`auth_service.dart`):** Removed silent mock offline token generation (`jwt_local_demo_token`) in `AuthService.login` catch block; returns explicit 503 error when cloud gateway is unreachable to eliminate silent fallback to old hardcoded mock balances.
   - **Docker & Teammate Onboarding Templates (`mobile/Dockerfile`, `.env.example`, `docker/.env.example`):** Added `--dart-define=API_BASE_URL` to `mobile/Dockerfile` web build; checked in tracked `.env.example` templates pointing to `paypink-sql.database.windows.net` to prevent unseeded local SQL container fallbacks. — [levi & Antigravity]
+<<<<<<< Updated upstream
 
 - 2026-10-09 — Self-Contained Offline Fonts for Mobile Web (`mobile/pubspec.yaml`, `mobile/assets/fonts/`):
   - Bundled true offline TTF font files for all typography styles used across PayPink mobile theme: `PlusJakartaSans` (ExtraLight, Light, Regular, Medium, SemiBold, Bold, ExtraBold, Italic) and `JetBrainsMono` (Regular, Medium, SemiBold, Bold, ExtraBold). Registered `- assets/fonts/` in `mobile/pubspec.yaml` asset manifest.
@@ -38,6 +43,8 @@
   - Rebuilt Docker container `docker-mobile-app` (`docker compose -f docker/docker-compose.yml up -d --build mobile-app`). Verified 0 browser console exceptions and 100% full screen UI rendering via headless browser automated test; verified all 17 mobile test suites pass (`flutter test`) and static analysis remains at 0 errors (`flutter analyze`). — [dom]
 
 
+=======
+>>>>>>> Stashed changes
 - 2026-10-09 — Merge Conflict Resolution in `mobile/lib/services/account_service.dart`:
   - Resolved merge conflict between `main` branch updates (loan-service `fetchLoans()` aggregation, RFC-7807 problem details parsing, and `ProfileUnavailableException`) and Member 5 mobile hardening (resilient `/accounts/me`, `/auth/banking/me`, `/accounts/customer/$customerId`, and `/accounts` cascading fallbacks, admin `/accounts/customers` elimination, centralized `ApiClient.extractErrorMessage` integration). Preserved both functionalities with 100% test coverage: all 17 mobile tests pass (`account_model_test.dart` and `widget_test.dart`), `flutter analyze` has 0 issues, and all 24 gateway unit tests pass. — [dom]
 
