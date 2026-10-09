@@ -103,7 +103,7 @@ jobs:
     timeout-minutes: 25
     env:
       CI_DATASTORES: "azure-sql postgresql redis zookeeper kafka"
-      CI_APPS: "account-service auth-service risk-engine t24-adapter loan-service transaction-service api-gateway"
+      CI_APPS: "account-service auth-service risk-engine t24-adapter loan-service transaction-service audit-service reconciliation-service analytics-service api-gateway"
     steps:
       - uses: actions/checkout@v5
 

@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "dc8f1086-4f75-4e50-bf0c-88949d833ed3",
+    "_postman_id": "7189acf4-453e-4500-a2c1-ae297ff888d6",
     "name": "PayPink 2.0 \u2014 Complete API Reference & Verification Suite",
     "description": "Comprehensive Postman Collection covering all 11 microservices and every API endpoint documented in docs/API_REFERENCE.md.\n\nIncludes dynamic token extraction, customer vs. admin authorization headers, idempotency keys, and automated assertion scripts.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -13,7 +13,7 @@
     },
     {
       "key": "customer_username",
-      "value": "jdelacruz",
+      "value": "lviernes",
       "type": "string"
     },
     {
@@ -43,7 +43,7 @@
     },
     {
       "key": "customer_id",
-      "value": "10",
+      "value": "1",
       "type": "string"
     },
     {
@@ -131,7 +131,12 @@
                   "pm.test('Customer JWT token received', function () {",
                   "    pm.expect(jsonData.token).to.be.a('string');",
                   "    pm.collectionVariables.set('customer_token', jsonData.token);",
-                  "    if (jsonData.customerId) pm.collectionVariables.set('customer_id', String(jsonData.customerId));",
+                  "    pm.environment.set('customer_token', jsonData.token);",
+                  "    pm.environment.set('jwt_token', jsonData.token);",
+                  "    if (jsonData.customerId) {",
+                  "        pm.collectionVariables.set('customer_id', String(jsonData.customerId));",
+                  "        pm.environment.set('customer_id', String(jsonData.customerId));",
+                  "    }",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -184,6 +189,8 @@
                   "    pm.expect(jsonData.token).to.be.a('string');",
                   "    pm.expect(jsonData.roles).to.include('ROLE_ADMIN');",
                   "    pm.collectionVariables.set('admin_token', jsonData.token);",
+                  "    pm.environment.set('admin_token', jsonData.token);",
+                  "    pm.environment.set('admin_jwt', jsonData.token);",
                   "});"
                 ],
                 "type": "text/javascript"

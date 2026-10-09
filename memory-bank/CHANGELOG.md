@@ -12,6 +12,14 @@
 - 2026-10-08 — Clean Architecture & BLoC Enterprise Mobile Refactoring: Added enterprise Flutter packages (`flutter_bloc`, `dio`, `get_it`, `encrypt`, `shimmer`) to `pubspec.yaml`; created 4-layer architecture structure (`core/network/dio_client.dart` with SSL Pinning & AES-256 E2EE, `core/security/secure_token_storage.dart`, `core/widgets/shimmer_skeleton.dart`, `core/widgets/state_matrix_container.dart`); built Clean Architecture domain/data/presentation modules for `auth`, `accounts`, `remittance`, and `transactions`; wired `GetIt` service locator container (`injection_container.dart`) and top-level `MultiBlocProvider` in `main.dart`. — [Antigravity]
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — Fix Newman Auth Credentials and CI Supporting Services Orchestration:
+  - **Newman Auth & Variable Scoping Alignment (`scripts/generate_postman_collection.py`, `postman/PayPink_2.0_API_Reference_Collection.json`, `postman/PayPink_Local_Environment.json`):**
+    - Corrected default customer username from non-existent `jdelacruz` to seeded demo customer `lviernes` (Levi Viernes) with password `password123` and customer ID `1`.
+    - Populated `admin_password` (`Admin@PayPink2026!`) and user credentials in `postman/PayPink_Local_Environment.json`. Previously, an empty `admin_password: ""` in the environment file took precedence over collection variables, causing `POST /api/v1/auth/login` to fail and leaving `admin_token` empty, which cascaded 401 Unauthorized errors to all admin endpoints.
+    - Added dual variable setting (`pm.collectionVariables.set` and `pm.environment.set`) for `customer_token`, `admin_token`, `jwt_token`, `admin_jwt`, and `customer_id` upon successful login.
+  - **CI Temporary Stack Container Lifecycle (`.github/workflows/pipeline.yml`):**
+    - Added `analytics-service`, `audit-service`, and `reconciliation-service` to `CI_APPS` in Stage 2 so that Section 10 Supporting Services endpoints are actively backed by running containers during Newman contract testing. — [dom]
+
 - 2026-10-09 — Fix Microservice Database Environment Defaults and CI Secrets:
   - **Docker Compose Fallback Defaults (`docker/docker-compose.yml`):**
     - Configured bash fallback defaults for `AZURE_SQL_JDBC_URL`, `AZURE_SQL_USERNAME`, and `AZURE_SQL_PASSWORD` across all services (`auth-service`, `account-service`, `transaction-service`, `reconciliation-service`, `outbox-publisher`) and `PAYPINK_GMAIL_APP_PASSWORD` for `notification-service`. This prevents empty-string injection when running without an explicit `.env` file, which previously overrode Spring Boot's internal datasource defaults with `""` and crashed HikariCP with "Failed to determine suitable jdbc url".

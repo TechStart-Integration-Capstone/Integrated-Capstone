@@ -2,9 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-09 (Docker Compose and CI database environment variable fallbacks, Azure SQL automated setup synchronization, and API Gateway downstream readiness verification by [dom])_
-_Last Updated: 2026-10-09 (Clean Architecture, BLoC State Machines, Local Dev Connectivity Fallback, Comprehensive OpenAPI Swagger documentation, Phase 10 RBAC hardening)_
-_Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
+_Last Updated: 2026-10-09 (Clean Architecture, BLoC State Machines, Mobile App cloud connection by [levi, cisko]; Newman auth credentials aligned with seeded Azure SQL users, dual token persistence, and full CI stack coverage by [dom])_
 
 ---
 

@@ -11,13 +11,13 @@ def create_collection():
         },
         "variable": [
             {"key": "base_url", "value": "http://localhost:8080", "type": "string"},
-            {"key": "customer_username", "value": "jdelacruz", "type": "string"},
+            {"key": "customer_username", "value": "lviernes", "type": "string"},
             {"key": "customer_password", "value": "password123", "type": "string"},
             {"key": "admin_username", "value": "admin", "type": "string"},
             {"key": "admin_password", "value": "Admin@PayPink2026!", "type": "string"},
             {"key": "customer_token", "value": "", "type": "string"},
             {"key": "admin_token", "value": "", "type": "string"},
-            {"key": "customer_id", "value": "10", "type": "string"},
+            {"key": "customer_id", "value": "1", "type": "string"},
             {"key": "account_id", "value": "1", "type": "string"},
             {"key": "source_account_no", "value": "001181233469", "type": "string"},
             {"key": "target_account_no", "value": "001133218709", "type": "string"},
@@ -98,7 +98,12 @@ def create_collection():
                     "pm.test('Customer JWT token received', function () {",
                     "    pm.expect(jsonData.token).to.be.a('string');",
                     "    pm.collectionVariables.set('customer_token', jsonData.token);",
-                    "    if (jsonData.customerId) pm.collectionVariables.set('customer_id', String(jsonData.customerId));",
+                    "    pm.environment.set('customer_token', jsonData.token);",
+                    "    pm.environment.set('jwt_token', jsonData.token);",
+                    "    if (jsonData.customerId) {",
+                    "        pm.collectionVariables.set('customer_id', String(jsonData.customerId));",
+                    "        pm.environment.set('customer_id', String(jsonData.customerId));",
+                    "    }",
                     "});"
                 ],
                 description="Authenticates a retail banking customer and captures JWT into {{customer_token}}."
@@ -116,6 +121,8 @@ def create_collection():
                     "    pm.expect(jsonData.token).to.be.a('string');",
                     "    pm.expect(jsonData.roles).to.include('ROLE_ADMIN');",
                     "    pm.collectionVariables.set('admin_token', jsonData.token);",
+                    "    pm.environment.set('admin_token', jsonData.token);",
+                    "    pm.environment.set('admin_jwt', jsonData.token);",
                     "});"
                 ],
                 description="Authenticates the administrator and stores admin JWT with ROLE_ADMIN into {{admin_token}}."
