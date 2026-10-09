@@ -180,7 +180,7 @@ class AuthService {
       debugPrint('[AuthService] Login network failure: $e');
       return AuthResult(
         success: false,
-        message: 'PayPink is starting up. Please wait a moment and try again.',
+        message: 'Unable to connect to PayPink Gateway at ${ApiConfig.baseUrl}. Please check your connection.',
         statusCode: 503,
       );
     }
