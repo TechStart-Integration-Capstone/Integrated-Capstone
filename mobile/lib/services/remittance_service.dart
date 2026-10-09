@@ -107,7 +107,19 @@ class RemittanceService {
         );
       }
 
-      // Secondary Gateway Endpoint: POST /api/v1/remittance/transfer
+      // If primary endpoint returned a definitive business error (e.g. 400, 403, 409, 422, 500), return error directly instead of sending duplicate requests
+      if (response.statusCode != 404) {
+        circuitBreaker.recordFailure();
+        final errorMsg = _extractErrorMessage(response.body);
+        return RemittanceResult(
+          success: false,
+          message: errorMsg.isNotEmpty
+              ? errorMsg
+              : 'Transfer failed with status ${response.statusCode}',
+        );
+      }
+
+      // Secondary Gateway Endpoint: POST /api/v1/remittance/transfer (only if primary route 404s)
       final remUrl =
           Uri.parse('${ApiConfig.baseUrl}/remittance/transfer');
       final remResponse = await http

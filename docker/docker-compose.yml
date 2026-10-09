@@ -448,7 +448,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD}
       - ORCHESTRATOR_URL=http://transaction-service:8083
-      - LOAN_SCHEMA_MIGRATION_ENABLED=false
+      - LOAN_SCHEMA_MIGRATION_ENABLED=true
     volumes:
       - ./../microservices/loan-service/target/loan-service.jar:/app/app.jar
     healthcheck:
