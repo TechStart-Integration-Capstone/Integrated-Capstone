@@ -1,9 +1,10 @@
 # PayPink 2.0 — Project Context
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
-_Active Working Branch: feature/loan-pending-payments (loan payments left on web + mobile, pay-in-full on web; not yet merged to main)_  
+_Active Working Branch: main_  
 _Last Updated: 2026-10-09 (Mobile Loans hub: one Loans button opens a screen with pay, details and apply; 30/30 tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Loan payments left shown on web and mobile from the repayment schedule; web Pay dialog adds Next payment / Full balance / Another amount; 28/28 mobile tests pass by [gillianneysha])_  
+_Last Updated: 2026-10-09 (Restored mobile-app service in docker/docker-compose.yml, preventing Azure VM CD deployment from tearing down the container with --remove-orphans and restoring live availability on http://paypink.westus2.cloudapp.azure.com:3002)_
 _Last Updated: 2026-10-09 (Mobile/web feature parity: missed loan auto-debit alert, real InstaPay/PESONet transfers, 30-second cancel window removed from web and mobile, server-derived notifications, server transaction report, local card freeze and client reversal removed; 27/27 tests pass by [gillianneysha])_  
 _Last Updated: 2026-10-09 (Patched db/phase6_loans.sql and scripts/migrate_phase6_loans.sql with dual dbo/app/t24 schema guards, preventing SQL Server 4909 'Cannot alter dbo.CUSTOMER because it is not a table' synonym error and allowing loan-service to start and pass Swagger probes in CI/CD)_
 _Last Updated: 2026-10-09 (Restored docker-compose.yml DataSource URL fallbacks and CI workflow env secrets, resolving Spring Boot HikariCP failed jdbc url crash and enabling automated CI/CD pipeline health checks and Newman tests to succeed)_
