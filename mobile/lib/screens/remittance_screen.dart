@@ -1441,7 +1441,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     amount: amt,
                   );
                   if (pinVerified) {
-                    _executeTransferWithPin(amt, fromAcc, toAcc);
+                    _executeTransfer(amt, fromAcc, toAcc);
                   }
                 },
                 icon: const Icon(Icons.send_rounded, size: 18),
@@ -1460,15 +1460,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     );
   }
 
-  void _executeTransferWithPin(double amt, String fromAcc, String toAcc) async {
-    final pinOk = await PinAuthSheet.show(
-      context,
-      title: 'Authorize Transfer',
-      description: 'Enter your 6-digit MPIN to authorize transfer of ₱${amt.toStringAsFixed(2)}',
-      amount: amt,
-    );
-    if (!pinOk) return;
-
+  /// Submits the transfer. The caller has already verified the MPIN once on the
+  /// confirmation sheet, so this must not prompt again.
+  void _executeTransfer(double amt, String fromAcc, String toAcc) async {
     final cleanDest = _selectedModeIndex == 0
         ? _ownTargetAccount
         : _recipientController.text.replaceAll(' ', '');

@@ -158,7 +158,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
       } else {
         // Step 2 confirmation
         if (pin == _firstEnteredPin) {
-          await SecureTokenStorage.savePin(pin);
+          await SecureTokenStorage.savePin(pin, owner: _resolvedUsername);
           HapticFeedback.mediumImpact();
           if (widget.onAuthSuccess != null) {
             widget.onAuthSuccess!();

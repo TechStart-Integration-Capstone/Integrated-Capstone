@@ -10,6 +10,7 @@ import 'screens/remittance_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'screens/login_register_screen.dart';
 import 'screens/pin_auth_screen.dart';
+import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/account_service.dart';
 import 'services/secure_token_storage.dart';
@@ -82,7 +83,21 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   void initState() {
     super.initState();
     _isAuthenticated = widget.initialAuthenticated;
+    ApiClient.unauthorizedNotifier.addListener(_handleSessionExpired);
     _checkInitialAuth();
+  }
+
+  @override
+  void dispose() {
+    ApiClient.unauthorizedNotifier.removeListener(_handleSessionExpired);
+    super.dispose();
+  }
+
+  /// The server rejected the token (expired or revoked): send the user back to
+  /// password sign-in. Their MPIN stays on the device.
+  void _handleSessionExpired() {
+    if (!ApiClient.unauthorizedNotifier.value || !_isAuthenticated) return;
+    _handleLogout();
   }
 
   Future<void> _checkInitialAuth() async {
@@ -101,9 +116,13 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
       if (hasToken && user.isNotEmpty) {
         _currentUser = user;
         _currentFullName = fullName.isNotEmpty ? fullName : user;
-        // User already has an active session token: bypass PIN login prompt directly to authenticated dashboard
-        _isAuthenticated = true;
-        _showPinLogin = false;
+        // A live session is unlocked with the MPIN the user already created,
+        // or they create one now if this device doesn't have it yet.
+        if (await SecureTokenStorage.hasPinFor(user)) {
+          _showPinLogin = true;
+        } else {
+          _requirePinSetup = true;
+        }
       }
     } catch (e) {
       debugPrint('[PayPink] Storage check non-critical failure: $e');
@@ -121,7 +140,9 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   }
 
   void _handleLoginSuccess(String user, String fullName) async {
-    final hasPin = await SecureTokenStorage.hasPin();
+    // Only ask for a new MPIN the first time this user signs in on this device.
+    final hasPin = await SecureTokenStorage.hasPinFor(user);
+    if (!mounted) return;
     setState(() {
       _currentUser = user;
       _currentFullName = fullName.isNotEmpty ? fullName : user;
@@ -199,12 +220,7 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
                               _isAuthenticated = true;
                             });
                           },
-                          onFallbackToPassword: () {
-                            setState(() {
-                              _showPinLogin = false;
-                              _isAuthenticated = false;
-                            });
-                          },
+                          onFallbackToPassword: _handleLogout,
                         )
                       : LoginRegisterScreen(
                           onLoginSuccess: _handleLoginSuccess,
