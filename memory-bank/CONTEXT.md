@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-08 (Comprehensive endpoint-level OpenAPI Swagger documentation across all microservices, centralized Gateway Swagger UI, automated 3-attempt bank loan retry & admin retry removal, RFC-7807 problem details platform standardisation, database-driven RBAC migration, gateway CORS allow-list, list pagination, and API reference alignment by [dom])_  
+_Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
 
 ---
 

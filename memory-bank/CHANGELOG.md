@@ -1,6 +1,9 @@
 # Changelog
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — Cloud Deployment Health & Mobile Cloud Connectivity:
+  - **Mobile Cloud Configuration (`mobile`):** Added `String.fromEnvironment('API_BASE_URL')` check to [`ApiConfig.baseUrl`](file:///mobile/lib/services/api_config.dart), enabling local Flutter apps (desktop, Chrome, mobile) to target the cloud API Gateway via `--dart-define=API_BASE_URL=http://paypink-levi-westus2.westus2.cloudapp.azure.com:8080/api/v1` without breaking local emulator defaults.
+  - **Cloud Infrastructure & Stack Verification (`vm-paypink`):** Disabled daily auto-shutdown policy on Azure VM; restored Kafka after stale broker ephemeral registration; verified all 26 core operational containers running and healthy. Confirmed Web Banking SPA accessible at `http://paypink-levi-westus2.westus2.cloudapp.azure.com/bank/` and Azure SQL `master` active with all retail banking tables. — [levi]
 - 2026-10-09 — Fix ReconciliationLog compilation error from PR #30 merge: removed duplicate field and javadoc declarations in ReconciliationLog.java; verified reconciliation-service compilation and 8/8 tests passed. — [dom]
 - 2026-10-06 — Dynamic Mobile Transfer & Activity History Binding: passed live user accounts (`_userProfile?.accounts`) to `RemittanceScreen` in `mobile/lib/main.dart`; updated `RemittanceService` and `RemittanceScreen` to submit and transfer using dynamic account numbers instead of hardcoded 5046/8504 mocks; updated `AccountService.fetchTransactions()` to query live database transactions from Azure SQL via `/auth/admin/transactions/today` & `/auth/banking/transactions`. — [Antigravity]
 - 2026-10-06 — Dynamic Mobile Dashboard & Accounts Binding: updated `mobile/lib/screens/dashboard_screen.dart` to dynamically render live database accounts (`widget.accounts`) fetched from Azure SQL instead of static hardcoded cards. — [Antigravity]

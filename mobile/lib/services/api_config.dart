@@ -8,6 +8,10 @@ class ApiConfig {
   /// - iOS / Web / Desktop: http://localhost:8080/api/v1
   /// - Production domain: https://api.yourbank.com/v1
   static String get baseUrl {
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isNotEmpty) {
+      return envUrl;
+    }
     if (kIsWeb) {
       return 'http://localhost:8080/api/v1';
     }
