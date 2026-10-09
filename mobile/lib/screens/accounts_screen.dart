@@ -78,7 +78,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           const SizedBox(height: 4),
           Text(
             'Your accounts, together. Select an account to see its details.',
-            style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
+            style: PayPinkTheme.body(fontSize: 13, color: textMuted),
           ),
           const SizedBox(height: 16),
 
@@ -133,7 +133,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     child: Text(
                       '$totalLinked linked',
                       style: PayPinkTheme.body(
-                        fontSize: 9.5,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                       ),
@@ -156,7 +156,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     Text(
                       widget.hideBalances ? 'Show balances' : 'Hide balances',
                       style: PayPinkTheme.body(
-                        fontSize: 11.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                       ),
@@ -300,7 +300,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           const SizedBox(height: 4),
           Text(
             failed ? widget.loadError! : 'No accounts are linked to this profile yet.',
-            style: PayPinkTheme.body(fontSize: 11.5, color: textMuted, height: 1.4),
+            style: PayPinkTheme.body(fontSize: 12, color: textMuted, height: 1.4),
           ),
           if (widget.onRetry != null) ...[
             const SizedBox(height: 12),
@@ -372,7 +372,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     children: [
                       Text(
                         name,
-                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700, color: textInk),
+                        style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w700, color: textInk),
                       ),
                       const SizedBox(height: 2),
                       GestureDetector(
@@ -405,7 +405,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 child: Text(
                   '• $status',
                   style: PayPinkTheme.body(
-                    fontSize: 9.5,
+                    fontSize: 10,
                     color: isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green,
                     fontWeight: FontWeight.w700,
                   ),
@@ -433,7 +433,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ),
             child: Text(
               interestRate != null ? '${interestRate.toStringAsFixed(2)}% p.a. interest' : 'No interest',
-              style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine),
+              style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w700, color: brandWine),
             ),
           ),
           const SizedBox(height: 14),
@@ -444,7 +444,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             children: [
               Text(
                 'Available balance',
-                style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
+                style: PayPinkTheme.body(fontSize: 11, color: textMuted),
               ),
               Row(
                 children: [
@@ -556,7 +556,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     children: [
                       Text(
                         name,
-                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700, color: textInk),
+                        style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w700, color: textInk),
                       ),
                       const SizedBox(height: 2),
                       GestureDetector(
@@ -589,7 +589,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 child: Text(
                   '• $status',
                   style: PayPinkTheme.body(
-                    fontSize: 9.5,
+                    fontSize: 10,
                     color: isDark ? const Color(0xFF818CF8) : PayPinkTheme.indigo,
                     fontWeight: FontWeight.w700,
                   ),
@@ -615,7 +615,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text('Remaining loan balance', style: PayPinkTheme.body(fontSize: 10.5, color: textMuted)),
+                  Text('Remaining loan balance', style: PayPinkTheme.body(fontSize: 11, color: textMuted)),
+                  if (loan.paymentsLeftLabel != null) ...[
+                    const SizedBox(height: 4),
+                    Text(loan.paymentsLeftLabel!, style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w600, color: brandWine)),
+                  ],
                 ],
               ),
               if (loan.dueDate != null || loan.minimumPayment != null)
@@ -629,9 +633,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       if (loan.dueDate != null)
-                        Text('Due: ${loan.dueDate}', style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine)),
+                        Text('Due: ${loan.dueDate}', style: PayPinkTheme.body(fontSize: 10, fontWeight: FontWeight.w700, color: brandWine)),
                       if (loan.minimumPayment != null)
-                        Text(formatPeso(loan.minimumPayment!), style: PayPinkTheme.mono(fontSize: 10.5, fontWeight: FontWeight.w800, color: textInk)),
+                        Text(formatPeso(loan.minimumPayment!), style: PayPinkTheme.mono(fontSize: 11, fontWeight: FontWeight.w800, color: textInk)),
                     ],
                   ),
                 ),
@@ -645,7 +649,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             children: [
               Text(
                 rateTerm,
-                style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
+                style: PayPinkTheme.body(fontSize: 11, color: textMuted),
               ),
               Row(
                 children: [

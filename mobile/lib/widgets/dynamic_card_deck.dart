@@ -196,7 +196,7 @@ class PayPinkCardFace extends StatelessWidget {
                               child: Text(
                                 card.cardHolder.toUpperCase(),
                                 style: PayPinkTheme.display(
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white.withValues(alpha: 0.85),
                                   letterSpacing: 1.2,
@@ -225,7 +225,7 @@ class PayPinkCardFace extends StatelessWidget {
                                 Text(
                                   'EXP ${card.expiry}',
                                   style: PayPinkTheme.mono(
-                                    fontSize: 9,
+                                    fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.white.withValues(alpha: 0.60),
                                   ),
@@ -476,8 +476,8 @@ class _FrozenBadge extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             'FROZEN',
-            style: PayPinkTheme.mono(
-              fontSize: 8.5,
+            style: PayPinkTheme.eyebrow(
+              fontSize: 10,
               fontWeight: FontWeight.w800,
               color: Colors.white,
             ),
@@ -539,7 +539,8 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
   late final PageController _controller;
   late final ValueNotifier<double> _pageNotifier;
   int _currentIndex = 0;
-  final Set<int> _frozenAccountIds = {};
+  // Frozen comes from the server (admins freeze accounts); customers cannot toggle it here.
+  static bool _isFrozen(BankAccount a) => a.status.toUpperCase() == 'FROZEN';
 
   @override
   void initState() {
@@ -607,34 +608,6 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
     ];
   }
 
-  void _toggleFreeze(int accountId) {
-    HapticFeedback.heavyImpact();
-    setState(() {
-      if (_frozenAccountIds.contains(accountId)) {
-        _frozenAccountIds.remove(accountId);
-        _showToast('Card unfrozen and active for transactions.');
-      } else {
-        _frozenAccountIds.add(accountId);
-        _showToast('Card locked and protected against unauthorized charges.');
-      }
-    });
-  }
-
-  void _showToast(String message) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: PayPinkTheme.wine,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: Text(
-          message,
-          style: PayPinkTheme.body(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
-        ),
-      ),
-    );
-  }
-
   String _formatAmount(double amount) {
     final parts = amount.toStringAsFixed(2).split('.');
     final integerPart = parts[0];
@@ -659,7 +632,7 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
         final cardHeight = PayPinkCardFace.heightFor(cardWidth);
 
         final activeAccount = accounts[_currentIndex.clamp(0, accounts.length - 1)];
-        final isFrozen = _frozenAccountIds.contains(activeAccount.accountId);
+        final isFrozen = _isFrozen(activeAccount);
 
         return Column(
           children: [
@@ -680,7 +653,7 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
                     maskedNumber: acct.accountNumber,
                     expiry: '10/29',
                     scheme: index % 2 == 0 ? CardScheme.mastercard : CardScheme.visa,
-                    isFrozen: _frozenAccountIds.contains(acct.accountId),
+                    isFrozen: _isFrozen(acct),
                     cardIndex: index,
                     isLastCard: isLast,
                   );
@@ -815,9 +788,9 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              isFrozen ? 'LOCKED' : 'ACTIVE',
-                              style: PayPinkTheme.mono(
-                                fontSize: 8.5,
+                              isFrozen ? 'FROZEN' : 'ACTIVE',
+                              style: PayPinkTheme.eyebrow(
+                                fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 color: isFrozen ? const Color(0xFF0284C7) : PayPinkTheme.green,
                               ),
@@ -859,7 +832,7 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
 
                   const SizedBox(height: 18),
 
-                  // Quick Card Action Strip (Details, Freeze/Unfreeze, Transfer)
+                  // Quick Card Action Strip (Details, Transfer)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Row(
@@ -870,16 +843,6 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
                             label: 'Details',
                             isDark: isDark,
                             onTap: widget.onOpenDetails ?? () {},
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _CardActionButton(
-                            icon: isFrozen ? Icons.lock_open_rounded : Icons.ac_unit_rounded,
-                            label: isFrozen ? 'Unfreeze' : 'Freeze',
-                            isHighlight: isFrozen,
-                            isDark: isDark,
-                            onTap: () => _toggleFreeze(activeAccount.accountId),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -909,27 +872,19 @@ class _CardActionButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool isDark;
-  final bool isHighlight;
 
   const _CardActionButton({
     required this.icon,
     required this.label,
     required this.onTap,
     this.isDark = false,
-    this.isHighlight = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg = isHighlight
-        ? (isDark ? const Color(0xFF1E3A8A) : const Color(0xFFE0F2FE))
-        : (isDark ? PayPinkTheme.darkCard : Colors.white);
-    final border = isHighlight
-        ? const Color(0xFF38BDF8)
-        : (isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.line);
-    final iconColor = isHighlight
-        ? const Color(0xFF0284C7)
-        : (isDark ? PayPinkTheme.pink : PayPinkTheme.wine);
+    final bg = isDark ? PayPinkTheme.darkCard : Colors.white;
+    final border = isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.line;
+    final iconColor = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
     final textColor = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
 
     return Material(

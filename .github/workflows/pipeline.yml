@@ -127,8 +127,10 @@ jobs:
           JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
           MSSQL_MEMORY_LIMIT_MB=2048
           AZURE_SQL_JDBC_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
+          AZURE_SQL_URL=jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true
           AZURE_SQL_USERNAME=sa
           AZURE_SQL_PASSWORD=PayPink2.0_StrongPass!
+          SAVINGS_ENABLED=false
           PAYPINK_GMAIL_APP_PASSWORD=dummy_ci_secret
           ENVEOF
 

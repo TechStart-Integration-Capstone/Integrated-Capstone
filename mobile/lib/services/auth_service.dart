@@ -177,10 +177,17 @@ class AuthService {
         );
       }
     } catch (e) {
-      debugPrint('[AuthService] Login network failure: $e');
+      debugPrint('[AuthService] Login failure: $e');
+      final errStr = e.toString();
+      final isNetwork = errStr.contains('ClientException') ||
+          errStr.contains('SocketException') ||
+          errStr.contains('Failed to fetch') ||
+          errStr.contains('Connection refused');
       return AuthResult(
         success: false,
-        message: 'Unable to connect to PayPink Gateway at ${ApiConfig.baseUrl}. Please check your connection.',
+        message: isNetwork
+            ? 'Unable to connect to PayPink Gateway at ${ApiConfig.baseUrl}. Please check your connection.'
+            : 'Authentication error: $errStr',
         statusCode: 503,
       );
     }
@@ -307,15 +314,31 @@ class AuthService {
   }
 
   /// Clears user authentication session and tokens from secure device storage
+  /// Ends the session. The MPIN is kept so the user doesn't have to create it again.
   static Future<void> logout() async {
-    await SecureTokenStorage.clearVault();
+    await SecureTokenStorage.clearSession();
     ApiClient.resetUnauthorized();
   }
 
-  /// Checks if device has a valid persistent JWT token
+  /// Checks if device has a persisted JWT that has not expired yet.
   static Future<bool> hasActiveSession() async {
     final token = await SecureTokenStorage.getToken();
-    return token != null && token.isNotEmpty;
+    if (token == null || token.isEmpty) return false;
+    final expiry = _jwtExpiry(token);
+    return expiry == null || expiry.isAfter(DateTime.now());
+  }
+
+  /// Reads the `exp` claim from a JWT without verifying it (the server does that).
+  static DateTime? _jwtExpiry(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      final payload = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+      final exp = payload is Map ? payload['exp'] : null;
+      return exp is num ? DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000) : null;
+    } catch (_) {
+      return null;
+    }
   }
 }
 

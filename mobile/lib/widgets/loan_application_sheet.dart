@@ -248,7 +248,7 @@ class _LoanApplicationSheetState extends State<LoanApplicationSheet> {
                         setDialogState(() => isAccepting = true);
                         try {
                           await AccountService.acceptLoanOffer(offer.referenceNo);
-                          if (mounted) {
+                          if (dialogCtx.mounted && mounted) {
                             Navigator.of(dialogCtx).pop(); // close dialog
                             Navigator.of(context).pop(); // close bottom sheet
                             widget.onLoanAccepted();
@@ -272,12 +272,14 @@ class _LoanApplicationSheetState extends State<LoanApplicationSheet> {
                           }
                         } catch (e) {
                           setDialogState(() => isAccepting = false);
-                          ScaffoldMessenger.of(dialogCtx).showSnackBar(
-                            SnackBar(
-                              backgroundColor: PayPinkTheme.red,
-                              content: Text(e.toString().replaceFirst('Exception: ', '')),
-                            ),
-                          );
+                          if (dialogCtx.mounted) {
+                            ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                              SnackBar(
+                                backgroundColor: PayPinkTheme.red,
+                                content: Text(e.toString().replaceFirst('Exception: ', '')),
+                              ),
+                            );
+                          }
                         }
                       },
                 child: isAccepting

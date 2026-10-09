@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +10,9 @@ import 'screens/remittance_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'screens/login_register_screen.dart';
 import 'screens/pin_auth_screen.dart';
+import 'services/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'services/account_service.dart';
 import 'services/secure_token_storage.dart';
 import 'widgets/bottom_sheets.dart';
@@ -83,7 +84,21 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   void initState() {
     super.initState();
     _isAuthenticated = widget.initialAuthenticated;
+    ApiClient.unauthorizedNotifier.addListener(_handleSessionExpired);
     _checkInitialAuth();
+  }
+
+  @override
+  void dispose() {
+    ApiClient.unauthorizedNotifier.removeListener(_handleSessionExpired);
+    super.dispose();
+  }
+
+  /// The server rejected the token (expired or revoked): send the user back to
+  /// password sign-in. Their MPIN stays on the device.
+  void _handleSessionExpired() {
+    if (!ApiClient.unauthorizedNotifier.value || !_isAuthenticated) return;
+    _handleLogout();
   }
 
   Future<void> _checkInitialAuth() async {
@@ -102,9 +117,13 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
       if (hasToken && user.isNotEmpty) {
         _currentUser = user;
         _currentFullName = fullName.isNotEmpty ? fullName : user;
-        // User already has an active session token: bypass PIN login prompt directly to authenticated dashboard
-        _isAuthenticated = true;
-        _showPinLogin = false;
+        // A live session is unlocked with the MPIN the user already created,
+        // or they create one now if this device doesn't have it yet.
+        if (await SecureTokenStorage.hasPinFor(user)) {
+          _showPinLogin = true;
+        } else {
+          _requirePinSetup = true;
+        }
       }
     } catch (e) {
       debugPrint('[PayPink] Storage check non-critical failure: $e');
@@ -122,7 +141,9 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   }
 
   void _handleLoginSuccess(String user, String fullName) async {
-    final hasPin = await SecureTokenStorage.hasPin();
+    // Only ask for a new MPIN the first time this user signs in on this device.
+    final hasPin = await SecureTokenStorage.hasPinFor(user);
+    if (!mounted) return;
     setState(() {
       _currentUser = user;
       _currentFullName = fullName.isNotEmpty ? fullName : user;
@@ -200,12 +221,7 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
                               _isAuthenticated = true;
                             });
                           },
-                          onFallbackToPassword: () {
-                            setState(() {
-                              _showPinLogin = false;
-                              _isAuthenticated = false;
-                            });
-                          },
+                          onFallbackToPassword: _handleLogout,
                         )
                       : LoginRegisterScreen(
                           onLoginSuccess: _handleLoginSuccess,
@@ -250,23 +266,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     }
     return 'P';
   }
-  // In-App Notifications state
-  final List<Map<String, dynamic>> _notifications = [
-    {
-      'id': 1,
-      'title': 'Welcome gift received',
-      'message': '₱50.00 credited to Everyday account •••• 5046.',
-      'time': 'Just now',
-      'unread': true,
-    },
-    {
-      'id': 2,
-      'title': 'Account Protected',
-      'message': 'Biometric & 6-Digit MPIN security active.',
-      'time': '10 mins ago',
-      'unread': false,
-    },
-  ];
+  // In-app notifications, derived from server transactions (same rules as the web app).
+  List<Map<String, dynamic>> _notifications = [];
+  List<TransactionItem> _serverTransactions = [];
+  Set<String> _readNotificationIds = {};
+  Set<String> _hiddenNotificationIds = {};
 
   final List<TransactionItem> _transactions = [];
 
@@ -276,10 +280,36 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   @override
   void initState() {
     super.initState();
+    _loadNotificationState();
     _loadLiveDatabaseData();
   }
 
-  void _loadLiveDatabaseData({bool preserveLocalTransactions = true, bool bypassCache = false}) async {
+  Future<void> _loadNotificationState() async {
+    final read = await NotificationService.loadIds(widget.currentUser, 'read');
+    final hidden = await NotificationService.loadIds(widget.currentUser, 'hidden');
+    if (!mounted) return;
+    setState(() {
+      _readNotificationIds = read;
+      _hiddenNotificationIds = hidden;
+      _rebuildNotifications();
+    });
+  }
+
+  void _rebuildNotifications() {
+    _notifications = NotificationService.fromTransactions(
+      _serverTransactions,
+      read: _readNotificationIds,
+      hidden: _hiddenNotificationIds,
+    );
+  }
+
+  void _persistNotificationState() {
+    final current = NotificationService.fromTransactions(_serverTransactions).map((n) => n['id'] as String);
+    NotificationService.saveIds(widget.currentUser, 'read', _readNotificationIds, current);
+    NotificationService.saveIds(widget.currentUser, 'hidden', _hiddenNotificationIds, current);
+  }
+
+  void _loadLiveDatabaseData({bool preserveLocalTransactions = false, bool bypassCache = false}) async {
     UserProfile? profile;
     String? profileError;
     try {
@@ -333,6 +363,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         }
       }
 
+      _serverTransactions = txs;
+      _rebuildNotifications();
+
       if (txs.isNotEmpty) {
         if (!preserveLocalTransactions || _transactions.isEmpty) {
           _transactions.clear();
@@ -340,7 +373,26 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         } else {
           // Merge live transactions preserving newly posted local items at the top
           final fetchedIds = txs.map((t) => t.id).toSet();
-          final localUnsynced = _transactions.where((t) => !fetchedIds.contains(t.id)).toList();
+          final localUnsynced = _transactions.where((t) {
+            if (fetchedIds.contains(t.id)) return false;
+            // Also check if any fetched transaction shares the same reference/id (e.g. substring or prefixed)
+            final hasIdMatch = txs.any((f) =>
+                f.id == t.id ||
+                (t.id.isNotEmpty && f.id.isNotEmpty && (f.id.contains(t.id) || t.id.contains(f.id))));
+            if (hasIdMatch) return false;
+            // Also deduplicate by fuzzy match: same amount, same debit/credit, recent timestamp (< 15 mins)
+            if (t.timestamp != null) {
+              final hasRecentMatch = txs.any((f) {
+                final amountMatches = (f.amount - t.amount).abs() < 0.001;
+                final creditMatches = f.isCredit == t.isCredit;
+                final timeMatches = f.timestamp == null ||
+                    f.timestamp!.difference(t.timestamp!).inMinutes.abs() < 15;
+                return amountMatches && creditMatches && timeMatches;
+              });
+              if (hasRecentMatch) return false;
+            }
+            return true;
+          }).toList();
           _transactions.clear();
           _transactions.addAll([...localUnsynced, ...txs]);
         }
@@ -394,6 +446,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       sourceCategory = 'PayPink Account';
     }
 
+    // Check if the transfer is between the user's OWN accounts
+    final ownAccounts = _userProfile?.accounts ?? [];
+    final ownAccountNumbers = ownAccounts.map((a) => a.accountNumber.replaceAll(RegExp(r'\D'), '')).toSet();
+    final isOwnAccountTransfer = ownAccountNumbers.contains(destClean);
+
     // 1. Immediate in-memory optimistic balance mutation (sender debited, receiver credited if owned)
     if (_userProfile != null && _userProfile!.accounts.isNotEmpty) {
       final srcClean = source.replaceAll(RegExp(r'\D'), '');
@@ -409,8 +466,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           );
         }
 
-        // Credit receiver account if it belongs to user's own accounts
-        if (acctClean == destClean || acct.accountNumber == recipient || acct.accountId.toString() == recipient || (destClean.length >= 4 && acctClean.endsWith(destClean))) {
+        // Credit receiver account ONLY if it belongs to user's own accounts
+        if (isOwnAccountTransfer && (acctClean == destClean || acct.accountNumber == recipient || acct.accountId.toString() == recipient || (destClean.length >= 4 && acctClean.endsWith(destClean)))) {
           final newBal = acct.currentBalance + amount;
           return acct.copyWith(
             currentBalance: newBal,
@@ -425,24 +482,45 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       );
     }
 
-    final cleanRefId = refId.startsWith('TXN-')
+    final cleanRefId = (refId.isNotEmpty)
         ? refId
         : 'TXN-${DateTime.now().year}-${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}';
 
-    final isToSavings = recipient.toLowerCase().contains('saving') || destClean.startsWith('0011');
-    final isToChecking = recipient.toLowerCase().contains('checking') || destClean.startsWith('0013');
-
+    // Transaction title and credit leg determination
     String txTitle;
-    if (isToSavings) {
-      txTitle = 'Transfer to Savings';
-    } else if (isToChecking) {
-      txTitle = 'Transfer to Checking';
-    } else if (recipient.toLowerCase().contains('paypink')) {
-      final cleanRecipientName = recipient.split('·').first.split('(').first.trim();
-      txTitle = 'Transfer to $cleanRecipientName';
+    TransactionItem? creditTx;
+
+    if (isOwnAccountTransfer) {
+      final isToSavings = recipient.toLowerCase().contains('saving') || destClean.startsWith('0011');
+      final isToChecking = recipient.toLowerCase().contains('checking') || destClean.startsWith('0013');
+      if (isToSavings) {
+        txTitle = 'Transfer to Savings';
+      } else if (isToChecking) {
+        txTitle = 'Transfer to Checking';
+      } else {
+        txTitle = 'Transfer to Own Account';
+      }
+
+      creditTx = TransactionItem(
+        id: '$cleanRefId-CR',
+        title: 'Transfer from $sourceCategory',
+        date: dateStr,
+        account: '${isToSavings ? 'Savings' : 'Checking'} Account •••• ${destClean.length >= 4 ? destClean.substring(destClean.length - 4) : destClean}',
+        amount: amount,
+        isCredit: true,
+        transactionType: 'TRANSFER_IN',
+        counterparty: last4.isNotEmpty ? '$sourceCategory •••• $last4' : sourceCategory,
+        status: 'Completed',
+        timestamp: now,
+        sourceAccount: source,
+        recipientAccount: recipient,
+      );
     } else {
+      // External / P2P transfer — NO incoming credit leg should be created for sender
       final cleanRecipientName = recipient.split('·').first.split('(').first.trim();
-      txTitle = 'Transfer to ${cleanRecipientName.isNotEmpty ? cleanRecipientName : recipient}';
+      txTitle = cleanRecipientName.isNotEmpty && cleanRecipientName != destClean
+          ? 'Transfer to $cleanRecipientName'
+          : (recipient.toLowerCase().contains('paypink') ? 'Transfer to PayPink Recipient' : 'Transfer to $recipient');
     }
 
     final newTx = TransactionItem(
@@ -460,24 +538,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       recipientAccount: recipient,
     );
 
-    TransactionItem? creditTx;
-    if (isToSavings) {
-      creditTx = TransactionItem(
-        id: '$cleanRefId-CR',
-        title: 'Transfer from Checking',
-        date: dateStr,
-        account: 'Savings Account •••• ${destClean.length >= 4 ? destClean.substring(destClean.length - 4) : '3469'}',
-        amount: amount,
-        isCredit: true,
-        transactionType: 'TRANSFER_IN',
-        counterparty: last4.isNotEmpty ? '$sourceCategory •••• $last4' : sourceCategory,
-        status: 'Completed',
-        timestamp: now,
-        sourceAccount: source,
-        recipientAccount: recipient,
-      );
-    }
-
     setState(() {
       _transactions.removeWhere((t) => t.id == cleanRefId || t.id == '$cleanRefId-CR');
       if (creditTx != null) {
@@ -485,16 +545,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       }
       _transactions.insert(0, newTx);
 
-      _notifications.insert(
-        0,
-        {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'title': 'Transfer Successful',
-          'message': 'Sent ₱${amount.toStringAsFixed(2)} to $recipient. Ref: $cleanRefId',
-          'time': 'Just now',
-          'unread': true,
-        },
-      );
 
       _currentIndex = 0; // Return to Dashboard overview where Recent Activity is at the top
     });
@@ -502,97 +552,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     _triggerStatusToast('Sent ₱${amount.toStringAsFixed(2)} to $recipient', '✅');
 
     // Bypass client-side caching to retrieve fresh balances directly from Azure SQL
-    _loadLiveDatabaseData(preserveLocalTransactions: true, bypassCache: true);
-  }
-
-  void _handleTransactionReversal(TransactionItem tx) {
-    if (!tx.isReversible && tx.status.toUpperCase() == 'REVERSED') {
-      _triggerStatusToast('Transaction has already been reversed.', '⚠️');
-      return;
-    }
-
-    final refundAmount = tx.amount;
-    final now = DateTime.now();
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final hour = now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour);
-    final ampm = now.hour >= 12 ? 'PM' : 'AM';
-    final timeStr = '${hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} $ampm';
-    final dateStr = '${months[now.month - 1]} ${now.day}, ${now.year} · $timeStr';
-
-    // 1. Refund the debited source account in _userProfile
-    if (_userProfile != null && _userProfile!.accounts.isNotEmpty) {
-      final srcClean = (tx.sourceAccount ?? tx.account).replaceAll(RegExp(r'\D'), '');
-      final destClean = (tx.recipientAccount ?? tx.counterparty ?? '').replaceAll(RegExp(r'\D'), '');
-
-      final updatedAccounts = _userProfile!.accounts.map((acct) {
-        final acctClean = acct.accountNumber.replaceAll(RegExp(r'\D'), '');
-
-        // Refund sender account
-        if (acctClean == srcClean || (acct.last4.isNotEmpty && srcClean.contains(acct.last4)) || acctClean.endsWith(acct.last4)) {
-          return acct.copyWith(
-            currentBalance: acct.currentBalance + refundAmount,
-          );
-        }
-
-        // If target was owned account, revert the credit
-        if (destClean.isNotEmpty && (acctClean == destClean || (acct.last4.isNotEmpty && destClean.contains(acct.last4)))) {
-          return acct.copyWith(
-            currentBalance: (acct.currentBalance - refundAmount).clamp(0.0, double.infinity),
-          );
-        }
-
-        return acct;
-      }).toList();
-
-      _userProfile = _userProfile!.copyWith(accounts: updatedAccounts);
-    }
-
-    // 2. Mark original transaction as REVERSED
-    setState(() {
-      final idx = _transactions.indexWhere((t) => t.id == tx.id);
-      if (idx != -1) {
-        _transactions[idx] = tx.copyWith(
-          status: 'REVERSED',
-        );
-      }
-
-      // If there was an internal companion credit, mark it reversed too
-      final crIdx = _transactions.indexWhere((t) => t.id == '${tx.id}-CR');
-      if (crIdx != -1) {
-        _transactions[crIdx] = _transactions[crIdx].copyWith(status: 'REVERSED');
-      }
-
-      // 3. Prepend an explicit Reversal credit entry to activity
-      final reversalCreditTx = TransactionItem(
-        id: 'REV-${tx.id}',
-        title: 'Reversal: ${tx.title}',
-        date: dateStr,
-        account: tx.account,
-        amount: refundAmount,
-        isCredit: true,
-        transactionType: 'TRANSFER_IN',
-        counterparty: 'PayPink 15-Min Reversal Service',
-        status: 'Completed',
-        timestamp: now,
-        sourceAccount: 'PayPink Reversal System',
-        recipientAccount: tx.account,
-      );
-      _transactions.insert(0, reversalCreditTx);
-
-      // 4. Add notification
-      _notifications.insert(
-        0,
-        {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'title': 'Transfer Reversed',
-          'message': '₱${refundAmount.toStringAsFixed(2)} has been refunded to ${tx.account}. Ref: REV-${tx.id}',
-          'time': 'Just now',
-          'unread': true,
-        },
-      );
-    });
-
-    _triggerStatusToast('Transfer reversed! ₱${refundAmount.toStringAsFixed(2)} refunded to ${tx.account}', '↩');
+    _loadLiveDatabaseData(preserveLocalTransactions: false, bypassCache: true);
   }
 
   void _handleLoanPaymentSuccess(double amount, String fundingAccount, String loanAccount) {
@@ -642,35 +602,28 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
     setState(() {
       _transactions.insert(0, newTx);
-      _notifications.insert(
-        0,
-        {
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'title': 'Loan Payment Received',
-          'message': '₱${amount.toStringAsFixed(2)} applied toward personal loan balance.',
-          'time': 'Just now',
-          'unread': true,
-        },
-      );
       _currentIndex = 0;
     });
 
     _triggerStatusToast('Loan payment of ₱${amount.toStringAsFixed(2)} processed!', '💳');
-    _loadLiveDatabaseData(preserveLocalTransactions: true, bypassCache: true);
+    _loadLiveDatabaseData(preserveLocalTransactions: false, bypassCache: true);
   }
 
   void _markAllNotificationsRead() {
     setState(() {
-      for (var n in _notifications) {
-        n['unread'] = false;
-      }
+      _readNotificationIds.addAll(_notifications.map((n) => n['id'] as String));
+      _rebuildNotifications();
     });
+    _persistNotificationState();
   }
 
-  void _dismissNotification(int id) {
+  void _dismissNotification(String id) {
     setState(() {
-      _notifications.removeWhere((n) => n['id'] == id);
+      _readNotificationIds.add(id);
+      _hiddenNotificationIds.add(id);
+      _rebuildNotifications();
     });
+    _persistNotificationState();
   }
 
   @override
@@ -698,7 +651,6 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         accounts: _userProfile?.accounts,
         totalBalance: _userProfile?.totalBalance,
         onLoanPaymentSuccess: _handleLoanPaymentSuccess,
-        onReverseTransaction: _handleTransactionReversal,
         onRefreshData: () => _loadLiveDatabaseData(bypassCache: true),
       ),
       AccountsScreen(
@@ -720,7 +672,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         transactions: _transactions,
         customerName: resolvedFullName,
         primaryAccountNumber: primaryAccountNum,
-        onReverseTransaction: _handleTransactionReversal,
+        accounts: _userProfile?.accounts ?? const [],
       ),
     ];
 
@@ -732,7 +684,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 440),
           child: Scaffold(
-            extendBody: true,
+            extendBody: false,
             backgroundColor: Colors.transparent,
             body: SafeArea(
               bottom: false,
@@ -829,7 +781,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                                 child: Text(
                                   _avatarInitials,
                                   style: PayPinkTheme.display(
-                                    fontSize: 10.5,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w800,
                                     color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                   ),
@@ -850,7 +802,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               ),
             ),
 
-            // Dynamic Glassmorphism Floating Bottom Navigation Bar
+            // Bottom tab bar
             bottomNavigationBar: _buildDynamicBottomBar(),
           ),
         ),
@@ -858,46 +810,26 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     );
   }
 
+  // Matches the web's phone tab bar (bank.css @media max-width:680px .sidebar):
+  // flat surface, top hairline, icon over an always-visible label, tinted active tab.
   Widget _buildDynamicBottomBar() {
     final isDark = widget.isDarkMode;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDark ? PayPinkTheme.darkGlassCardBg : Colors.white.withValues(alpha: 0.84),
-              borderRadius: BorderRadius.circular(32),
-              border: Border.all(
-                color: isDark ? PayPinkTheme.darkGlassBorder : Colors.white.withValues(alpha: 0.95),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: (isDark ? Colors.black : PayPinkTheme.wine).withValues(alpha: isDark ? 0.35 : 0.12),
-                  blurRadius: 28,
-                  offset: const Offset(0, 10),
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildDynamicNavItem(0, Icons.grid_view_rounded, 'Overview'),
-                _buildDynamicNavItem(1, Icons.account_balance_wallet_rounded, 'Accounts'),
-                _buildDynamicNavItem(2, Icons.swap_horiz_rounded, 'Transfer'),
-                _buildDynamicNavItem(3, Icons.receipt_long_rounded, 'Activity'),
-              ],
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? PayPinkTheme.darkPaper : Colors.white,
+        border: Border(top: BorderSide(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          child: Row(
+            children: [
+              _buildDynamicNavItem(0, Icons.home_outlined, 'Overview'),
+              _buildDynamicNavItem(1, Icons.account_balance_wallet_outlined, 'Accounts'),
+              _buildDynamicNavItem(2, Icons.swap_horiz_rounded, 'Transfer'),
+              _buildDynamicNavItem(3, Icons.receipt_long_outlined, 'Activity'),
+            ],
           ),
         ),
       ),
@@ -907,61 +839,46 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   Widget _buildDynamicNavItem(int index, IconData icon, String label) {
     final isSelected = _currentIndex == index;
     final isDark = widget.isDarkMode;
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        setState(() => _currentIndex = index);
-      },
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOutCubic,
-        padding: EdgeInsets.symmetric(
-          horizontal: isSelected ? 15 : 10,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (isDark ? PayPinkTheme.wineLight : PayPinkTheme.wine)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: PayPinkTheme.wine.withValues(alpha: isDark ? 0.45 : 0.28),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 20,
+    final activeColor = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+    final idleColor = isDark ? PayPinkTheme.darkMuted : const Color(0xFF867B84);
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: label,
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            setState(() => _currentIndex = index);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(
               color: isSelected
-                  ? Colors.white
-                  : (isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted),
+                  ? (isDark ? PayPinkTheme.wine.withValues(alpha: 0.35) : const Color(0xFFF6EAF0))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
             ),
-            AnimatedCrossFade(
-              firstChild: Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: Text(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 21, color: isSelected ? activeColor : idleColor),
+                const SizedBox(height: 3),
+                Text(
                   label,
                   style: PayPinkTheme.body(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? activeColor : idleColor,
                   ),
                 ),
-              ),
-              secondChild: const SizedBox.shrink(),
-              crossFadeState: isSelected ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-              duration: const Duration(milliseconds: 200),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

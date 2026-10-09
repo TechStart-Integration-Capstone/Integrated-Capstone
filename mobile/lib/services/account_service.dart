@@ -30,6 +30,15 @@ class BankAccount {
   final String? repaymentAccountNumber;
   final double? penaltyDue;
   final int? termMonths;
+  /// Amount of the last nightly auto-debit that failed for lack of funds, while that
+  /// failure still applies (same rule as the web `missedAutoDebit` in loans.js).
+  final double? missedAutoDebitAmount;
+  final String? missedAutoDebitDate;
+  /// Loans only, from the repayment schedule: installments not yet fully paid, all installments,
+  /// and the full payoff amount (penalty + every unpaid installment), the most one repayment can be.
+  final int? paymentsRemaining;
+  final int? paymentsTotal;
+  final double? payoffAmount;
 
   BankAccount({
     required this.accountId,
@@ -46,7 +55,48 @@ class BankAccount {
     this.repaymentAccountNumber,
     this.penaltyDue,
     this.termMonths,
+    this.missedAutoDebitAmount,
+    this.missedAutoDebitDate,
+    this.paymentsRemaining,
+    this.paymentsTotal,
+    this.payoffAmount,
   });
+
+  bool get hasMissedAutoDebit => isLoan && missedAutoDebitAmount != null;
+
+  /// e.g. "8 of 12 monthly payments left"; null until the schedule is known.
+  String? get paymentsLeftLabel {
+    final left = paymentsRemaining, total = paymentsTotal;
+    if (left == null || total == null || total == 0) return null;
+    return '$left of $total monthly ${total == 1 ? 'payment' : 'payments'} left';
+  }
+
+  /// Copy with figures derived from the loan's repayment schedule.
+  BankAccount withSchedule(List<LoanInstallment> rows) {
+    final unpaid = rows.where((r) => !r.isPaid);
+    final owedCents = ((penaltyDue ?? 0) * 100).round() + unpaid.fold<int>(0, (sum, r) => sum + (r.remaining * 100).round());
+    return BankAccount(
+      accountId: accountId,
+      accountNumber: accountNumber,
+      accountType: accountType,
+      currency: currency,
+      currentBalance: currentBalance,
+      status: status,
+      outstandingDebt: outstandingDebt,
+      minimumPayment: minimumPayment,
+      dueDate: dueDate,
+      interestRate: interestRate,
+      loanId: loanId,
+      repaymentAccountNumber: repaymentAccountNumber,
+      penaltyDue: penaltyDue,
+      termMonths: termMonths,
+      missedAutoDebitAmount: missedAutoDebitAmount,
+      missedAutoDebitDate: missedAutoDebitDate,
+      paymentsRemaining: unpaid.length,
+      paymentsTotal: rows.length,
+      payoffAmount: owedCents / 100,
+    );
+  }
 
   bool get isChecking =>
       accountType.contains('CHECKING') || accountType.contains('EVERYDAY');
@@ -149,6 +199,11 @@ class BankAccount {
       repaymentAccountNumber: repaymentAccountNumber ?? this.repaymentAccountNumber,
       penaltyDue: penaltyDue ?? this.penaltyDue,
       termMonths: termMonths ?? this.termMonths,
+      missedAutoDebitAmount: missedAutoDebitAmount,
+      missedAutoDebitDate: missedAutoDebitDate,
+      paymentsRemaining: paymentsRemaining,
+      paymentsTotal: paymentsTotal,
+      payoffAmount: payoffAmount,
     );
   }
 
@@ -199,6 +254,19 @@ class BankAccount {
     final outstanding = _toDouble(json['outstandingPrincipal']) ?? 0.0;
     final penalty = _toDouble(json['penaltyDue']) ?? 0.0;
     final nextAmount = _toDouble(nextDue?['amount']);
+    final status = json['status']?.toString() ?? 'ACTIVE';
+
+    // Installments are collected by the nightly EOD job. A short balance leaves the loan
+    // flagged INSUFFICIENT_FUNDS until the amount is paid. Mirrors web loans.js missedAutoDebit().
+    final last = json['lastAutoDebit'] is Map ? json['lastAutoDebit'] as Map : null;
+    final lastDate = last?['date']?.toString();
+    final nextDueDate = nextDue?['dueDate']?.toString();
+    final missed = last != null &&
+        last['status']?.toString() == 'INSUFFICIENT_FUNDS' &&
+        status != 'CLOSED' &&
+        (status == 'OVERDUE' ||
+            penalty > 0 ||
+            (nextDueDate != null && lastDate != null && nextDueDate.compareTo(lastDate) <= 0));
 
     return BankAccount(
       accountId: loanId ?? 0,
@@ -206,7 +274,7 @@ class BankAccount {
       accountType: 'LOAN_ACCOUNT',
       currency: 'PHP',
       currentBalance: outstanding,
-      status: json['status']?.toString() ?? 'ACTIVE',
+      status: status,
       outstandingDebt: outstanding,
       // Same suggestion as the web app: next installment plus any late penalty.
       minimumPayment: nextAmount == null ? (penalty > 0 ? penalty : null) : nextAmount + penalty,
@@ -216,6 +284,8 @@ class BankAccount {
       repaymentAccountNumber: json['accountNo']?.toString(),
       penaltyDue: penalty,
       termMonths: int.tryParse(json['termMonths']?.toString() ?? ''),
+      missedAutoDebitAmount: missed ? _toDouble(last['amount']) : null,
+      missedAutoDebitDate: missed ? formatDueDate(lastDate) : null,
     );
   }
 }
@@ -558,24 +628,33 @@ class AccountService {
 
   /// GET /api/v1/loans — the customer's active and overdue loans. Returns an empty list on failure
   /// so deposit accounts still load; a loan is never invented.
-  static Future<List<BankAccount>> fetchLoans() async {
+  static Future<List<BankAccount>> fetchLoans() async => await fetchLoansOrNull() ?? [];
+
+  /// Like [fetchLoans], but returns null when loans could not be loaded, so callers can
+  /// tell "no loans" from "couldn't reach the bank" and keep what they already show.
+  static Future<List<BankAccount>?> fetchLoansOrNull() async {
     try {
       final resp = await _api.get('/loans');
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
         if (data is List) {
-          return data
+          final loans = data
               .whereType<Map<String, dynamic>>()
               .where((l) => const ['ACTIVE', 'OVERDUE'].contains(l['status']?.toString().toUpperCase()))
               .map(BankAccount.fromLoanJson)
               .where((l) => l.loanId != null)
               .toList();
+          // Attach payments left and the payoff total from each loan's schedule (same as the web).
+          return await Future.wait(loans.map((loan) async {
+            final rows = await fetchLoanSchedule(loan);
+            return rows == null ? loan : loan.withSchedule(rows);
+          }));
         }
       }
     } catch (e) {
       debugPrint('[AccountService] fetchLoans error: $e');
     }
-    return [];
+    return null;
   }
 
   /// GET /api/v1/loans/{loanId}/schedule. Returns null if the schedule cannot be loaded.
@@ -726,7 +805,7 @@ class AccountService {
 
       if (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 202) {
         final data = jsonDecode(response.body);
-        final ref = data['reference'] ?? data['referenceId'] ?? data['transactionId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+        final ref = data['referenceNo'] ?? data['reference'] ?? data['referenceId'] ?? data['transactionId']?.toString() ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
         return TransferReceipt(
           success: true,
           referenceId: ref.toString(),
@@ -918,7 +997,6 @@ class AccountService {
         results = results.where((tx) {
           if (ft == 'CREDIT' || ft == 'IN') return tx.isCredit;
           if (ft == 'DEBIT' || ft == 'OUT') return !tx.isCredit;
-          if (ft == 'REVERSAL') return tx.status.toUpperCase() == 'REVERSED' || tx.status.toLowerCase().contains('refund');
           if (ft == 'CHECKING') return tx.isCheckingRelated;
           if (ft == 'SAVINGS') return tx.isSavingsRelated;
           if (ft == 'PAYPINK') return tx.isPayPinkRelated;
@@ -958,7 +1036,7 @@ class AccountService {
       final rawType = item['transactionType']?.toString().toUpperCase() ?? item['type']?.toString().toUpperCase() ?? '';
       final isCredit = op == 'CREDIT' || rawType == 'CREDIT' || rawType.contains('IN') || rawType == 'DEPOSIT' || rawType == 'WELCOME_GIFT' || rawType == 'LOAN_DISBURSEMENT';
 
-      final ref = item['reference'] ?? item['referenceNo'] ?? item['id'] ?? item['transactionId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+      final ref = item['reference'] ?? item['referenceNo'] ?? item['id']?.toString() ?? item['transactionId']?.toString() ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
       final status = item['status']?.toString().toUpperCase() ?? 'COMPLETED';
       final acct = item['accountNumber']?.toString() ?? '';
       final last4 = acct.length >= 4 ? acct.substring(acct.length - 4) : acct;
@@ -973,14 +1051,15 @@ class AccountService {
       }
 
       DateTime? parsedTime;
-      if (item['transactionDate'] != null) {
-        parsedTime = DateTime.tryParse(item['transactionDate'].toString());
-      } else if (item['date'] != null) {
-        parsedTime = DateTime.tryParse(item['date'].toString());
-      } else if (item['createdAt'] != null) {
-        parsedTime = DateTime.tryParse(item['createdAt'].toString());
-      } else if (item['timestamp'] != null) {
-        parsedTime = DateTime.tryParse(item['timestamp'].toString());
+      final rawDate = (item['transactionDate'] ?? item['date'] ?? item['createdAt'] ?? item['timestamp'])?.toString();
+      if (rawDate != null && rawDate.isNotEmpty) {
+        // Azure SQL / Spring Boot returns ISO-8601 UTC timestamps without timezone offset (e.g. "2026-10-09T10:24:13.4268199").
+        // If no timezone suffix exists, append 'Z' so DateTime treats it as UTC, then convert toLocal() for Asia/Manila (PHT).
+        String normalizedDate = rawDate;
+        if (!normalizedDate.contains('Z') && !normalizedDate.contains('+') && !RegExp(r'-\d{2}:\d{2}$').hasMatch(normalizedDate)) {
+          normalizedDate = '${normalizedDate}Z';
+        }
+        parsedTime = DateTime.tryParse(normalizedDate)?.toLocal() ?? DateTime.tryParse(rawDate)?.toLocal();
       }
 
       String date = 'Recent';
@@ -999,6 +1078,11 @@ class AccountService {
       final cpName = item['counterpartyName']?.toString() ?? item['recipientName']?.toString();
       final cpAcct = item['counterpartyAccountNumber']?.toString() ?? item['destinationAccount']?.toString() ?? item['recipient']?.toString();
 
+      final cpAcctClean = cpAcct?.replaceAll(RegExp(r'\D'), '') ?? '';
+      final isOwnAccount = cpAcctClean.startsWith('0011') || cpAcctClean.startsWith('0013') || cpAcctClean.startsWith('0019');
+      final isChecking = cpAcctClean.startsWith('0013') || (cpAcct?.toLowerCase().contains('check') ?? false);
+      final isSavings = cpAcctClean.startsWith('0011') || (cpAcct?.toLowerCase().contains('sav') ?? false);
+
       String title = item['title']?.toString() ?? '';
       if (title.isEmpty) {
         if (rawType == 'WELCOME_GIFT' || op == 'WELCOME_GIFT') {
@@ -1007,6 +1091,12 @@ class AccountService {
           title = 'Personal Loan Disbursement';
         } else if (rawType == 'LOAN_REPAYMENT') {
           title = 'Personal Loan Repayment';
+        } else if (isOwnAccount) {
+          if (isCredit) {
+            title = isSavings ? 'Transfer from Savings Account' : (isChecking ? 'Transfer from Checking Account' : 'Transfer from Own Account');
+          } else {
+            title = isChecking ? 'Transfer to Checking Account' : (isSavings ? 'Transfer to Savings Account' : 'Transfer to Own Account');
+          }
         } else if (isCredit) {
           title = (cpName != null && cpName.isNotEmpty) ? 'Transfer from $cpName' : 'Received Funds';
         } else {
@@ -1015,7 +1105,11 @@ class AccountService {
       }
 
       String? counterpartyDisplay;
-      if (cpName != null && cpName.isNotEmpty) {
+      if (isOwnAccount) {
+        final targetType = isChecking ? 'Checking Account' : (isSavings ? 'Savings Account' : 'Own Account');
+        final cpLast4 = cpAcctClean.length >= 4 ? cpAcctClean.substring(cpAcctClean.length - 4) : cpAcctClean;
+        counterpartyDisplay = cpLast4.isNotEmpty ? '$targetType (•••• $cpLast4)' : targetType;
+      } else if (cpName != null && cpName.isNotEmpty) {
         if (cpAcct != null && cpAcct.isNotEmpty) {
           final cpLast4 = cpAcct.length >= 4 ? cpAcct.substring(cpAcct.length - 4) : cpAcct;
           counterpartyDisplay = '$cpName (•••• $cpLast4)';
@@ -1035,7 +1129,7 @@ class AccountService {
         isCredit: isCredit,
         transactionType: rawType,
         counterparty: counterpartyDisplay,
-        status: status.contains('FAIL') ? 'FAILED' : (status.contains('PEND') ? 'PENDING' : (status.contains('REV') ? 'REVERSED' : 'Completed')),
+        status: status.contains('FAIL') ? 'FAILED' : (status.contains('PEND') ? 'PENDING' : (status.contains('PROCESS') ? 'PROCESSING' : (status.contains('CANC') ? 'CANCELLED' : (status.contains('REV') ? 'REVERSED' : 'Completed')))),
         timestamp: parsedTime,
         sourceAccount: item['sourceAccount']?.toString() ?? item['accountNumber']?.toString() ?? acct,
         recipientAccount: cpAcct ?? cpName,

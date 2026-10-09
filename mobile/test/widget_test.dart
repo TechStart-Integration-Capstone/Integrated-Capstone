@@ -7,6 +7,10 @@ import 'package:paypink_mobile/services/account_service.dart';
 import 'package:paypink_mobile/screens/transactions_screen.dart';
 import 'package:paypink_mobile/widgets/dynamic_card_deck.dart';
 import 'package:paypink_mobile/widgets/paypink_logo.dart';
+import 'package:paypink_mobile/widgets/bottom_sheets.dart';
+import 'package:paypink_mobile/widgets/profile_sheet.dart';
+import 'package:paypink_mobile/screens/remittance_screen.dart';
+import 'package:paypink_mobile/services/secure_token_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -26,9 +30,11 @@ void main() {
 
     // Verify Login Screen elements
     expect(find.textContaining('PayPink'), findsWidgets);
-    expect(find.text('Sign In'), findsWidgets);
-    expect(find.text('Register'), findsOneWidget);
-    expect(find.text('Username or Account Number'), findsOneWidget);
+    expect(find.text('Welcome back.'), findsOneWidget);
+    expect(find.text('Log in'), findsOneWidget);
+    expect(find.text('Open an account'), findsOneWidget);
+    expect(find.text('Username'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
   });
 
   testWidgets('PayPink Mobile App authenticated mode renders overview and navigation', (WidgetTester tester) async {
@@ -129,15 +135,12 @@ void main() {
 
     // Verify card face and value swap
     expect(find.text('LEVI VIERNES'), findsWidgets);
-    expect(find.text('Freeze'), findsOneWidget);
     expect(find.text('Details'), findsOneWidget);
     expect(find.text('Pay & Send'), findsOneWidget);
 
-    // Tap Freeze and verify toggle to Unfreeze
-    await tester.tap(find.text('Freeze'));
-    await tester.pumpAndSettle();
-    expect(find.text('Unfreeze'), findsOneWidget);
-    expect(find.text('LOCKED'), findsOneWidget);
+    // Freeze is server-controlled: there is no local toggle, and an ACTIVE account shows ACTIVE.
+    expect(find.text('Freeze'), findsNothing);
+    expect(find.text('ACTIVE'), findsOneWidget);
   });
 
   testWidgets('TransactionsScreen displays connected account history, PayPink filter, and transaction items', (WidgetTester tester) async {
@@ -176,5 +179,209 @@ void main() {
     expect(find.text('Recipient: Carlos Mendoza · PayPink (•••• 5678)'), findsOneWidget);
     expect(find.text('-₱1500.00'), findsOneWidget);
     expect(find.text('PayPink'), findsOneWidget);
+  });
+
+  testWidgets('TransactionsScreen deduplicates duplicate transactions with identical ID and direction', (WidgetTester tester) async {
+    final tx1 = TransactionItem(
+      id: 'TXN-DUPLICATE-1',
+      title: 'Transfer to Aly Rosales',
+      date: 'Today · 2:00 PM',
+      account: 'Everyday Checking •••• 2611',
+      amount: 250.00,
+      isCredit: false,
+      counterparty: 'Aly Rosales',
+      sourceAccount: '001373612611',
+      recipientAccount: '001142169612',
+      timestamp: DateTime.now(),
+    );
+    final tx2 = tx1.copyWith(); // duplicate item
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransactionsScreen(
+            transactions: [tx1, tx2],
+            customerName: 'Levi Viernes',
+            primaryAccountNumber: '001373612611',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify exactly ONE item is rendered, not two
+    expect(find.text('Transfer to Aly Rosales'), findsOneWidget);
+    expect(find.text('-₱250.00'), findsOneWidget);
+  });
+
+  testWidgets('TransactionsScreen drops optimistic transaction when authoritative server transaction is present', (WidgetTester tester) async {
+    final now = DateTime.now();
+    final optimisticTx = TransactionItem(
+      id: 'TX-PH-ABCD1234',
+      title: 'Transfer to Checking Account',
+      date: 'Today · 6:24 PM',
+      account: 'Savings Account •••• 2613',
+      amount: 10.00,
+      isCredit: false,
+      counterparty: 'Checking Account (•••• 2611)',
+      sourceAccount: '001173612613',
+      recipientAccount: '001373612611',
+      timestamp: now,
+    );
+    final serverTx = TransactionItem(
+      id: 'PP-20261009-000000000044',
+      title: 'Transfer to Checking Account',
+      date: 'Today · 6:24 PM',
+      account: 'Savings •••• 2613',
+      amount: 10.00,
+      isCredit: false,
+      counterparty: 'Checking Account (•••• 2611)',
+      sourceAccount: '001173612613',
+      recipientAccount: '001373612611',
+      timestamp: now.subtract(const Duration(seconds: 2)),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TransactionsScreen(
+            transactions: [optimisticTx, serverTx],
+            customerName: 'Levi Viernes',
+            primaryAccountNumber: '001373612611',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify only the server transaction is shown (single item rendered, no duplicate)
+    expect(find.text('Transfer to Checking Account'), findsOneWidget);
+    expect(find.text('-₱10.00'), findsOneWidget);
+  });
+
+  testWidgets('ProfileSheet toggles theme mode immediately in modal and parent', (WidgetTester tester) async {
+    bool themeToggled = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.light(),
+        darkTheme: ThemeData.dark(),
+        themeMode: ThemeMode.light,
+        home: Scaffold(
+          body: ProfileSheet(
+            currentUser: 'Aly Rosales',
+            isDarkMode: false,
+            onToggleTheme: () {
+              themeToggled = true;
+            },
+            onLogout: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Light Mode Active'), findsOneWidget);
+
+    // Toggle switch
+    final switchFinder = find.byType(Switch);
+    expect(switchFinder, findsOneWidget);
+    await tester.ensureVisible(switchFinder);
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
+
+    expect(themeToggled, isTrue);
+    expect(find.text('Dark Mode Active'), findsOneWidget);
+  });
+
+  testWidgets('PayPinkBottomSheets.showNotificationsDrawer renders many notifications without overflow', (WidgetTester tester) async {
+    final notifs = List.generate(
+      15,
+      (i) => {
+        'id': 'notif-$i',
+        'title': 'Money received #$i',
+        'message': '₱1,000.00 from Sender #$i was credited to your account.',
+        'time': 'Oct 9, 2026 · 10:24 AM',
+        'unread': i % 2 == 0,
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () {
+                PayPinkBottomSheets.showNotificationsDrawer(
+                  ctx,
+                  notifications: notifs,
+                  onMarkAllRead: () {},
+                  onDismiss: (_) {},
+                );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    // Verify modal is open and first notification is rendered with no RenderFlex overflow
+    expect(find.text('In-App Notifications'), findsOneWidget);
+    expect(find.text('Money received #0'), findsOneWidget);
+    expect(find.text('Close Notifications'), findsOneWidget);
+  });
+
+  test('SecureTokenStorage caches and retrieves favorites list across sessions', () async {
+    final sampleFavs = [
+      {'name': 'Aly Rosales', 'number': '001142169612', 'avatar': 'AR', 'bank': 'PayPink'},
+      {'name': 'Francis Marasigan', 'number': '001152494553', 'avatar': 'FM', 'bank': 'PayPink'},
+    ];
+
+    await SecureTokenStorage.saveFavoritesCache(sampleFavs);
+    final retrieved = await SecureTokenStorage.getFavoritesCache();
+
+    expect(retrieved.length, equals(2));
+    expect(retrieved.first['name'], equals('Aly Rosales'));
+    expect(retrieved.first['number'], equals('001142169612'));
+  });
+
+  testWidgets('RemittanceScreen loads and displays persistent favorites', (WidgetTester tester) async {
+    final sampleFavs = [
+      {'name': 'Aly Rosales', 'number': '001142169612', 'avatar': 'AR', 'bank': 'PayPink'},
+    ];
+    await SecureTokenStorage.saveFavoritesCache(sampleFavs);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RemittanceScreen(
+            onTransferSuccess: (_, __, ___, ____) {},
+            accounts: [
+              BankAccount(
+                accountId: 1,
+                accountNumber: '001181233469',
+                accountType: 'CHECKING_ACCOUNT',
+                currency: 'PHP',
+                currentBalance: 50000.0,
+                status: 'ACTIVE',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    // Switch to 'Another PayPink' transfer tab where PayPink favorites are displayed
+    await tester.tap(find.text('Another PayPink'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Favorites'), findsOneWidget);
+    expect(find.text('Aly'), findsOneWidget);
   });
 }

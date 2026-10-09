@@ -59,7 +59,7 @@ class PayPinkBottomSheets {
               const SizedBox(height: 8),
               Text(
                 'Savings earn 1% below ₱1,000, 2.5% below ₱10,000 and 4% from ₱10,000, on the whole balance. Interest accrues daily and is added on the last day of each month.',
-                style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted, height: 1.4),
+                style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted, height: 1.4),
               ),
             ],
             const SizedBox(height: 20),
@@ -168,6 +168,10 @@ class PayPinkBottomSheets {
               _DetailRow(label: 'Annual Interest Rate', value: '${loan.interestRate!.toStringAsFixed(2)}% p.a.'),
             if (loan.termMonths != null)
               _DetailRow(label: 'Term', value: '${loan.termMonths} months'),
+            if (loan.paymentsRemaining != null && loan.paymentsTotal != null)
+              _DetailRow(label: 'Payments Left', value: '${loan.paymentsRemaining} of ${loan.paymentsTotal}', isBold: true),
+            if (loan.payoffAmount != null)
+              _DetailRow(label: 'Total to Pay Off', value: formatPeso(loan.payoffAmount!)),
             if (loan.repaymentAccountNumber != null)
               _DetailRow(label: 'Auto-debit From', value: loan.repaymentAccountNumber!, isMono: true),
             const SizedBox(height: 20),
@@ -293,7 +297,7 @@ class PayPinkBottomSheets {
                 children: [
                   Text(
                     'Save your frequent payees as Favorites for quick and secure 1-tap remittances.',
-                    style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted),
+                    style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.muted),
                   ),
                   const SizedBox(height: 14),
 
@@ -510,9 +514,6 @@ class PayPinkBottomSheets {
     String? account,
     String? counterparty,
     String? status,
-    bool canReverse = false,
-    int reversalMinutesRemaining = 0,
-    VoidCallback? onReverse,
   }) {
     final isReversed = status?.toUpperCase() == 'REVERSED' || status == 'Refunded';
 
@@ -559,55 +560,6 @@ class PayPinkBottomSheets {
                 ),
               ),
               const SizedBox(height: 16),
-              if (!isCredit && !isReversed) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: PayPinkTheme.pinkSubtle,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: PayPinkTheme.pink.withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Request Reversal / Dispute',
-                              style: PayPinkTheme.display(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '15-min instant window closed. Open a support dispute investigation.',
-                              style: PayPinkTheme.body(fontSize: 9.5, color: PayPinkTheme.muted),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: PayPinkTheme.wine,
-                              content: Text('Reversal ticket #REV-${refId.replaceAll(RegExp(r"\D"), "")} filed with PayPink 24/7 Support.'),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.support_agent_rounded, size: 15, color: PayPinkTheme.wine),
-                        label: Text(
-                          'Request',
-                          style: PayPinkTheme.body(fontSize: 11, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
 
               // Real-Time Transaction Monitoring / Lifecycle Stepper
               Container(
@@ -623,7 +575,7 @@ class PayPinkBottomSheets {
                   children: [
                     Text(
                       'TRANSACTION STATUS',
-                      style: PayPinkTheme.mono(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                      style: PayPinkTheme.eyebrow(fontSize: 10, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
                     ),
                     const SizedBox(height: 10),
                     _buildLifecycleStep(1, 'Request Submitted', 'Payment request processed securely', isDone: true),
@@ -756,7 +708,7 @@ Thank you for banking with PayPink!
               ),
               Text(
                 desc,
-                style: PayPinkTheme.body(fontSize: 9, color: PayPinkTheme.muted),
+                style: PayPinkTheme.body(fontSize: 10, color: PayPinkTheme.muted),
               ),
               const SizedBox(height: 4),
             ],
@@ -770,122 +722,149 @@ Thank you for banking with PayPink!
     BuildContext context, {
     required List<Map<String, dynamic>> notifications,
     required VoidCallback onMarkAllRead,
-    required Function(int) onDismiss,
+    required Function(String) onDismiss,
   }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setSheetState) => _SheetContainer(
-          title: 'In-App Notifications',
-          trailing: TextButton(
-            onPressed: () {
-              onMarkAllRead();
-              setSheetState(() {});
-            },
-            child: Text(
-              'Mark all read',
-              style: PayPinkTheme.body(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: PayPinkTheme.wine,
-              ),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (notifications.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 30),
-                  child: Text(
-                    'No notifications at this time.',
-                    style: PayPinkTheme.body(color: PayPinkTheme.muted, fontSize: 13),
-                  ),
-                )
-              else
-                ...notifications.map((n) {
-                  final unread = n['unread'] == true;
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: unread ? PayPinkTheme.pinkSubtle : Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: unread ? PayPinkTheme.pink : PayPinkTheme.line,
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: unread ? PayPinkTheme.wine : Colors.grey.shade200,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.notifications_rounded,
-                            color: unread ? Colors.white : PayPinkTheme.muted,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                n['title'] ?? '',
-                                style: PayPinkTheme.display(fontSize: 13, fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                n['message'] ?? '',
-                                style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                n['time'] ?? '',
-                                style: PayPinkTheme.body(fontSize: 9, color: PayPinkTheme.muted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            onDismiss(n['id']);
-                            setSheetState(() {});
-                          },
-                          child: const Padding(
-                            padding: EdgeInsets.all(4.0),
-                            child: Icon(Icons.close, size: 16, color: PayPinkTheme.muted),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: PayPinkTheme.wine,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: const Text('Close Notifications'),
+        builder: (context, setSheetState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+          final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+
+          return _SheetContainer(
+            title: 'In-App Notifications',
+            trailing: TextButton(
+              onPressed: () {
+                onMarkAllRead();
+                setSheetState(() {});
+              },
+              child: Text(
+                'Mark all read',
+                style: PayPinkTheme.body(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (notifications.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 30),
+                      child: Center(
+                        child: Text(
+                          'No notifications at this time.',
+                          style: PayPinkTheme.body(color: textMuted, fontSize: 13),
+                        ),
+                      ),
+                    )
+                  else
+                    ...notifications.map((n) {
+                      final unread = n['unread'] == true;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? (unread ? PayPinkTheme.wine.withValues(alpha: 0.25) : PayPinkTheme.darkCard)
+                              : (unread ? PayPinkTheme.pinkSubtle : Colors.white),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark
+                                ? (unread ? PayPinkTheme.pink : PayPinkTheme.darkLine)
+                                : (unread ? PayPinkTheme.pink : PayPinkTheme.line),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: unread
+                                    ? PayPinkTheme.wine
+                                    : (isDark ? Colors.white12 : Colors.grey.shade200),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.notifications_rounded,
+                                color: unread ? Colors.white : textMuted,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    n['title'] ?? '',
+                                    style: PayPinkTheme.display(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: textInk,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    n['message'] ?? '',
+                                    style: PayPinkTheme.body(
+                                      fontSize: 11,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    n['time'] ?? '',
+                                    style: PayPinkTheme.body(
+                                      fontSize: 10,
+                                      color: textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                onDismiss(n['id']);
+                                setSheetState(() {});
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(4.0),
+                                child: Icon(Icons.close, size: 16, color: textMuted),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: PayPinkTheme.wine,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Close Notifications'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -905,7 +884,7 @@ Thank you for banking with PayPink!
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _SheetContainer(
-        title: 'Customer 360 & Vault',
+        title: 'Security & device',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -939,7 +918,7 @@ Thank you for banking with PayPink!
             const SizedBox(height: 14),
             Text(
               'Your PayPink account is secured with end-to-end encryption, 6-digit MPIN authentication, and automated fraud monitoring.',
-              style: PayPinkTheme.body(fontSize: 11.5, color: PayPinkTheme.muted, height: 1.4),
+              style: PayPinkTheme.body(fontSize: 12, color: PayPinkTheme.muted, height: 1.4),
             ),
             const SizedBox(height: 14),
             const _DetailRow(label: 'Account Tier', value: 'Level 3 Fully Verified', valueColor: PayPinkTheme.green, isBold: true),
@@ -1181,7 +1160,7 @@ Thank you for banking with PayPink!
                   const Icon(Icons.qr_code_2_rounded, size: 120, color: PayPinkTheme.wine),
                   Text(
                     'PAYPINK·PH·5046',
-                    style: PayPinkTheme.mono(fontSize: 9, color: PayPinkTheme.muted),
+                    style: PayPinkTheme.mono(fontSize: 10, color: PayPinkTheme.muted),
                   ),
                 ],
               ),
@@ -1344,7 +1323,7 @@ class _DetailRow extends StatelessWidget {
                       color: valueColor ?? textInk,
                     )
                   : PayPinkTheme.body(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
                       color: valueColor ?? textInk,
                     ),

@@ -290,6 +290,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
                         if (widget.loanAccount.interestRate != null)
                           'Rate: ${widget.loanAccount.interestRate!.toStringAsFixed(2)}% p.a.',
                         if (_amountOwed != null) 'Total to pay off: ${formatPeso(_amountOwed!)}',
+                        if (widget.loanAccount.paymentsLeftLabel != null) widget.loanAccount.paymentsLeftLabel!,
                       ].join(' · '),
                       style: PayPinkTheme.body(fontSize: 11, color: textMuted),
                     ),
@@ -302,7 +303,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
               Text(
                 'Pay From',
                 style: PayPinkTheme.body(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: textInk,
                 ),
@@ -371,7 +372,7 @@ class _LoanPaymentSheetState extends State<LoanPaymentSheet> {
               Text(
                 'Payment Amount',
                 style: PayPinkTheme.body(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   color: textInk,
                 ),
