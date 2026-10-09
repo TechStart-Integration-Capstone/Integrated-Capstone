@@ -12,6 +12,8 @@
 - 2026-10-08 — Clean Architecture & BLoC Enterprise Mobile Refactoring: Added enterprise Flutter packages (`flutter_bloc`, `dio`, `get_it`, `encrypt`, `shimmer`) to `pubspec.yaml`; created 4-layer architecture structure (`core/network/dio_client.dart` with SSL Pinning & AES-256 E2EE, `core/security/secure_token_storage.dart`, `core/widgets/shimmer_skeleton.dart`, `core/widgets/state_matrix_container.dart`); built Clean Architecture domain/data/presentation modules for `auth`, `accounts`, `remittance`, and `transactions`; wired `GetIt` service locator container (`injection_container.dart`) and top-level `MultiBlocProvider` in `main.dart`. — [Antigravity]
 Newest first. One line per change: date, what changed, who.
 
+- 2026-10-09 — Azure Deployment Guide Teammate Onboarding & Access Documentation:
+  - **Deployment Guide (`docs/AZURE_DEPLOYMENT_GUIDE.md`):** Added a dedicated step-by-step onboarding guide for team members connecting to `vm-paypink`: NSG public IP whitelisting (`az network nsg rule create`), appending public SSH keys (`authorized_keys` / `az vm run-command invoke`), SSH connection commands, and local port forwarding tunnels for Grafana and API Gateway. — [levi]
 - 2026-10-09 — Azure Cloud SQL Hosted Database Alignment & Funds Transfer Resolution:
   - **Azure SQL Cloud PaaS Schema Alignment (`paypink-sql.database.windows.net`):**
     - Resolved Web Banking login 500 error by adding missing `roles` column (`NVARCHAR(255) NOT NULL DEFAULT 'ROLE_CUSTOMER,ROLE_RETAIL_USER'`) to `app.CUSTOMER` on the hosted Azure SQL Database.
