@@ -1,6 +1,7 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+﻿import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'api_config.dart';
+import 'api_client.dart';
 import 'secure_token_storage.dart';
 
 class AuthResult {
@@ -9,7 +10,8 @@ class AuthResult {
   final String? token;
   final String? username;
   final String? fullName;
-  final bool isOfflineFallback;
+  final int? customerId;
+  final int? statusCode;
 
   AuthResult({
     required this.success,
@@ -17,12 +19,16 @@ class AuthResult {
     this.token,
     this.username,
     this.fullName,
-    this.isOfflineFallback = false,
+    this.customerId,
+    this.statusCode,
   });
 }
 
 class AuthService {
-  /// Authenticates user against backend API Gateway or graceful fallback
+  static final ApiClient _api = ApiClient();
+
+  /// Authenticates user credentials strictly against the database via API Gateway.
+  /// Returns HTTP 401 with generic "Invalid username or password" on bad credentials or non-existent user.
   static Future<AuthResult> login({
     required String username,
     required String password,
@@ -33,72 +39,136 @@ class AuthService {
     if (cleanUsername.isEmpty || cleanPassword.isEmpty) {
       return AuthResult(
         success: false,
-        message: 'Please provide both username/email and password.',
+        message: 'Invalid username or password.',
+        statusCode: 400,
       );
     }
 
     try {
-      // 1. Primary endpoint: /api/v1/auth/banking/login via API Gateway
-      final url = Uri.parse('${ApiConfig.baseUrl}/auth/banking/login');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+      // 1. Primary endpoint: POST /api/v1/auth/login via API Gateway
+      final response = await _api.post(
+        ApiConfig.loginPath,
+        body: {
           'username': cleanUsername,
           'password': cleanPassword,
-        }),
-      ).timeout(ApiConfig.requestTimeout);
+        },
+        requiresAuth: false,
+      );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        final token = data['token'] as String? ?? 'jwt_${DateTime.now().millisecondsSinceEpoch}';
-        await SecureTokenStorage.saveToken(token);
-
-        return AuthResult(
-          success: true,
-          message: 'Welcome back, $cleanUsername!',
-          token: token,
-          username: cleanUsername,
-          fullName: data['fullName'] ?? cleanUsername,
-          isOfflineFallback: false,
-        );
-      } else {
-        // Try fallback to /api/v1/auth/login
-        final authUrl = Uri.parse('${ApiConfig.baseUrl}/auth/login');
-        final authResp = await http.post(
-          authUrl,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'username': cleanUsername,
-            'password': cleanPassword,
-          }),
-        ).timeout(ApiConfig.requestTimeout);
-
-        if (authResp.statusCode == 200 || authResp.statusCode == 201) {
-          final data = jsonDecode(authResp.body);
-          final token = data['token'] as String? ?? 'jwt_${DateTime.now().millisecondsSinceEpoch}';
-          await SecureTokenStorage.saveToken(token);
-
+        final token = data['token'] as String?;
+        if (token == null || token.isEmpty) {
           return AuthResult(
-            success: true,
-            message: 'Welcome back, $cleanUsername!',
-            token: token,
-            username: cleanUsername,
-            fullName: data['fullName'] ?? cleanUsername,
-            isOfflineFallback: false,
+            success: false,
+            message: 'Invalid authentication response from server.',
+            statusCode: 500,
           );
         }
 
-        // Fallback simulation for seamless evaluator & offline usage
-        return _loginFallback(cleanUsername);
+        final fullName = data['fullName'] as String? ?? cleanUsername;
+        final customerId = data['customerId'] is int
+            ? data['customerId'] as int
+            : int.tryParse(data['customerId']?.toString() ?? '1') ?? 1;
+
+        // Persist token in secure device storage (KeyStore / Keychain)
+        await SecureTokenStorage.saveToken(token);
+        await SecureTokenStorage.saveUserSession(
+          username: cleanUsername,
+          fullName: fullName,
+          customerId: customerId,
+        );
+
+        ApiClient.resetUnauthorized();
+
+        return AuthResult(
+          success: true,
+          message: 'Welcome back, $fullName!',
+          token: token,
+          username: cleanUsername,
+          fullName: fullName,
+          customerId: customerId,
+          statusCode: 200,
+        );
+      } else if (response.statusCode == 401) {
+        // Strict specification requirement: generic message
+        return AuthResult(
+          success: false,
+          message: 'Invalid username or password.',
+          statusCode: 401,
+        );
+      } else if (response.statusCode == 429) {
+        return AuthResult(
+          success: false,
+          message: 'Too many login attempts. Please wait a moment and try again.',
+          statusCode: 429,
+        );
+      } else {
+        // Try fallback banking path /api/v1/auth/banking/login
+        try {
+          final fallbackResp = await _api.post(
+            '/auth/banking/login',
+            body: {
+              'username': cleanUsername,
+              'password': cleanPassword,
+            },
+            requiresAuth: false,
+          );
+
+          if (fallbackResp.statusCode == 200 || fallbackResp.statusCode == 201) {
+            final data = jsonDecode(fallbackResp.body);
+            final token = data['token'] as String?;
+            if (token != null && token.isNotEmpty) {
+              final fullName = data['fullName'] as String? ?? cleanUsername;
+              final customerId = data['customerId'] is int
+                  ? data['customerId'] as int
+                  : int.tryParse(data['customerId']?.toString() ?? '1') ?? 1;
+
+              await SecureTokenStorage.saveToken(token);
+              await SecureTokenStorage.saveUserSession(
+                username: cleanUsername,
+                fullName: fullName,
+                customerId: customerId,
+              );
+              ApiClient.resetUnauthorized();
+
+              return AuthResult(
+                success: true,
+                message: 'Welcome back, $fullName!',
+                token: token,
+                username: cleanUsername,
+                fullName: fullName,
+                customerId: customerId,
+                statusCode: 200,
+              );
+            }
+          } else if (fallbackResp.statusCode == 401) {
+            return AuthResult(
+              success: false,
+              message: 'Invalid username or password.',
+              statusCode: 401,
+            );
+          }
+        } catch (_) {}
+
+        final msg = _extractErrorMessage(response.body);
+        return AuthResult(
+          success: false,
+          message: msg.isNotEmpty ? msg : 'Invalid username or password.',
+          statusCode: response.statusCode,
+        );
       }
-    } catch (_) {
-      // Backend not running / connection timed out -> Seamless offline session
-      return _loginFallback(cleanUsername);
+    } catch (e) {
+      debugPrint('[AuthService] Login error: $e');
+      return AuthResult(
+        success: false,
+        message: 'Unable to connect to the banking server. Please check your network.',
+        statusCode: 503,
+      );
     }
   }
 
-  /// Registers new account against backend API Gateway or graceful fallback
+  /// Registers a new user via API Gateway
   static Future<AuthResult> register({
     required String username,
     required String password,
@@ -114,6 +184,7 @@ class AuthService {
       return AuthResult(
         success: false,
         message: 'Please fill out all required registration fields.',
+        statusCode: 400,
       );
     }
 
@@ -122,24 +193,30 @@ class AuthService {
       final firstName = nameParts.isNotEmpty ? nameParts.first : cleanUser;
       final lastName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : 'User';
 
-      final url = Uri.parse('${ApiConfig.baseUrl}/auth/banking/register');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+      final response = await _api.post(
+        '/auth/banking/register',
+        body: {
           'firstName': firstName,
           'lastName': lastName,
           'email': cleanEmail,
           'phone': '+639171234567',
           'username': cleanUser,
           'password': cleanPass,
-        }),
-      ).timeout(ApiConfig.requestTimeout);
+        },
+        requiresAuth: false,
+      );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        final token = data['token'] as String? ?? 'jwt_reg_${DateTime.now().millisecondsSinceEpoch}';
+        final token = data['token'] as String? ?? 'jwt_';
+        final customerId = data['customerId'] is int ? data['customerId'] as int : 1;
+
         await SecureTokenStorage.saveToken(token);
+        await SecureTokenStorage.saveUserSession(
+          username: cleanUser,
+          fullName: cleanName,
+          customerId: customerId,
+        );
 
         return AuthResult(
           success: true,
@@ -147,51 +224,45 @@ class AuthService {
           token: token,
           username: cleanUser,
           fullName: cleanName,
-          isOfflineFallback: false,
+          customerId: customerId,
+          statusCode: 201,
         );
       } else {
-        return _registerFallback(cleanUser, cleanName);
+        final msg = _extractErrorMessage(response.body);
+        return AuthResult(
+          success: false,
+          message: msg.isNotEmpty ? msg : 'Registration failed (HTTP ).',
+          statusCode: response.statusCode,
+        );
       }
-    } catch (_) {
-      return _registerFallback(cleanUser, cleanName);
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Unable to connect to banking gateway.',
+        statusCode: 503,
+      );
     }
   }
 
+  /// Clears user authentication session and tokens from secure device storage
   static Future<void> logout() async {
     await SecureTokenStorage.clearVault();
+    ApiClient.resetUnauthorized();
   }
 
+  /// Checks if device has a valid persistent JWT token
   static Future<bool> hasActiveSession() async {
     final token = await SecureTokenStorage.getToken();
     return token != null && token.isNotEmpty;
   }
 
-  static Future<AuthResult> _loginFallback(String username) async {
-    final fallbackToken = 'mock_jwt_session_${DateTime.now().millisecondsSinceEpoch}';
-    await SecureTokenStorage.saveToken(fallbackToken);
-    final displayName = username.toLowerCase() == 'trixie' ? 'Trixie' : username;
-
-    return AuthResult(
-      success: true,
-      message: 'Logged in as $displayName (Local Secure Session)',
-      token: fallbackToken,
-      username: username,
-      fullName: displayName,
-      isOfflineFallback: true,
-    );
-  }
-
-  static Future<AuthResult> _registerFallback(String username, String fullName) async {
-    final fallbackToken = 'mock_jwt_reg_${DateTime.now().millisecondsSinceEpoch}';
-    await SecureTokenStorage.saveToken(fallbackToken);
-
-    return AuthResult(
-      success: true,
-      message: 'Account created (Local Secure Session)',
-      token: fallbackToken,
-      username: username,
-      fullName: fullName.isNotEmpty ? fullName : username,
-      isOfflineFallback: true,
-    );
+  static String _extractErrorMessage(String responseBody) {
+    try {
+      final data = jsonDecode(responseBody);
+      return data['message'] ?? data['error'] ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 }
+

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
+import '../widgets/dynamic_card_deck.dart';
 import '../services/account_service.dart';
 
 class AccountsScreen extends StatefulWidget {
@@ -10,6 +11,7 @@ class AccountsScreen extends StatefulWidget {
   final VoidCallback onToggleHideBalances;
   final Function(int)? onNavigateTab;
   final List<BankAccount>? accounts;
+  final String? userName;
 
   const AccountsScreen({
     super.key,
@@ -17,6 +19,7 @@ class AccountsScreen extends StatefulWidget {
     required this.onToggleHideBalances,
     this.onNavigateTab,
     this.accounts,
+    this.userName,
   });
 
   @override
@@ -57,7 +60,32 @@ class _AccountsScreenState extends State<AccountsScreen> {
             'Your accounts, together. Select an account to see its details.',
             style: PayPinkTheme.body(fontSize: 12.5, color: textMuted),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // 3D Physical Cards Deck with Specular Sheen & Depth Tilt
+          DynamicCardDeck(
+            accounts: widget.accounts ?? [],
+            cardHolder: widget.userName?.isNotEmpty == true ? widget.userName! : 'PayPink Client',
+            hideBalances: widget.hideBalances,
+            onToggleHideBalances: widget.onToggleHideBalances,
+            onOpenTransfer: () => widget.onNavigateTab?.call(2),
+            onOpenDetails: () {
+              if (widget.accounts != null && widget.accounts!.isNotEmpty) {
+                final acct = widget.accounts!.first;
+                final holder = widget.userName?.isNotEmpty == true ? widget.userName! : acct.displayName;
+                PayPinkBottomSheets.showAccountDetails(
+                  context,
+                  name: holder,
+                  fullNumber: acct.formattedNumber,
+                  balance: acct.currentBalance,
+                  type: acct.accountType,
+                  status: acct.status,
+                );
+              }
+            },
+            isDark: isDark,
+          ),
+          const SizedBox(height: 24),
 
           // Header with Hide balances toggle
           Row(
@@ -233,11 +261,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
           // Discretion note card matching mockup
           GlassCard(
-            backgroundColor: PayPinkTheme.paper,
+            backgroundColor: isDark ? PayPinkTheme.darkPaper : PayPinkTheme.paper,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.shield_outlined, color: PayPinkTheme.wine, size: 20),
+                Icon(Icons.shield_outlined, color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -245,14 +273,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     children: [
                       Text(
                         'A little discretion, built in.',
-                        style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700),
+                        style: PayPinkTheme.display(fontSize: 12, fontWeight: FontWeight.w700, color: textInk),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         'Your account numbers are masked by default. Tap the eye icon to reveal them, or copy the number.',
                         style: PayPinkTheme.body(
                           fontSize: 11,
-                          color: PayPinkTheme.muted,
+                          color: textMuted,
                           height: 1.4,
                         ),
                       ),
@@ -285,16 +313,24 @@ class _AccountsScreenState extends State<AccountsScreen> {
     required Color iconColor,
     required Color iconBg,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+
     return GlassCard(
-      onTap: () => PayPinkBottomSheets.showAccountDetails(
-        context,
-        name: name,
-        fullNumber: fullNumber,
-        balance: balance,
-        type: type,
-        status: status,
-        ledgerId: ledgerId,
-      ),
+      onTap: () {
+        final holder = widget.userName?.isNotEmpty == true ? widget.userName! : name;
+        PayPinkBottomSheets.showAccountDetails(
+          context,
+          name: holder,
+          fullNumber: fullNumber,
+          balance: balance,
+          type: type,
+          status: status,
+        );
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -307,10 +343,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: iconBg,
+                      color: isDark ? const Color(0xFF1E2638) : iconBg,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, color: iconColor, size: 18),
+                    child: Icon(icon, color: isDark ? PayPinkTheme.pink : iconColor, size: 18),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -318,7 +354,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     children: [
                       Text(
                         name,
-                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700),
+                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700, color: textInk),
                       ),
                       const SizedBox(height: 2),
                       GestureDetector(
@@ -327,13 +363,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           children: [
                             Text(
                               maskedNumber,
-                              style: PayPinkTheme.mono(fontSize: 10, color: PayPinkTheme.muted),
+                              style: PayPinkTheme.mono(fontSize: 10, color: textMuted),
                             ),
                             const SizedBox(width: 4),
                             Icon(
                               isMasked ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                               size: 12,
-                              color: PayPinkTheme.muted,
+                              color: textMuted,
                             ),
                           ],
                         ),
@@ -345,14 +381,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: PayPinkTheme.greenBg,
+                  color: isDark ? const Color(0xFF143823) : PayPinkTheme.greenBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '• $status',
                   style: PayPinkTheme.body(
                     fontSize: 9.5,
-                    color: PayPinkTheme.green,
+                    color: isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -365,6 +401,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             style: PayPinkTheme.display(
               fontSize: 28,
               fontWeight: FontWeight.w800,
+              color: textInk,
               letterSpacing: -0.6,
             ),
           ),
@@ -375,50 +412,50 @@ class _AccountsScreenState extends State<AccountsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                 decoration: BoxDecoration(
-                  color: PayPinkTheme.greenBg,
+                  color: isDark ? const Color(0xFF143823) : PayPinkTheme.greenBg,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   'Avail: ₱${balance.toStringAsFixed(2)}',
-                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.green),
+                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green),
                 ),
               ),
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: isDark ? PayPinkTheme.darkCard : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: PayPinkTheme.line),
+                  border: Border.all(color: textLine),
                 ),
                 child: Text(
                   'Held: ₱${heldBalance.toStringAsFixed(2)}',
-                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w600, color: PayPinkTheme.muted),
+                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w600, color: textMuted),
                 ),
               ),
               const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                 decoration: BoxDecoration(
-                  color: PayPinkTheme.pinkSubtle,
+                  color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   '${interestRate.toStringAsFixed(2)}% p.a.',
-                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine),
+                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          const Divider(color: PayPinkTheme.line, height: 1),
+          Divider(color: textLine, height: 1),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Available balance',
-                style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
               ),
               Row(
                 children: [
@@ -435,14 +472,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     },
                     child: Row(
                       children: [
-                        const Icon(Icons.copy_rounded, size: 13, color: PayPinkTheme.wine),
+                        Icon(Icons.copy_rounded, size: 13, color: brandWine),
                         const SizedBox(width: 4),
                         Text(
                           'Copy',
                           style: PayPinkTheme.body(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: PayPinkTheme.wine,
+                            color: brandWine,
                           ),
                         ),
                       ],
@@ -457,14 +494,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     },
                     child: Row(
                       children: [
-                        const Icon(Icons.swap_horiz_rounded, size: 14, color: PayPinkTheme.wine),
+                        Icon(Icons.swap_horiz_rounded, size: 14, color: brandWine),
                         const SizedBox(width: 4),
                         Text(
                           'Transfer',
                           style: PayPinkTheme.body(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: PayPinkTheme.wine,
+                            color: brandWine,
                           ),
                         ),
                       ],
@@ -491,6 +528,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
     required String dueDate,
     required String status,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
+    final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+
     return GlassCard(
       onTap: () => PayPinkBottomSheets.showLoanDetails(
         context,
@@ -511,10 +554,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: PayPinkTheme.indigoBg,
+                      color: isDark ? const Color(0xFF1E2640) : PayPinkTheme.indigoBg,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.real_estate_agent_rounded, color: PayPinkTheme.indigo, size: 18),
+                    child: Icon(Icons.real_estate_agent_rounded, color: isDark ? const Color(0xFF818CF8) : PayPinkTheme.indigo, size: 18),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -522,7 +565,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     children: [
                       Text(
                         name,
-                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700),
+                        style: PayPinkTheme.display(fontSize: 13.5, fontWeight: FontWeight.w700, color: textInk),
                       ),
                       const SizedBox(height: 2),
                       GestureDetector(
@@ -531,13 +574,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           children: [
                             Text(
                               maskedNumber,
-                              style: PayPinkTheme.mono(fontSize: 10, color: PayPinkTheme.muted),
+                              style: PayPinkTheme.mono(fontSize: 10, color: textMuted),
                             ),
                             const SizedBox(width: 4),
                             Icon(
                               isMasked ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                               size: 12,
-                              color: PayPinkTheme.muted,
+                              color: textMuted,
                             ),
                           ],
                         ),
@@ -549,14 +592,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: PayPinkTheme.indigoBg,
+                  color: isDark ? const Color(0xFF1E2640) : PayPinkTheme.indigoBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '• $status',
                   style: PayPinkTheme.body(
                     fontSize: 9.5,
-                    color: PayPinkTheme.indigo,
+                    color: isDark ? const Color(0xFF818CF8) : PayPinkTheme.indigo,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -576,38 +619,39 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     style: PayPinkTheme.display(
                       fontSize: 28,
                       fontWeight: FontWeight.w800,
+                      color: textInk,
                       letterSpacing: -0.6,
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text('Remaining loan balance', style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted)),
+                  Text('Remaining loan balance', style: PayPinkTheme.body(fontSize: 10.5, color: textMuted)),
                 ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
-                  color: PayPinkTheme.pinkSubtle,
+                  color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('Due: $dueDate', style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: PayPinkTheme.wine)),
-                    Text('₱${amortization.toStringAsFixed(0)}/mo', style: PayPinkTheme.mono(fontSize: 10.5, fontWeight: FontWeight.w800, color: PayPinkTheme.ink)),
+                    Text('Due: $dueDate', style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine)),
+                    Text('₱${amortization.toStringAsFixed(0)}/mo', style: PayPinkTheme.mono(fontSize: 10.5, fontWeight: FontWeight.w800, color: textInk)),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          const Divider(color: PayPinkTheme.line, height: 1),
+          Divider(color: textLine, height: 1),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 '5.50% p.a. · 12 Mo',
-                style: PayPinkTheme.body(fontSize: 10.5, color: PayPinkTheme.muted),
+                style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
               ),
               Row(
                 children: [
@@ -621,14 +665,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.calendar_month_outlined, size: 13, color: PayPinkTheme.wine),
+                        Icon(Icons.calendar_month_outlined, size: 13, color: brandWine),
                         const SizedBox(width: 4),
                         Text(
                           'Schedule',
                           style: PayPinkTheme.body(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: PayPinkTheme.wine,
+                            color: brandWine,
                           ),
                         ),
                       ],
@@ -645,14 +689,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.payment_rounded, size: 14, color: PayPinkTheme.wine),
+                        Icon(Icons.payment_rounded, size: 14, color: brandWine),
                         const SizedBox(width: 4),
                         Text(
                           'Pay Loan',
                           style: PayPinkTheme.body(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: PayPinkTheme.wine,
+                            color: brandWine,
                           ),
                         ),
                       ],

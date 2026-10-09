@@ -18,7 +18,7 @@ public final class BankingIdentifiers {
             case "EVERYDAY_ACCOUNT" -> "2";
             case "CHECKING_ACCOUNT" -> "3";
             case "TIME_DEPOSIT" -> "4";
-            case "STRESS_TEST_ACCOUNT" -> "9";
+            case "STRESS_TEST_ACCOUNT", "LOAN", "LOAN_ACCOUNT" -> "9";
             default -> throw new IllegalArgumentException("Unsupported account type: " + type);
         };
     }

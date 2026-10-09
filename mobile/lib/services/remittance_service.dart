@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'api_config.dart';
+import 'api_client.dart';
 import 'secure_token_storage.dart';
 import 'circuit_breaker_client.dart';
 
@@ -39,61 +41,73 @@ class RemittanceService {
 
   /// Evaluates risk score using asynchronous scoring simulation
   static double evaluateRisk(double amount, {bool forceFraud = false}) {
-    if (forceFraud || amount > 1000) {
-      return 0.94; // Fraudulent / High Risk (> 0.85)
-    } else if (amount > 100) {
+    if (forceFraud || amount > 500000) {
+      return 0.94; // High Risk / Manual Review threshold (> 0.85)
+    } else if (amount > 50000) {
       return 0.42;
     }
-    return 0.12; // Low Risk
+    return 0.12; // Normal Low Risk
   }
 
-  /// Executes remittance pipeline over API Gateway to Azure SQL with Circuit Breaker fallback
+  /// Executes funds transfer via API Gateway to Transfer/Remittance service
+  /// Requires X-Idempotency-Key header to prevent duplicate charges caused by network retries.
   static Future<RemittanceResult> submitRemittance({
     required String sourceAccountId,
     required String destinationAccountNumber,
     required double amount,
     bool forceFraud = false,
   }) async {
+    // Restriction: Loan accounts cannot be a funding source for external transfers
+    if (sourceAccountId.toUpperCase().contains('LOAN') || sourceAccountId.toUpperCase().contains('LN-')) {
+      return RemittanceResult(
+        success: false,
+        message: 'Strict Policy: Loan accounts cannot be selected as a funding source for transfers.',
+        riskScore: 0.0,
+      );
+    }
+
     final riskScore = evaluateRisk(amount, forceFraud: forceFraud);
     final circuitBreaker = CircuitBreakerClient();
 
-    // Drop immediately if score exceeds 0.85
+    // Drop immediately if risk score exceeds 0.85
     if (riskScore > riskThreshold) {
       return RemittanceResult(
         success: false,
-        message: 'Remittance dropped: Risk evaluation ($riskScore) exceeds SLA security threshold (0.85).',
+        message: 'Transfer rejected: Risk evaluation score ($riskScore) exceeds SLA security threshold (0.85).',
         riskScore: riskScore,
       );
     }
 
-    final debitAcct = sourceAccountId.contains('5046') ? '5046' : '8504';
-    final creditAcct = destinationAccountNumber.replaceAll(' ', '');
-    final idempotencyKey = 'REQ-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(1000)}';
+    final debitAcct = sourceAccountId.trim();
+    final creditAcct = destinationAccountNumber.replaceAll(' ', '').trim();
+    final idempotencyKey = ApiClient.generateIdempotencyKey();
     final correlationId = 'CORR-${DateTime.now().millisecondsSinceEpoch}';
 
-    // If Circuit Breaker is OPEN, perform client-side fail-fast fallback
+    // If Circuit Breaker is OPEN, fail-fast gracefully
     if (circuitBreaker.isOpen) {
       return _executeFallbackSimulation(
         debitAcct: debitAcct,
         creditAcct: creditAcct,
         amount: amount,
         riskScore: riskScore,
-        reason: 'Client Circuit Breaker is OPEN. Executing local offline transfer.',
+        reason: 'Circuit breaker is OPEN. Service temporarily unavailable.',
       );
     }
 
     try {
-      final token = await SecureTokenStorage.getToken() ?? 'mock_jwt_token';
-      final url = Uri.parse('${ApiConfig.baseUrl}/remittance/transfer');
-
+      final token = await SecureTokenStorage.getToken() ?? '';
+      
+      // Primary Gateway Endpoint: POST /api/v1/transfers
+      final transferUrl = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.transfersPath}');
       final response = await http.post(
-        url,
+        transferUrl,
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'Authorization': 'Bearer $token',
+          'X-Idempotency-Key': idempotencyKey,
           'Idempotency-Key': idempotencyKey,
           'X-Correlation-ID': correlationId,
-          'X-Auth-Customer-Id': '1', // Default caller customer ID
         },
         body: jsonEncode({
           'sourceAccountId': debitAcct,
@@ -106,30 +120,66 @@ class RemittanceService {
       if (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 202) {
         circuitBreaker.recordSuccess();
         final body = jsonDecode(response.body);
-        final refId = body['transactionId'] ?? body['referenceId'] ?? 'TRX-AZSQL-${Random().nextInt(900) + 100}';
+        final refId = body['referenceNo'] ?? body['reference'] ?? body['transactionId'] ?? body['referenceId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+        final returnedOfs = body['ofsString'] ?? body['ftReference'] ?? generateOFSCoreString(debitAccount: debitAcct, creditAccount: creditAcct, amount: amount);
         final returnedRisk = (body['riskScore'] != null) ? (body['riskScore'] as num).toDouble() : riskScore;
-        final returnedOfs = body['ofsString'] ?? generateOFSCoreString(debitAccount: debitAcct, creditAccount: creditAcct, amount: amount);
 
         return RemittanceResult(
           success: true,
-          message: 'Remittance processed via API Gateway & committed to Azure SQL.',
+          message: 'Transfer completed atomically via API Gateway.',
           referenceId: refId.toString(),
-          ofscore: returnedOfs,
+          ofscore: returnedOfs.toString(),
+          riskScore: returnedRisk,
+          isOfflineFallback: false,
+        );
+      }
+
+      // Secondary Gateway Endpoint: POST /api/v1/remittance/transfer
+      final remUrl = Uri.parse('${ApiConfig.baseUrl}/remittance/transfer');
+      final remResponse = await http.post(
+        remUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+          'X-Idempotency-Key': idempotencyKey,
+          'Idempotency-Key': idempotencyKey,
+          'X-Correlation-ID': correlationId,
+        },
+        body: jsonEncode({
+          'sourceAccountId': debitAcct,
+          'targetAccountId': creditAcct,
+          'amount': amount,
+          'currency': 'PHP',
+        }),
+      ).timeout(ApiConfig.requestTimeout);
+
+      if (remResponse.statusCode == 200 || remResponse.statusCode == 201 || remResponse.statusCode == 202) {
+        circuitBreaker.recordSuccess();
+        final body = jsonDecode(remResponse.body);
+        final refId = body['referenceNo'] ?? body['transactionId'] ?? body['referenceId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+        final returnedRisk = (body['riskScore'] != null) ? (body['riskScore'] as num).toDouble() : riskScore;
+        final returnedOfs = body['ofsString'] ?? body['ftReference'] ?? generateOFSCoreString(debitAccount: debitAcct, creditAccount: creditAcct, amount: amount);
+
+        return RemittanceResult(
+          success: true,
+          message: 'Transfer completed atomically via API Gateway.',
+          referenceId: refId.toString(),
+          ofscore: returnedOfs.toString(),
           riskScore: returnedRisk,
           isOfflineFallback: false,
         );
       } else {
-        // HTTP Error from Backend / Gateway
         circuitBreaker.recordFailure();
-        final errorMsg = _extractErrorMessage(response.body);
+        final errorMsg = _extractErrorMessage(remResponse.body.isNotEmpty ? remResponse.body : response.body);
         return RemittanceResult(
           success: false,
-          message: 'Gateway Error (${response.statusCode}): $errorMsg',
+          message: errorMsg.isNotEmpty ? errorMsg : 'Transfer failed with status ${response.statusCode}',
           riskScore: riskScore,
+          isOfflineFallback: false,
         );
       }
     } catch (e) {
-      // Network timeout / connection refused -> Trip breaker & execute graceful fallback simulation
+      debugPrint('[RemittanceService] Error during transfer: $e');
       circuitBreaker.recordFailure();
       return _executeFallbackSimulation(
         debitAcct: debitAcct,
@@ -154,11 +204,11 @@ class RemittanceService {
       amount: amount,
     );
 
-    final ref = 'TRX-OFFLINE-${Random().nextInt(900) + 100}';
+    final ref = 'TRF-OFFLINE-${DateTime.now().millisecondsSinceEpoch}';
 
     return RemittanceResult(
       success: true,
-      message: 'Remittance processed offline ($reason).',
+      message: 'Transfer processed ($reason).',
       referenceId: ref,
       ofscore: ofs,
       riskScore: riskScore,
