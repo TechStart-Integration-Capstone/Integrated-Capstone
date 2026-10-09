@@ -118,4 +118,13 @@ class OutboxPollerServiceTest {
         assertThat(service.getTotalPublished()).isZero();
         assertThat(service.getTotalFailed()).isZero();
         assertThat(service.getTotalDeadLetter()).isZero();}
+    @Test void savingsEventsUseDedicatedTopic() {
+        OutboxEvent event=pendingEvent(9L);sf(event,"transactionId",null);sf(event,"aggregateId","savings-operation");sf(event,"eventType","savings.allocated");
+        when(outboxRepository.findPendingBatch(50)).thenReturn(List.of(event));
+        when(kafkaTemplate.send(eq("savings.events"),eq("savings-operation"),anyString())).thenReturn(successFuture());
+        service.pollPendingEvents();
+        verify(kafkaTemplate).send(eq("savings.events"),eq("savings-operation"),anyString());
+        assertThat(event.getStatus()).isEqualTo("PROCESSED");
+    }
+
 }

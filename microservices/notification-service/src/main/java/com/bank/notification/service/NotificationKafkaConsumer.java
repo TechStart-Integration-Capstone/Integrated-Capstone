@@ -36,12 +36,23 @@ public class NotificationKafkaConsumer {
         this.objectMapper           = objectMapper;
     }
 
-    @KafkaListener(topics = {"remittance.events", "ledger.transaction.events"}, groupId = "notification-service-group")
+    @KafkaListener(topics = {"remittance.events", "ledger.transaction.events", "savings.events"}, groupId = "notification-service-group")
     @Transactional
     public void consume(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);
 
+            if (node.path("eventType").asText().startsWith("savings.")) {
+                String type = node.path("eventType").asText();
+                if (!java.util.Set.of("savings.allocated", "savings.released", "savings.circle_completed").contains(type)) return;
+                if (!node.hasNonNull("customerId") || !node.hasNonNull("accountId") || !node.hasNonNull("referenceNo")) return;
+                String savingsMessage = "savings.circle_completed".equals(type)
+                        ? "Your PinkCircle reached its shared goal. Each member keeps their own savings; payments require separate authorization."
+                        : "PHP " + node.path("amount").asText() + ("savings.released".equals(type)
+                            ? " was released from savings and is available to spend." : " was reserved for your savings goals. Your money stays in your account.");
+                deliver(node.get("customerId").asLong(), node.get("accountId").asLong(), node.get("referenceNo").asText(), savingsMessage);
+                return;
+            }
             if (LoanNotificationMessages.isLoanEvent(node)) {
                 LoanNotificationMessages.build(node).ifPresent(alert ->
                         deliver(alert.customerId(), alert.accountId(), alert.referenceNo(), alert.message()));
