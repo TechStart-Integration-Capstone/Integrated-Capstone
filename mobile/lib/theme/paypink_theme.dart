@@ -68,6 +68,47 @@ class PayPinkTheme {
     colors: [pink, wine],
   );
 
+  // Distinct Account Card Color Gradients with Lower-Half Gradient Black (MOB-103)
+  // Card 1: Checking Account (Default) — Signature PayPink Vibrant Rose to Gradient Black
+  static const LinearGradient cardCheckingGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFE11D48), Color(0xFFDB2777), Color(0xFF220E18), Color(0xFF09090B)],
+    stops: [0.0, 0.38, 0.72, 1.0],
+  );
+
+  // Card 2: Savings Account — Soft Blush / Pastel Rose to Gradient Black
+  static const LinearGradient cardSavingsGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFFDA4AF), Color(0xFFFB7185), Color(0xFF221118), Color(0xFF09090B)],
+    stops: [0.0, 0.38, 0.72, 1.0],
+  );
+
+  // Last Card: Pinkish Beige (Desert Rose / Champagne Blush Nude to Gradient Black)
+  static const LinearGradient cardPinkishBeigeGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFD8ABA0), Color(0xFFBA8677), Color(0xFF261414), Color(0xFF09090B)],
+    stops: [0.0, 0.38, 0.72, 1.0],
+  );
+
+  // Card 3: Alternative / Third Card / Reserve — Electric Fuchsia & Magenta Pink to Gradient Black
+  static const LinearGradient cardFuchsiaGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFE879F9), Color(0xFFC026D3), Color(0xFF1F0A24), Color(0xFF09090B)],
+    stops: [0.0, 0.38, 0.72, 1.0],
+  );
+
+  // Card 4: Loan Account / Credit — Deep Obsidian Wine to Gradient Black
+  static const LinearGradient cardLoanGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF881337), Color(0xFF4C0519), Color(0xFF18181B), Color(0xFF09090B)],
+    stops: [0.0, 0.38, 0.72, 1.0],
+  );
+
   static String get fontFamily =>
       GoogleFonts.plusJakartaSans().fontFamily ?? 'Plus Jakarta Sans';
 

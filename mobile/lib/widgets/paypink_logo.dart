@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/paypink_theme.dart';
 
@@ -208,3 +209,134 @@ class PayPinkLogo extends StatelessWidget {
     );
   }
 }
+
+/// Official PayPink 'P' Emblem Watermark Painter for Digital Cards (MOB-103)
+/// Exact SVG path rendering of the spiral 'P' watermark:
+/// viewBox: 0 0 400 480 with 60% opacity fill
+class PayPinkCardWatermarkPainter extends CustomPainter {
+  final double opacity;
+  final Color color;
+
+  const PayPinkCardWatermarkPainter({
+    this.opacity = 0.60,
+    this.color = Colors.white,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
+    final scale = math.min(size.width / 400.0, size.height / 480.0);
+    final dx = (size.width - 400.0 * scale) / 2.0;
+    final dy = (size.height - 480.0 * scale) / 2.0;
+
+    final paint = Paint()
+      ..color = color.withValues(alpha: opacity)
+      ..style = PaintingStyle.fill;
+
+    // 1. Top-Left Stem Accent
+    // M 40 40 H 105 C 105 40 85 95 40 152 V 40 Z
+    final path1 = Path();
+    path1.moveTo(dx + 40 * scale, dy + 40 * scale);
+    path1.lineTo(dx + 105 * scale, dy + 40 * scale);
+    path1.cubicTo(
+      dx + 105 * scale, dy + 40 * scale,
+      dx + 85 * scale, dy + 95 * scale,
+      dx + 40 * scale, dy + 152 * scale,
+    );
+    path1.lineTo(dx + 40 * scale, dy + 40 * scale);
+    path1.close();
+
+    // 2. Main Sweeping Spiral "P" Body & Stem
+    final path2 = Path()..fillType = PathFillType.evenOdd;
+    path2.moveTo(dx + 40 * scale, dy + 174 * scale);
+    path2.cubicTo(
+      dx + 88 * scale, dy + 116 * scale,
+      dx + 112 * scale, dy + 55 * scale,
+      dx + 120 * scale, dy + 40 * scale,
+    );
+    path2.cubicTo(
+      dx + 148 * scale, dy + 28 * scale,
+      dx + 182 * scale, dy + 22 * scale,
+      dx + 220 * scale, dy + 22 * scale,
+    );
+    path2.cubicTo(
+      dx + 308 * scale, dy + 22 * scale,
+      dx + 365 * scale, dy + 78 * scale,
+      dx + 365 * scale, dy + 178 * scale,
+    );
+    path2.cubicTo(
+      dx + 365 * scale, dy + 272 * scale,
+      dx + 305 * scale, dy + 330 * scale,
+      dx + 220 * scale, dy + 330 * scale,
+    );
+    path2.cubicTo(
+      dx + 178 * scale, dy + 330 * scale,
+      dx + 148 * scale, dy + 312 * scale,
+      dx + 124 * scale, dy + 286 * scale,
+    );
+    path2.lineTo(dx + 138 * scale, dy + 238 * scale);
+    path2.cubicTo(
+      dx + 158 * scale, dy + 258 * scale,
+      dx + 184 * scale, dy + 270 * scale,
+      dx + 216 * scale, dy + 270 * scale,
+    );
+    path2.cubicTo(
+      dx + 272 * scale, dy + 270 * scale,
+      dx + 305 * scale, dy + 230 * scale,
+      dx + 305 * scale, dy + 178 * scale,
+    );
+    path2.cubicTo(
+      dx + 305 * scale, dy + 124 * scale,
+      dx + 272 * scale, dy + 82 * scale,
+      dx + 216 * scale, dy + 82 * scale,
+    );
+    path2.cubicTo(
+      dx + 166 * scale, dy + 82 * scale,
+      dx + 128 * scale, dy + 118 * scale,
+      dx + 105 * scale, dy + 170 * scale,
+    );
+    path2.lineTo(dx + 105 * scale, dy + 430 * scale);
+    path2.lineTo(dx + 40 * scale, dy + 430 * scale);
+    path2.lineTo(dx + 40 * scale, dy + 174 * scale);
+    path2.close();
+
+    canvas.drawPath(path1, paint);
+    canvas.drawPath(path2, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant PayPinkCardWatermarkPainter oldDelegate) =>
+      oldDelegate.opacity != opacity || oldDelegate.color != color;
+}
+
+/// Subtle, high-end PayPink brand watermark widget for account cards
+class PayPinkCardWatermark extends StatelessWidget {
+  final double? width;
+  final double? height;
+  final double opacity;
+  final Color color;
+
+  const PayPinkCardWatermark({
+    super.key,
+    this.width,
+    this.height,
+    this.opacity = 0.60,
+    this.color = Colors.white,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: CustomPaint(
+        painter: PayPinkCardWatermarkPainter(
+          opacity: opacity,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+

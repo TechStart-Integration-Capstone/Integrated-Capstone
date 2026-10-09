@@ -427,7 +427,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
     final cleanRefId = refId.startsWith('TXN-')
         ? refId
-        : 'TXN-2026-${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}';
+        : 'TXN-${DateTime.now().year}-${(DateTime.now().millisecondsSinceEpoch % 100000).toString().padLeft(5, '0')}';
 
     final isToSavings = recipient.toLowerCase().contains('saving') || destClean.startsWith('0011');
     final isToChecking = recipient.toLowerCase().contains('checking') || destClean.startsWith('0013');
@@ -744,9 +744,19 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: PayPinkLogo.header(
-                            isDark: isDark,
-                            subtitle: 'Oct 2, 2026',
+                          child: Builder(
+                            builder: (context) {
+                              final now = DateTime.now();
+                              const months = [
+                                'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+                              ];
+                              final dynamicDate = '${months[now.month - 1]} ${now.day}, ${now.year}';
+                              return PayPinkLogo.header(
+                                isDark: isDark,
+                                subtitle: dynamicDate,
+                              );
+                            },
                           ),
                         ),
                         Row(

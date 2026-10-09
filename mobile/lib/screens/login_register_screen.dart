@@ -634,7 +634,7 @@ class _LoginRegisterScreenState extends State<LoginRegisterScreen> {
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
-                                  'Hardware KeyStore 256-Bit Encrypted · BSP Regulated',
+                                  'End-to-End Encrypted · BSP Regulated',
                                   style: PayPinkTheme.body(fontSize: 9.5, color: mutedColor),
                                   overflow: TextOverflow.ellipsis,
                                 ),

@@ -46,9 +46,9 @@ class _PromoBannerState extends State<PromoBanner> {
 
   static const List<PromoItem> _promos = [
     PromoItem(
-      id: 'promo_visa',
+      id: 'promo_premier_card',
       tag: 'NEW PREMIER CARD',
-      title: 'PayPink Visa Premier',
+      title: 'PayPink Premier Card',
       body: 'Zero foreign exchange fees and up to 2.5% cashback on everyday spending.',
       actionLabel: 'Explore Card',
       imageAsset: 'assets/images/paypink_promo_banner.jpg',
