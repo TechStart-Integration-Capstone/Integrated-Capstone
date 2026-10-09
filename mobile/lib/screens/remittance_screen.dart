@@ -11,6 +11,8 @@ import '../services/api_config.dart';
 import '../services/secure_token_storage.dart';
 import '../services/remittance_service.dart';
 import '../services/account_service.dart';
+import '../widgets/loading_overlay_wrapper.dart';
+
 
 class RemittanceScreen extends StatefulWidget {
   final Function(double amount, String refId, String source, String recipient) onTransferSuccess;
@@ -47,7 +49,9 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   bool _isLoadingFavorites = false;
 
   // Saga state variables
+  bool _isSubmitting = false;
   bool _isSagaPending = false;
+
   String? _pendingReferenceNo;
   double? _pendingAmt;
   String? _pendingFromAcc;
@@ -1469,41 +1473,49 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     );
     if (!pinOk) return;
 
-    final cleanDest = _selectedModeIndex == 0
-        ? _ownTargetAccount
-        : _recipientController.text.replaceAll(' ', '');
+    setState(() => _isSubmitting = true);
+    try {
+      final cleanDest = _selectedModeIndex == 0
+          ? _ownTargetAccount
+          : _recipientController.text.replaceAll(' ', '');
 
-    final result = await RemittanceService.submitRemittance(
-      sourceAccountId: _sourceAccount,
-      destinationAccountNumber: cleanDest,
-      amount: amt,
-    );
-
-    if (!mounted) return;
-
-    if (result.success && result.status == 'RESERVED') {
-      // 202 — enter saga grace window
-      final ref = result.referenceId ?? '';
-      setState(() {
-        _pendingReferenceNo = ref;
-        _isSagaPending = true;
-        _sagaErrorMessage = null;
-      });
-      _startStatusPolling(ref, amt, fromAcc, toAcc);
-    } else if (result.success) {
-      final cleanRef = result.referenceId != null && result.referenceId!.isNotEmpty
-          ? result.referenceId!
-          : 'TXN-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      _showScreenshotReceiptDialog(amt, cleanRef, fromAcc, toAcc);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: PayPinkTheme.red,
-          content: Text(result.message),
-        ),
+      final result = await RemittanceService.submitRemittance(
+        sourceAccountId: _sourceAccount,
+        destinationAccountNumber: cleanDest,
+        amount: amt,
       );
+
+      if (!mounted) return;
+
+      if (result.success && result.status == 'RESERVED') {
+        // 202 — enter saga grace window
+        final ref = result.referenceId ?? '';
+        setState(() {
+          _pendingReferenceNo = ref;
+          _isSagaPending = true;
+          _sagaErrorMessage = null;
+        });
+        _startStatusPolling(ref, amt, fromAcc, toAcc);
+      } else if (result.success) {
+        final cleanRef = result.referenceId != null && result.referenceId!.isNotEmpty
+            ? result.referenceId!
+            : 'TXN-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+        _showScreenshotReceiptDialog(amt, cleanRef, fromAcc, toAcc);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: PayPinkTheme.red,
+            content: Text(result.message),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
+
 
   // ── MOB-305: Saga 202 grace-window helpers ────────────────────────────────
 
@@ -1985,10 +1997,15 @@ Thank you for banking with PayPink!
       );
     }
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      child: Column(
+    return LoadingOverlayWrapper(
+      isLoading: _isSubmitting,
+      loadingText: 'Processing Transfer...',
+      subText: 'Running real-time risk screening & securing core banking hold.',
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        child: Column(
+
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -2520,8 +2537,10 @@ Thank you for banking with PayPink!
           const SizedBox(height: 90),
         ],
       ),
+    ),
     );
   }
+
 
   Widget _buildAmtChip(String label, double amount, {bool isDark = false}) {
     return GestureDetector(

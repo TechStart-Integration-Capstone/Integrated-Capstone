@@ -2,7 +2,11 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-09 (Updated last card in digital deck with luxury Pinkish Beige palette - Desert Rose / Champagne Blush Nude into gradient black)_
+_Last Updated: 2026-10-09 (Created reusable LoadingOverlayWrapper with AbsorbPointer and glassmorphism backdrop; shielded RemittanceScreen and LoanPaymentSheet against touch events during in-flight network requests)_
+_Last Updated: 2026-10-09 (Mobile Features 3, 4, 5 implemented: TelemetryService structured logging & Dio integration, SessionManager backgrounding auto-lock & SessionLockWrapper, expanded BLoC and Telemetry test suite with 30/30 tests passing)_
+
+_Last Updated: 2026-10-09 (Cleaned up AccountService.fetchProfile() syntax, retrieved customerId, and eliminated hardcoded dummy account seeding for 100% Cloud-Native live Azure SQL data fetching)_
+
 _Last Updated: 2026-10-09 (Removed Ledger Balance from Account Details modal, customized 3rd card with distinct Electric Fuchsia & Magenta Pink palette)_
 _Last Updated: 2026-10-09 (Mobile card styling & half-gradient black, bottom logo removal, favorites UI redesign matching PayPink theme with inline error messaging)_
 _Last Updated: 2026-10-09 (Mobile brand refactoring & backend validation: MOB-102 receipt PayPinkLogo, MOB-103 card color gradients & SVG watermark, MOB-104 dynamic dates, MOB-105 server-side favorites & 12-digit lookup verification)_
