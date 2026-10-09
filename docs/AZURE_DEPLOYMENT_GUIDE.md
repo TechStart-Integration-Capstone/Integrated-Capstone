@@ -170,6 +170,10 @@ flowchart TD
      ```bash
      az vm auto-shutdown --resource-group "RG-PAYPINK-WESTUS2" --name "vm-paypink" --time "1100"
      ```
+  3. **Disable Auto-Shutdown for Active Demos & Evaluation Windows:**
+     ```bash
+     az vm auto-shutdown --resource-group "RG-PAYPINK-WESTUS2" --name "vm-paypink" --off
+     ```
 
 ### NSG Rule Management & Dynamic Cloud Shell IPs
 * Azure Cloud Shell outbound IPs change dynamically every session. To connect via SSH from Cloud Shell, port 22 in the NSG must allow the connection.
@@ -179,12 +183,65 @@ flowchart TD
   ```
 * **Restrict Access:** Replace `TEAM_IPS` placeholders with exact `/32` CIDRs for team members (`curl ifconfig.me`). Never leave port 22 open to `*` or `Any` in production.
 
-### SSH Key Recovery Warning
-* Using `az vm user update --ssh-key-value ~/.ssh/id_rsa.pub` updates the public key for `azureuser`, which **replaces** the active `~/.ssh/authorized_keys` file.
-* **Teammate Access:** If teammates previously had their SSH keys authorized, their keys will be overwritten. Always re-append teammates' public keys after running a key reset:
-  ```bash
-  echo "<TEAMMATE_PUBLIC_KEY>" >> ~/.ssh/authorized_keys
-  ```
+### Teammate VM Access & SSH Onboarding (Step-by-Step)
+To grant a teammate SSH access to `vm-paypink`, both the **Azure Network Security Group (NSG firewall)** and the **Linux `authorized_keys`** must be configured:
+
+#### Step 1: Whitelist the Teammate's Public IP in the NSG
+The Azure NSG blocks all SSH attempts by default. Have the teammate find their public IP by running:
+```bash
+curl -s ifconfig.me
+```
+Then, an admin with Azure CLI access adds their IP to `vm-paypink-nsg`:
+```bash
+# Example: Adding Maria's IP
+az network nsg rule create \
+  --resource-group "RG-PAYPINK-WESTUS2" \
+  --nsg-name "vm-paypink-nsg" \
+  --name "Allow-SSH-Teammate-Maria" \
+  --priority 1010 \
+  --destination-port-ranges 22 \
+  --source-address-prefixes "<TEAMMATE_IP>/32" \
+  --protocol Tcp \
+  --access Allow
+```
+
+#### Step 2: Authorize the Teammate's Public SSH Key
+1. The teammate generates an SSH keypair on their machine (if they don't already have one):
+   ```bash
+   ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -C "teammate@paypink"
+   ```
+2. The teammate shares the contents of their **public** key (`~/.ssh/id_rsa.pub`).
+3. An active admin already on the VM appends it to `authorized_keys`:
+   ```bash
+   echo "<TEAMMATE_PUBLIC_KEY>" >> ~/.ssh/authorized_keys
+   chmod 600 ~/.ssh/authorized_keys
+   ```
+   *(Alternatively, if no one is currently logged into the VM, an Azure contributor can append it via Azure CLI without needing SSH):*
+   ```bash
+   az vm run-command invoke \
+     --resource-group "RG-PAYPINK-WESTUS2" \
+     --name "vm-paypink" \
+     --command-id RunShellScript \
+     --scripts "echo '<TEAMMATE_PUBLIC_KEY>' >> /home/azureuser/.ssh/authorized_keys"
+   ```
+
+> [!WARNING]
+> **Avoid `az vm user update`:** Running `az vm user update --ssh-key-value ...` **overwrites** the entire `authorized_keys` file for `azureuser`, locking out all other teammates. Always append (`>>`) public keys instead.
+
+#### Step 3: Connect to the VM
+The teammate can now connect via SSH:
+```bash
+ssh azureuser@20.69.157.88
+# Or using the FQDN:
+ssh azureuser@paypink-levi-westus2.westus2.cloudapp.azure.com
+```
+
+#### Useful Tunneling for Teammates (Port Forwarding):
+Teammates can forward internal ports (like Grafana or the internal database) directly to their local browser:
+```bash
+# Forward Grafana (:3000) and API Gateway (:8080) to localhost
+ssh -L 3000:localhost:3000 -L 8080:localhost:8080 azureuser@paypink-levi-westus2.westus2.cloudapp.azure.com
+```
 
 ### Performance & Latency Context (Philippines vs. West US 2)
 * `West US 2` has an unavoidable physical network RTT of **~150–200 ms** from Manila, Philippines over public transit.
@@ -306,3 +363,18 @@ Run [`scripts/03-verify-ports.sh`](file:///scripts/03-verify-ports.sh) from outs
    * The pipeline step *Guard against containers from another Compose project* stops the deploy before any containers are created.
    * Fix once, without SSH: `az vm run-command invoke -g RG-PAYPINK-WESTUS2 -n vm-paypink --command-id RunShellScript --scripts @scripts/04-migrate-compose-project.sh`, then re-run the deploy. The `docker_*` volumes are kept as a backup.
    * Never start the prod stack by hand without `-p paypink`.
+5. **Connecting Local Flutter Mobile App to Cloud API Gateway:**
+   * To run the Flutter mobile app (Chrome, macOS, Android/iOS) on a developer workstation directly against the live Azure Cloud backend:
+     ```bash
+     cd mobile
+     flutter run -d chrome --dart-define=API_BASE_URL=http://paypink-levi-westus2.westus2.cloudapp.azure.com:8080/api/v1
+     ```
+   * [`ApiConfig.baseUrl`](file:///mobile/lib/services/api_config.dart) resolves `String.fromEnvironment('API_BASE_URL')` before falling back to local emulator defaults.
+6. **Hosted Azure SQL Database Architecture (`paypink-sql.database.windows.net`):**
+   * Services on the VM connect to hosted Azure Cloud SQL PaaS via `/opt/paypink/.env` (`paypink-sql.database.windows.net`, database `paypink`).
+   * The database uses two enterprise schemas:
+     * **`t24`** for core banking: `t24.ACCOUNT`, `t24.LEDGER_TRANSACTION`, `t24.EOD_JOB_RUN`, `t24.LOCKED_AMOUNT`, `t24.POSTING_JOURNAL`
+     * **`app`** for application data: `app.CUSTOMER`, `app.REMITTANCE`, `app.OUTBOX_EVENT`, `app.AUDIT_LOG`, `app.BANKING_FAVORITE`
+   * **Synonyms Requirement:** Ensure `dbo.*` database synonyms exist (`dbo.ACCOUNT -> t24.ACCOUNT`, `dbo.CUSTOMER -> app.CUSTOMER`, `dbo.REMITTANCE -> app.REMITTANCE`, `dbo.LEDGER_TRANSACTION -> t24.LEDGER_TRANSACTION`) so all ledger and orchestrator queries resolve without schema qualification mismatches.
+   * **RBAC & Saga Columns:** `app.CUSTOMER` requires the `roles` column (`ROLE_CUSTOMER,ROLE_RETAIL_USER`) for Spring Security JWT generation, and `app.REMITTANCE` requires the Saga lifecycle columns (`cancel_until`, `retry_count`, `max_retries`, `current_service`, `internal_status`).
+

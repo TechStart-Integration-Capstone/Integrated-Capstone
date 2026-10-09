@@ -72,6 +72,7 @@ public class ReconciliationService {
     // ── Scheduled sweep every 15 minutes ─────────────────────────────────────
 
     @Scheduled(cron = "${app.reconciliation.cron:0 */15 * * * *}")
+    @Transactional("postgresTransactionManager")
     public void scheduledReconciliation() {
         log.info("[reconciliation-service] Running scheduled 15-minute reconciliation sweep...");
         List<TransactionRecord> transactions = transactionRepository.findTop50ByOrderByTransactionDateDesc();
@@ -145,6 +146,7 @@ public class ReconciliationService {
         return reconLogRepository.findTop50ByOrderByReconDateDesc();
     }
 
+    @Transactional("postgresTransactionManager")
     public void runFullSweep() {
         scheduledReconciliation();
     }

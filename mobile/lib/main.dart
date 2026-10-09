@@ -271,6 +271,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   final List<TransactionItem> _transactions = [];
 
   UserProfile? _userProfile;
+  String? _profileError;
 
   @override
   void initState() {
@@ -279,14 +280,34 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   }
 
   void _loadLiveDatabaseData({bool preserveLocalTransactions = true, bool bypassCache = false}) async {
-    final profile = await AccountService.fetchProfile(
-      fallbackUsername: widget.currentUser,
-      bypassCache: bypassCache,
-    );
+    UserProfile? profile;
+    String? profileError;
+    try {
+      profile = await AccountService.fetchProfile(
+        fallbackUsername: widget.currentUser,
+        bypassCache: bypassCache,
+      );
+    } on ProfileUnavailableException catch (e) {
+      profileError = e.message;
+    }
     final txs = await AccountService.fetchTransactions();
     if (!mounted) return;
+    if (profileError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: PayPinkTheme.red,
+          content: Text(profileError),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _loadLiveDatabaseData(bypassCache: true),
+          ),
+        ),
+      );
+    }
     setState(() {
-      if (profile.accounts.isNotEmpty) {
+      _profileError = profileError;
+      if (profile != null) {
         if (_userProfile == null || !preserveLocalTransactions) {
           _userProfile = profile;
         } else {
@@ -295,14 +316,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           final mergedAccounts = profile.accounts.map((fresh) {
             final local = currentAcctsMap[fresh.accountNumber];
             if (local != null) {
-              if (local.isLoan) {
-                return fresh.copyWith(
-                  currentBalance: local.currentBalance < fresh.currentBalance
-                      ? local.currentBalance
-                      : fresh.currentBalance,
-                  outstandingDebt: local.outstandingDebt,
-                );
-              }
+              // Loan repayments are posted synchronously by loan-service, so its figures are current.
+              if (local.isLoan) return fresh;
               // If local account was debited, keep the lower balance until backend reflects it
               if (local.currentBalance < fresh.currentBalance) {
                 return fresh.copyWith(currentBalance: local.currentBalance);
@@ -598,8 +613,8 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           final newBal = (acc.currentBalance - amount).clamp(0.0, double.infinity);
           return acc.copyWith(currentBalance: newBal);
         }
-        // Reduce loan debt & balance
-        if (accClean == loanClean || acc.accountNumber == loanAccount || acc.accountType.toUpperCase().contains('LOAN')) {
+        // Reduce this loan's debt until the refresh below brings loan-service's figures
+        if (acc.isLoan && (accClean == loanClean || acc.accountNumber == loanAccount)) {
           final newBal = (acc.currentBalance - amount).clamp(0.0, double.infinity);
           final currentDebt = acc.outstandingDebt ?? 0.0;
           final newDebt = (currentDebt - amount).clamp(0.0, double.infinity);
@@ -691,10 +706,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),
         accounts: _userProfile?.accounts,
         userName: resolvedFullName,
+        loadError: _userProfile == null ? _profileError : null,
+        onRetry: () => _loadLiveDatabaseData(bypassCache: true),
+        onLoanPaymentSuccess: _handleLoanPaymentSuccess,
       ),
       RemittanceScreen(
         onTransferSuccess: _handleTransferSuccess,
-        accounts: _userProfile?.accounts,
+        // Loans are not transfer sources or targets; they are paid from the loan sheet.
+        accounts: _userProfile?.accounts.where((a) => !a.isLoan).toList(),
       ),
       TransactionsScreen(
         transactions: _transactions,

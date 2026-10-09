@@ -140,9 +140,7 @@ void main() {
     expect(find.text('LOCKED'), findsOneWidget);
   });
 
-  testWidgets('TransactionsScreen displays connected account history, PayPink filter, and 15-minute reversal confirmation dialog', (WidgetTester tester) async {
-    TransactionItem? reversedTx;
-
+  testWidgets('TransactionsScreen displays connected account history, PayPink filter, and transaction items', (WidgetTester tester) async {
     final recentTransfer = TransactionItem(
       id: 'TXN-2026-TEST1',
       title: 'Transfer to Carlos Mendoza',
@@ -156,8 +154,6 @@ void main() {
       timestamp: DateTime.now().subtract(const Duration(minutes: 3)),
     );
 
-    expect(recentTransfer.isReversible, isTrue);
-    expect(recentTransfer.reversalMinutesRemaining, 12);
     expect(recentTransfer.isCheckingRelated, isTrue);
     expect(recentTransfer.isPayPinkRelated, isTrue);
 
@@ -168,36 +164,17 @@ void main() {
             transactions: [recentTransfer],
             customerName: 'Levi Viernes',
             primaryAccountNumber: '001 3 5046 8001',
-            onReverseTransaction: (tx) {
-              reversedTx = tx;
-            },
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // Verify presence of title, account, counterparty, and reversal button
+    // Verify presence of title, account, counterparty, amounts, and filter chip
     expect(find.text('Transfer to Carlos Mendoza'), findsOneWidget);
     expect(find.text('Everyday Checking •••• 5046 · Today · 1:30 PM'), findsOneWidget);
     expect(find.text('Recipient: Carlos Mendoza · PayPink (•••• 5678)'), findsOneWidget);
-    expect(find.text('Reverse (12m)'), findsOneWidget);
+    expect(find.text('-₱1500.00'), findsOneWidget);
     expect(find.text('PayPink'), findsOneWidget);
-
-    // Tap Reverse and verify confirmation dialog pops up
-    await tester.tap(find.text('Reverse (12m)'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Reverse Transfer'), findsOneWidget);
-    expect(find.text('Amount to Refund'), findsOneWidget);
-    expect(find.text('₱1500.00'), findsOneWidget);
-    expect(find.text('Confirm Reversal'), findsOneWidget);
-
-    // Confirm reversal and verify callback was called with transaction
-    await tester.tap(find.text('Confirm Reversal'));
-    await tester.pumpAndSettle();
-
-    expect(reversedTx, isNotNull);
-    expect(reversedTx!.id, 'TXN-2026-TEST1');
   });
 }

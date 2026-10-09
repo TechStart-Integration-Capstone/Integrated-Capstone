@@ -6,8 +6,12 @@ _Last Updated: 2026-10-09 (Updated last card in digital deck with luxury Pinkish
 _Last Updated: 2026-10-09 (Removed Ledger Balance from Account Details modal, customized 3rd card with distinct Electric Fuchsia & Magenta Pink palette)_
 _Last Updated: 2026-10-09 (Mobile card styling & half-gradient black, bottom logo removal, favorites UI redesign matching PayPink theme with inline error messaging)_
 _Last Updated: 2026-10-09 (Mobile brand refactoring & backend validation: MOB-102 receipt PayPinkLogo, MOB-103 card color gradients & SVG watermark, MOB-104 dynamic dates, MOB-105 server-side favorites & 12-digit lookup verification)_
-_Last Updated: 2026-10-09 (Restored Local Dev Fallback Mode for Development & Firewall Testing, Comprehensive OpenAPI Swagger documentation, Phase 10 RBAC hardening)_
-_Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
+_Last Updated: 2026-10-09 (AccountService conflict resolved: merged loan-service fetchLoans aggregation, ProfileUnavailableException, Member 5 cascading profile fallbacks and ApiClient error extractor by [dom])_  
+_Last Updated: 2026-10-09 (Member 5 Implementation: Mobile backlog MOB-501 through MOB-506 delivered, Gateway CORS and routing aligned, CQRS activity feed integrated, RFC-7807 error handling unified by [dom])_  
+_Last Updated: 2026-10-09 (Restored missing saga polling state declarations in remittance_screen.dart after git merge from main; verified clean flutter analyze build)_  
+_Last Updated: 2026-10-09 (Clean Architecture, BLoC State Machines, Mobile App cloud connection by [levi, cisko]; Newman auth credentials aligned with seeded Azure SQL users, dual token persistence, full CI stack coverage, 20 Newman API contract test resolutions, and 100% test assertion parity on Interest EOD resolve/post endpoints by [dom])_  
+_Last Updated: 2026-10-09 (Hosted Azure Cloud SQL paypink-sql.database.windows.net schema patched with roles, Saga columns, and synonyms; Web Banking login and end-to-end remittance transfers fully verified operational by [levi])_  
+_Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_
 
 ---
 
@@ -46,7 +50,7 @@ The PayPink system is being refactored from a shared-database monolithic ledger 
 | 5b | Loans — apply / accept / disburse / repay / EOD | Implemented (unit-tested; not yet Docker end-to-end) |
 | 6 | Immutable Audit & Risk Decision Log (RISK_DECISION table in PostgreSQL) | Done |
 | Interest EOD | Daily interest accrual and monthly savings posting | Enabled in local Docker; PostgreSQL GL integration deployed; 78 change-specific tests passed |
-| 7 | Mobile Frontend (PWA) | Pending |
+| 7 | Mobile Frontend (Flutter App & PWA) | Integrated with Microservices (MOB-501..506 complete; Flutter analyze & tests pass) |
 | 8 | Chaos + Load Testing | Pending |
 
 - **Perimeter (Edge):** `api-gateway` (:8080) acts as the sole public ingress, validating JWTs, enforcing RBAC (Customer vs. Admin), and applying rate limits.
@@ -386,7 +390,7 @@ PayPink 2.0 operates as an event-driven, domain-partitioned microservices bankin
 
 ## Core Rules and Architectural Boundaries
 
-1. **Mobile Scope (`mobile/`):** The mobile application directory is 100% frozen and untouched. All 6 mobile API contracts must remain strictly backward-compatible.
+1. **Mobile Scope (`mobile/`):** The mobile application directory is 100% frozen and untouched. All 6 mobile API contracts must remain strictly backward-compatible. Exception: the team has opened `mobile/` for the UI and web-alignment backlog in `docs/MOBILE_BACKLOG.md` (MOB-101…MOB-506, split across 5 members). Member 2's tasks (MOB-201…206) are done: the app loads its profile from `GET /api/v1/accounts/me`, loans from `GET /api/v1/loans`, repays via `POST /api/v1/loans/{loanId}/repayments`, and shows errors instead of placeholder balances. It no longer calls `/api/v1/loans/pay`.
 2. **Money Never Moves Without a Risk Score:** Risk score > 0.85 results in rejection before any hold or balance is touched.
 3. **Core Owns Money and Balances:** Microservices do not mutate balances directly in SQL; hold placement and postings are executed by `t24-adapter`.
 4. **Display Balances are Display-Only:** Redis-cached balances are never used for transfer authorization.

@@ -4,14 +4,20 @@ import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
 import '../widgets/dynamic_card_deck.dart';
+import '../widgets/loan_payment_sheet.dart';
 import '../services/account_service.dart';
 
 class AccountsScreen extends StatefulWidget {
   final bool hideBalances;
   final VoidCallback onToggleHideBalances;
   final Function(int)? onNavigateTab;
+  /// Null while the first load is in progress.
   final List<BankAccount>? accounts;
   final String? userName;
+  /// Set when accounts could not be loaded; the screen shows it with a Retry button.
+  final String? loadError;
+  final VoidCallback? onRetry;
+  final Function(double amount, String fromAccount, String loanAccount)? onLoanPaymentSuccess;
 
   const AccountsScreen({
     super.key,
@@ -20,6 +26,9 @@ class AccountsScreen extends StatefulWidget {
     this.onNavigateTab,
     this.accounts,
     this.userName,
+    this.loadError,
+    this.onRetry,
+    this.onLoanPaymentSuccess,
   });
 
   @override
@@ -27,18 +36,29 @@ class AccountsScreen extends StatefulWidget {
 }
 
 class _AccountsScreenState extends State<AccountsScreen> {
-  final Set<int> _unmaskedAccountIds = {};
-  bool _maskEveryday = true;
-  bool _maskSavings = false;
-  bool _maskLoan = true;
+  final Set<String> _unmaskedAccountNumbers = {};
+
+  void _openLoanPayment(BankAccount loan) {
+    LoanPaymentSheet.show(
+      context,
+      loanAccount: loan,
+      accounts: widget.accounts ?? [],
+      onPaymentSuccess: (amount, fundingAccount, _) {
+        widget.onLoanPaymentSuccess?.call(amount, fundingAccount.accountNumber, loan.accountNumber);
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
-    final hasLiveAccounts = widget.accounts != null && widget.accounts!.isNotEmpty;
-    final totalLinked = hasLiveAccounts ? widget.accounts!.length : 3;
+    final accounts = widget.accounts ?? const <BankAccount>[];
+    final deposits = accounts.where((a) => !a.isLoan).toList();
+    final loans = accounts.where((a) => a.isLoan).toList();
+    final hasLiveAccounts = accounts.isNotEmpty;
+    final totalLinked = accounts.length;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -62,16 +82,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 3D Physical Cards Deck with Specular Sheen & Depth Tilt
-          DynamicCardDeck(
-            accounts: widget.accounts ?? [],
-            cardHolder: widget.userName?.isNotEmpty == true ? widget.userName! : 'PayPink Client',
-            hideBalances: widget.hideBalances,
-            onToggleHideBalances: widget.onToggleHideBalances,
-            onOpenTransfer: () => widget.onNavigateTab?.call(2),
-            onOpenDetails: () {
-              if (widget.accounts != null && widget.accounts!.isNotEmpty) {
-                final acct = widget.accounts!.first;
+          // 3D Physical Cards Deck with Specular Sheen & Depth Tilt (real deposit accounts only)
+          if (deposits.isNotEmpty) ...[
+            DynamicCardDeck(
+              accounts: deposits,
+              cardHolder: widget.userName?.isNotEmpty == true ? widget.userName! : 'PayPink Client',
+              hideBalances: widget.hideBalances,
+              onToggleHideBalances: widget.onToggleHideBalances,
+              onOpenTransfer: () => widget.onNavigateTab?.call(2),
+              onOpenDetails: () {
+                final acct = deposits.first;
                 final holder = widget.userName?.isNotEmpty == true ? widget.userName! : acct.displayName;
                 PayPinkBottomSheets.showAccountDetails(
                   context,
@@ -80,12 +100,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   balance: acct.currentBalance,
                   type: acct.accountType,
                   status: acct.status,
+                  account: acct,
                 );
-              }
-            },
-            isDark: isDark,
-          ),
-          const SizedBox(height: 24),
+              },
+              isDark: isDark,
+            ),
+            const SizedBox(height: 24),
+          ],
 
           // Header with Hide balances toggle
           Row(
@@ -147,13 +168,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Dynamic Live Database Accounts or Fallbacks
-          if (hasLiveAccounts) ...[
-            ...widget.accounts!.map((account) {
-              final isMasked = !_unmaskedAccountIds.contains(account.accountId);
-              final isSavings = account.accountType == 'SAVINGS_ACCOUNT';
-              final isChecking = account.accountType == 'CHECKING_ACCOUNT';
-              final isEveryday = account.accountType == 'EVERYDAY_ACCOUNT';
+          // Live accounts only; never placeholder balances.
+          if (!hasLiveAccounts)
+            _buildStatusCard(context)
+          else ...[
+            ...deposits.map((account) {
+              final isMasked = !_unmaskedAccountNumbers.contains(account.accountNumber);
+              final isSavings = account.isSavings;
+              final isChecking = account.accountType.contains('CHECKING');
+              final isEveryday = account.accountType.contains('EVERYDAY');
 
               final IconData icon = isSavings
                   ? Icons.savings_rounded
@@ -177,85 +200,38 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 padding: const EdgeInsets.only(bottom: 14.0),
                 child: _buildAccountFullCard(
                   context,
+                  account: account,
                   name: account.displayName,
                   maskedNumber: isMasked ? account.maskedNumber : account.formattedNumber,
                   fullNumber: account.formattedNumber,
                   isMasked: isMasked,
-                  onToggleMask: () {
-                    setState(() {
-                      if (_unmaskedAccountIds.contains(account.accountId)) {
-                        _unmaskedAccountIds.remove(account.accountId);
-                      } else {
-                        _unmaskedAccountIds.add(account.accountId);
-                      }
-                    });
-                  },
-                  balance: account.currentBalance,
-                  heldBalance: 0.00,
-                  interestRate: isSavings ? 1.50 : 0.25,
-                  type: account.accountType,
-                  status: account.status.toLowerCase() == 'active' ? 'Active' : account.status,
-                  ledgerId: account.accountNumber,
+                  onToggleMask: () => setState(() {
+                    if (!_unmaskedAccountNumbers.remove(account.accountNumber)) {
+                      _unmaskedAccountNumbers.add(account.accountNumber);
+                    }
+                  }),
                   icon: icon,
                   iconColor: iconColor,
                   iconBg: iconBg,
                 ),
               );
             }),
-          ] else ...[
-            // Everyday Account Card
-            _buildAccountFullCard(
-              context,
-              name: 'Everyday account',
-              maskedNumber: _maskEveryday ? '•••• •••• 5046' : '001 1 5046 8001',
-              fullNumber: '001 1 5046 8001',
-              isMasked: _maskEveryday,
-              onToggleMask: () => setState(() => _maskEveryday = !_maskEveryday),
-              balance: 50.00,
-              heldBalance: 0.00,
-              interestRate: 0.25,
-              type: 'EVERYDAY_ACCOUNT',
-              status: 'Active',
-              ledgerId: 'everyday-5046',
-              icon: Icons.account_balance_wallet_rounded,
-              iconColor: PayPinkTheme.green,
-              iconBg: PayPinkTheme.greenBg,
-            ),
-            const SizedBox(height: 14),
-
-            // Savings Account Card
-            _buildAccountFullCard(
-              context,
-              name: 'Savings account',
-              maskedNumber: _maskSavings ? '•••• •••• 8504' : '001 1 5968504 7',
-              fullNumber: '001 1 5968504 7',
-              isMasked: _maskSavings,
-              onToggleMask: () => setState(() => _maskSavings = !_maskSavings),
-              balance: 0.00,
-              heldBalance: 0.00,
-              interestRate: 1.50,
-              type: 'SAVINGS_ACCOUNT',
-              status: 'Active',
-              ledgerId: 'savings-8504',
-              icon: Icons.savings_rounded,
-              iconColor: PayPinkTheme.wine,
-              iconBg: PayPinkTheme.pinkSubtle,
-            ),
-            const SizedBox(height: 14),
-
-            // Personal Loan Account Card
-            _buildLoanCard(
-              context,
-              name: 'Personal Loan',
-              maskedNumber: _maskLoan ? '•••• •••• 9921' : '001 9 9921 4410',
-              fullNumber: '001 9 9921 4410',
-              isMasked: _maskLoan,
-              onToggleMask: () => setState(() => _maskLoan = !_maskLoan),
-              remainingBalance: 45000.00,
-              amortization: 3750.00,
-              dueDate: 'Oct 25, 2026',
-              status: 'Current',
-            ),
+            ...loans.map((loan) {
+              final isMasked = !_unmaskedAccountNumbers.contains(loan.accountNumber);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14.0),
+                child: _buildLoanCard(
+                  context,
+                  loan: loan,
+                  isMasked: isMasked,
+                  onToggleMask: () => setState(() {
+                    if (!_unmaskedAccountNumbers.remove(loan.accountNumber)) {
+                      _unmaskedAccountNumbers.add(loan.accountNumber);
+                    }
+                  }),
+                ),
+              );
+            }),
           ],
           const SizedBox(height: 20),
 
@@ -296,19 +272,57 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
+  /// Loading, load-failure, or no-accounts card shown instead of placeholder accounts.
+  Widget _buildStatusCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
+    final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
+    final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+
+    if (widget.accounts == null && widget.loadError == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine)),
+      );
+    }
+
+    final failed = widget.loadError != null;
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(failed ? Icons.cloud_off_rounded : Icons.account_balance_outlined, color: brandWine, size: 22),
+          const SizedBox(height: 10),
+          Text(
+            failed ? 'We couldn’t load your accounts' : 'No accounts yet',
+            style: PayPinkTheme.display(fontSize: 14, fontWeight: FontWeight.w700, color: textInk),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            failed ? widget.loadError! : 'No accounts are linked to this profile yet.',
+            style: PayPinkTheme.body(fontSize: 11.5, color: textMuted, height: 1.4),
+          ),
+          if (widget.onRetry != null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: widget.onRetry,
+              icon: Icon(Icons.refresh_rounded, size: 16, color: brandWine),
+              label: Text('Try again', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: brandWine)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildAccountFullCard(
     BuildContext context, {
+    required BankAccount account,
     required String name,
     required String maskedNumber,
     required String fullNumber,
     required bool isMasked,
     required VoidCallback onToggleMask,
-    required double balance,
-    double heldBalance = 0.0,
-    double interestRate = 1.50,
-    required String type,
-    required String status,
-    required String ledgerId,
     required IconData icon,
     required Color iconColor,
     required Color iconBg,
@@ -318,6 +332,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
     final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+    final balance = account.currentBalance;
+    final interestRate = account.annualInterestRatePercent;
+    final status = account.status.toLowerCase() == 'active' ? 'Active' : account.status;
 
     return GlassCard(
       onTap: () {
@@ -327,8 +344,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
           name: holder,
           fullNumber: fullNumber,
           balance: balance,
-          type: type,
+          type: account.accountType,
           status: status,
+          account: account,
         );
       },
       child: Column(
@@ -397,7 +415,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            widget.hideBalances ? '••••••' : '₱${balance.toStringAsFixed(2)}',
+            widget.hideBalances ? '••••••' : formatPeso(balance),
             style: PayPinkTheme.display(
               fontSize: 28,
               fontWeight: FontWeight.w800,
@@ -406,46 +424,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          // Available vs Held vs Interest Pills
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF143823) : PayPinkTheme.greenBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'Avail: ₱${balance.toStringAsFixed(2)}',
-                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: isDark ? PayPinkTheme.darkCard : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: textLine),
-                ),
-                child: Text(
-                  'Held: ₱${heldBalance.toStringAsFixed(2)}',
-                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w600, color: textMuted),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${interestRate.toStringAsFixed(2)}% p.a.',
-                  style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine),
-                ),
-              ),
-            ],
+          // Interest pill: real savings tier, or "No interest" for checking accounts
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              interestRate != null ? '${interestRate.toStringAsFixed(2)}% p.a. interest' : 'No interest',
+              style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine),
+            ),
           ),
           const SizedBox(height: 14),
           Divider(color: textLine, height: 1),
@@ -518,30 +507,32 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   Widget _buildLoanCard(
     BuildContext context, {
-    required String name,
-    required String maskedNumber,
-    required String fullNumber,
+    required BankAccount loan,
     required bool isMasked,
     required VoidCallback onToggleMask,
-    required double remainingBalance,
-    required double amortization,
-    required String dueDate,
-    required String status,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
     final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
+    const name = 'Personal Loan';
+    final maskedNumber = isMasked ? loan.maskedNumber : loan.accountNumber;
+    final remainingBalance = loan.outstandingDebt ?? loan.currentBalance;
+    final overdue = loan.status.toUpperCase() == 'OVERDUE' || (loan.penaltyDue ?? 0) > 0;
+    final status = overdue ? 'Overdue' : 'Current';
+    final rateTerm = [
+      if (loan.interestRate != null) '${loan.interestRate!.toStringAsFixed(2)}% p.a.',
+      if (loan.termMonths != null) '${loan.termMonths} Mo',
+    ].join(' · ');
+    void openDetails() => PayPinkBottomSheets.showLoanDetails(
+          context,
+          loan: loan,
+          onPay: () => _openLoanPayment(loan),
+        );
 
     return GlassCard(
-      onTap: () => PayPinkBottomSheets.showLoanDetails(
-        context,
-        loanNumber: fullNumber,
-        remaining: remainingBalance,
-        amortization: amortization,
-        dueDate: dueDate,
-      ),
+      onTap: openDetails,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -615,7 +606,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.hideBalances ? '••••••' : '₱${remainingBalance.toStringAsFixed(2)}',
+                    widget.hideBalances ? '••••••' : formatPeso(remainingBalance),
                     style: PayPinkTheme.display(
                       fontSize: 28,
                       fontWeight: FontWeight.w800,
@@ -627,20 +618,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   Text('Remaining loan balance', style: PayPinkTheme.body(fontSize: 10.5, color: textMuted)),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
-                  borderRadius: BorderRadius.circular(8),
+              if (loan.dueDate != null || loan.minimumPayment != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (loan.dueDate != null)
+                        Text('Due: ${loan.dueDate}', style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine)),
+                      if (loan.minimumPayment != null)
+                        Text(formatPeso(loan.minimumPayment!), style: PayPinkTheme.mono(fontSize: 10.5, fontWeight: FontWeight.w800, color: textInk)),
+                    ],
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('Due: $dueDate', style: PayPinkTheme.body(fontSize: 9.5, fontWeight: FontWeight.w700, color: brandWine)),
-                    Text('₱${amortization.toStringAsFixed(0)}/mo', style: PayPinkTheme.mono(fontSize: 10.5, fontWeight: FontWeight.w800, color: textInk)),
-                  ],
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -650,19 +644,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '5.50% p.a. · 12 Mo',
+                rateTerm,
                 style: PayPinkTheme.body(fontSize: 10.5, color: textMuted),
               ),
               Row(
                 children: [
                   GestureDetector(
-                    onTap: () => PayPinkBottomSheets.showLoanDetails(
-                      context,
-                      loanNumber: fullNumber,
-                      remaining: remainingBalance,
-                      amortization: amortization,
-                      dueDate: dueDate,
-                    ),
+                    onTap: () => PayPinkBottomSheets.showLoanSchedule(context, loan: loan),
                     child: Row(
                       children: [
                         Icon(Icons.calendar_month_outlined, size: 13, color: brandWine),
@@ -680,13 +668,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   ),
                   const SizedBox(width: 16),
                   GestureDetector(
-                    onTap: () => PayPinkBottomSheets.showLoanDetails(
-                      context,
-                      loanNumber: fullNumber,
-                      remaining: remainingBalance,
-                      amortization: amortization,
-                      dueDate: dueDate,
-                    ),
+                    onTap: () => _openLoanPayment(loan),
                     child: Row(
                       children: [
                         Icon(Icons.payment_rounded, size: 14, color: brandWine),

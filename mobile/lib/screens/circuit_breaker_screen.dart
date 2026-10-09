@@ -51,7 +51,7 @@ class CircuitBreakerScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'The mobile client tripped its local Resilience4j Circuit Breaker after gateway proxy timeout (SLA ≤ 200ms). Ledger data is protected with fail-fast resilience.',
+                'We could not connect to PayPink services right now. Your account data remains fully protected with automated security guards.',
                 textAlign: TextAlign.center,
                 style: PayPinkTheme.body(
                   fontSize: 12.5,
@@ -83,7 +83,7 @@ class CircuitBreakerScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'LOCAL ENCRYPTED FALLBACK CACHE',
+                          'LAST SAVED BALANCE',
                           style: PayPinkTheme.mono(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -101,7 +101,7 @@ class CircuitBreakerScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Retrieved from iOS Keychain / Android KeyStore safe store.',
+                          'Encrypted offline security snapshot.',
                           style: PayPinkTheme.body(
                             fontSize: 11,
                             color: PayPinkTheme.muted,
@@ -122,7 +122,7 @@ class CircuitBreakerScreen extends StatelessWidget {
                     onRecover();
                   },
                   icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Reconnect to Gateway (127.0.0.1:8080)'),
+                  label: const Text('Try Reconnecting'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: PayPinkTheme.wine,
                     foregroundColor: Colors.white,

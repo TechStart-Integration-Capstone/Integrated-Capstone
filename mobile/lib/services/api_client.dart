@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -130,5 +130,28 @@ class ApiClient {
       SecureTokenStorage.clearVault();
       triggerUnauthorized();
     }
+  }
+
+  /// Extracts user-facing error message matching web SPA standards:
+  /// - 502/503/504: "PayPink is starting up. Please wait a moment and try again."
+  /// - 429: "Too many requests. Please wait a moment and try again."
+  /// - RFC-7807 / Problem details: message, error, detail, or reason
+  static String extractErrorMessage(int statusCode, String responseBody) {
+    if (statusCode == 502 || statusCode == 503 || statusCode == 504) {
+      return 'PayPink is starting up. Please wait a moment and try again.';
+    }
+    if (statusCode == 429) {
+      return 'Too many requests. Please wait a moment and try again.';
+    }
+    try {
+      final data = jsonDecode(responseBody);
+      if (data is Map<String, dynamic>) {
+        final msg = data['error'] ?? data['message'] ?? data['detail'] ?? data['reason'];
+        if (msg != null && msg.toString().trim().isNotEmpty) {
+          return msg.toString().trim();
+        }
+      }
+    } catch (_) {}
+    return '';
   }
 }
