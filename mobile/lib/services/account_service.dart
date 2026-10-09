@@ -528,6 +528,7 @@ class AccountService {
   }) async {
     final savedUser = await SecureTokenStorage.getUsername() ?? fallbackUsername ?? '';
     final savedName = await SecureTokenStorage.getFullName() ?? savedUser;
+    final customerId = await SecureTokenStorage.getCustomerId();
 
     final cacheHeaders = bypassCache ? {'Cache-Control': 'no-cache, no-store'} : null;
     final queryParams = bypassCache ? {'_t': DateTime.now().millisecondsSinceEpoch.toString()} : null;
@@ -568,7 +569,7 @@ class AccountService {
         }
       }
 
-      // 3. Fallback: GET /api/v1/accounts
+      // 3. Fallback endpoint: GET /api/v1/accounts
       final response = await _api.get(
         ApiConfig.accountsPath,
         headers: cacheHeaders,
@@ -598,38 +599,13 @@ class AccountService {
       debugPrint('[AccountService] fetchProfile error: $e');
     }
 
-    // Default structure matching live Azure SQL schema
+    // Strict Cloud Target: Return clean user profile structure if cloud backend profile fetching failed
     return UserProfile(
       firstName: savedName.split(' ').first,
       fullName: savedName,
       username: savedUser,
       email: '$savedUser@paypink.ph',
-      accounts: [
-        BankAccount(
-          accountId: 1,
-          accountNumber: '001173612613',
-          accountType: 'SAVINGS_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 183715.00,
-          status: 'ACTIVE',
-        ),
-        BankAccount(
-          accountId: 2,
-          accountNumber: '001373612611',
-          accountType: 'CHECKING_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 50474.85,
-          status: 'ACTIVE',
-        ),
-        BankAccount(
-          accountId: 3,
-          accountNumber: '001973612615',
-          accountType: 'STRESS_TEST_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 1049.00,
-          status: 'ACTIVE',
-        ),
-      ],
+      accounts: const [],
     );
   }
 

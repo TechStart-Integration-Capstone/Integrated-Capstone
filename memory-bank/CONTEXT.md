@@ -23,13 +23,17 @@ _Last Updated: 2026-10-09 (Aligned Mobile Web to dynamic reverse proxy origin ${
 _Last Updated: 2026-10-09 (Mobile real-time loan origination & instant state refresh implemented: merged fetchLoans() into fetchProfile() UserProfile.accounts, and wired onRefreshData to trigger _loadLiveDatabaseData(bypassCache: true) immediately upon loan acceptance; 17/17 tests pass clean by [dom])_  
 _Last Updated: 2026-10-09 (Corrected Azure FQDN to paypink.westus2.cloudapp.azure.com:8080/api/v1, enabled GoogleFonts runtime fetching, and tuned nginx caching to avoid stale mobile app browser caching)_
 _Last Updated: 2026-10-09 (Self-contained offline fonts bundled in mobile/assets/fonts/ and registered in pubspec.yaml; resolved blank white screen crash on http://localhost:3002 Docker release; 17/17 tests pass by [dom])_  
-_Last Updated: 2026-10-09 (Updated last card in digital deck with luxury Pinkish Beige palette - Desert Rose / Champagne Blush Nude into gradient black)_
+_Last Updated: 2026-10-09 (Created reusable LoadingOverlayWrapper with AbsorbPointer and glassmorphism backdrop; shielded RemittanceScreen and LoanPaymentSheet against touch events during in-flight network requests)_
+_Last Updated: 2026-10-09 (Mobile Features 3, 4, 5 implemented: TelemetryService structured logging & Dio integration, SessionManager backgrounding auto-lock & SessionLockWrapper, expanded BLoC and Telemetry test suite with 30/30 tests passing)_
+
+_Last Updated: 2026-10-09 (Cleaned up AccountService.fetchProfile() syntax, retrieved customerId, and eliminated hardcoded dummy account seeding for 100% Cloud-Native live Azure SQL data fetching)_
+
 _Last Updated: 2026-10-09 (Removed Ledger Balance from Account Details modal, customized 3rd card with distinct Electric Fuchsia & Magenta Pink palette)_
 _Last Updated: 2026-10-09 (Mobile card styling & half-gradient black, bottom logo removal, favorites UI redesign matching PayPink theme with inline error messaging)_
 _Last Updated: 2026-10-09 (Mobile brand refactoring & backend validation: MOB-102 receipt PayPinkLogo, MOB-103 card color gradients & SVG watermark, MOB-104 dynamic dates, MOB-105 server-side favorites & 12-digit lookup verification)_
 _Last Updated: 2026-10-09 (AccountService conflict resolved: merged loan-service fetchLoans aggregation, ProfileUnavailableException, Member 5 cascading profile fallbacks and ApiClient error extractor by [dom])_  
 _Last Updated: 2026-10-09 (Member 5 Implementation: Mobile backlog MOB-501 through MOB-506 delivered, Gateway CORS and routing aligned, CQRS activity feed integrated, RFC-7807 error handling unified by [dom])_  
-_Last Updated: 2026-10-09 (Restored missing saga polling state declarations in remittance_screen.dart after git merge from main; verified clean flutter analyze build)_  
+_Last Updated: 2026-10-09 (Fixed isSmall constructor parameter and Widget mapping in bottom_sheets.dart; verified clean flutter analyze build)_  
 _Last Updated: 2026-10-09 (Permanent Web & Mobile Cloud Synchronization established; mobile defaults to Azure Cloud API Gateway and aligns directly with /auth/banking/me endpoint, rendering 3 live accounts totaling ₱235,238.85 identically across Web Banking and Mobile App)_
 _Last Updated: 2026-10-09 (Hosted Azure Cloud SQL paypink-sql.database.windows.net schema patched with roles, Saga columns, and synonyms; Web Banking login and end-to-end remittance transfers fully verified operational by [levi])_  
 _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 containers restored and verified online, and mobile app enabled for cloud connection via API_BASE_URL by [levi])_  
