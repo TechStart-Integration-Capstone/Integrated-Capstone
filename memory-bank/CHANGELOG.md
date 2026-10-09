@@ -70,6 +70,13 @@ Newest first. One line per change: date, what changed, who.
   - **Stage 3 Production Deployment Migrations:**
     - Added `scripts/migrate_phase10_rbac_roles.sql` to Azure SQL additive migrations loop.
     - Added `scripts/migrate_interest_recovery_postgres.sql` and `scripts/migrate_interest_approval_postgres.sql` to PostgreSQL migrations loop. — [dom]
+- 2026-10-09 — Azure Cloud SQL Hosted Database Alignment & Funds Transfer Resolution:
+  - **Azure SQL Cloud PaaS Schema Alignment (`paypink-sql.database.windows.net`):**
+    - Resolved Web Banking login 500 error by adding missing `roles` column (`NVARCHAR(255) NOT NULL DEFAULT 'ROLE_CUSTOMER,ROLE_RETAIL_USER'`) to `app.CUSTOMER` on the hosted Azure SQL Database.
+    - Resolved Remittance Transfer 500 error by patching `app.REMITTANCE` with missing Saga & cancellation lifecycle columns (`cancel_until`, `retry_count`, `max_retries`, `next_retry_at`, `transaction_type`, `current_service`, `internal_status`, `risk_score`, `risk_decision`, `ft_reference`, `reason`).
+    - Added customer limit columns (`daily_transfer_limit`, `per_tx_limit`) to `app.CUSTOMER` and `held_balance` to `t24.ACCOUNT`.
+    - Created database synonyms (`dbo.ACCOUNT` -> `t24.ACCOUNT`, `dbo.CUSTOMER` -> `app.CUSTOMER`, `dbo.REMITTANCE` -> `app.REMITTANCE`, `dbo.LEDGER_TRANSACTION` -> `t24.LEDGER_TRANSACTION`, `dbo.OUTBOX_EVENT` -> `app.OUTBOX_EVENT`, `dbo.AUDIT_LOG` -> `app.AUDIT_LOG`, `dbo.BANKING_FAVORITE` -> `app.BANKING_FAVORITE`).
+    - Verified full end-to-end funds transfer (₱777.00) in Web Banking SPA: Idempotency locking -> Risk Engine scoring -> T24 hold -> Ledger posting -> UI receipt generation. — [levi]
 - 2026-10-09 — Cloud Deployment Health & Mobile Cloud Connectivity:
   - **Mobile Cloud Configuration (`mobile`):** Added `String.fromEnvironment('API_BASE_URL')` check to [`ApiConfig.baseUrl`](file:///mobile/lib/services/api_config.dart), enabling local Flutter apps (desktop, Chrome, mobile) to target the cloud API Gateway via `--dart-define=API_BASE_URL=http://paypink-levi-westus2.westus2.cloudapp.azure.com:8080/api/v1` without breaking local emulator defaults.
   - **Cloud Infrastructure & Stack Verification (`vm-paypink`):** Disabled daily auto-shutdown policy on Azure VM; restored Kafka after stale broker ephemeral registration; verified all 26 core operational containers running and healthy. Confirmed Web Banking SPA accessible at `http://paypink-levi-westus2.westus2.cloudapp.azure.com/bank/` and Azure SQL `master` active with all retail banking tables. — [levi]
