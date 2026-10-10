@@ -36,6 +36,7 @@ public class TransactionReportService {
         var end = Timestamp.from(to.plusDays(1).atStartOfDay(ZONE).toInstant());
         // Outgoing rows are the account's own ledger rows. Transfers posted by transaction-service (P2P_REMITTANCE)
         // and loan payouts are a single row for both sides, so the account's incoming leg is added as a CREDIT.
+        // Legacy transfers already have separate account-owned debit/credit rows; do not mirror them again.
         // Sender requests without a ledger entry are also listed, but never count toward completed totals.
         var rows = jdbc.query("SELECT * FROM (SELECT t.transaction_date, t.reference_no, t.transaction_type, t.status, "
             + "COALESCE("
@@ -49,7 +50,8 @@ public class TransactionReportService {
             + "t.status, 'CREDIT', t.amount, c.first_name + ' ' + c.last_name, t.transaction_id, 1, "
             + "CASE WHEN t.transaction_type = 'P2P_REMITTANCE' THEN t.reference_no END FROM LEDGER_TRANSACTION t "
             + "LEFT JOIN ACCOUNT a ON a.account_id = t.from_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
-            + "WHERE t.to_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ? "
+            + "WHERE t.to_account_id = ? AND t.transaction_type IN ('P2P_REMITTANCE','LOAN_DISBURSEMENT') "
+            + "AND t.transaction_date >= ? AND t.transaction_date < ? "
             + "UNION ALL SELECT r.created_at, r.reference_no, 'P2P_REMITTANCE', " + UnpostedTransferQuery.STATUS
             + ", 'DEBIT', r.amount, c.first_name + ' ' + c.last_name, r.remittance_id, 2, r.reference_no "
             + "FROM app.REMITTANCE r JOIN ACCOUNT source ON source.account_id = r.source_account_id "

@@ -1,4 +1,9 @@
 # Changelog
+- 2026-10-11 — Customer fix 20: remove duplicate incoming entries from transaction PDFs — [aly]
+  - microservices/auth-service TransactionReportService now adds a synthetic incoming credit only for P2P_REMITTANCE and LOAN_DISBURSEMENT, which store a single row for both sides. Legacy TRANSFER_OUT/TRANSFER_IN rows already belong to their respective accounts and are no longer mirrored into duplicate or phantom credits.
+  - Added three BankingActivityQueryTest cases for legacy own-account/other-customer transfers and loan payout/repayment behavior; strengthened the P2P incoming report assertion. All 95 auth-service tests passed with H2 query coverage, including accurate report counts and completed totals.
+  - No database migration or historical data rewrite. User handles auth-service JAR/image rebuild and container recreation; no deployment performed, live SQL Server/browser acceptance pending. Numbered review findings 1–22 are now implemented locally; the separately observed mobile savePin error-handling issue remains outside those fixes.
+
 - 2026-10-11 — Customer fix 21: prevent old API responses from ending a newer session — [aly]
   - frontend/bank/bank.js captures the session and generation when sending shared API requests, then checks both after reading the response body. Responses from an earlier authenticated session are rejected before logout or returning data; current-session 401 handling and unauthenticated login errors retain their behavior.
   - Added eight regressions in scripts/test_bank_loan_sessions.mjs covering delayed 401/success responses across different and same-customer logins (including a reused token), session changes while parsing JSON, concurrent expired requests, unauthenticated failures and current-session success.

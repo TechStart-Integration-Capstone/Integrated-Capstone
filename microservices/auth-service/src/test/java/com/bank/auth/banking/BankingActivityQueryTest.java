@@ -214,6 +214,39 @@ class BankingActivityQueryTest {
 
         byte[] pdf = new TransactionReportService(banking, jdbc).generate("token", 3L, today.minusDays(1), today);
 
-        assertThat(new String(pdf, StandardCharsets.ISO_8859_1)).contains("TRANSFER IN - Jamie Rivera");
+        assertThat(new String(pdf, StandardCharsets.ISO_8859_1)).contains("TRANSFER IN - Jamie Rivera",
+                "(1 transactions)", "Completed money in: PHP 25.00", "Completed money out: PHP 0.00");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"2,Jamie Rivera", "3,Alex Cruz"})
+    void legacyTransferReportsEachAccountLegExactlyOnce(long recipient, String name) throws Exception {
+        jdbc.update("DELETE FROM OUTBOX_EVENT");
+        jdbc.update("DELETE FROM LEDGER_TRANSACTION");
+        jdbc.update("INSERT INTO LEDGER_TRANSACTION (transaction_id,from_account_id,to_account_id,amount,"
+                + "source_currency,target_currency,transaction_type,reference_no,status) VALUES "
+                + "(20,1,?,40,'PHP','PHP','TRANSFER_OUT','LEGACY-OUT','SUCCESS'),"
+                + "(21,?,1,40,'PHP','PHP','TRANSFER_IN','LEGACY-IN','SUCCESS')", recipient, recipient);
+        jdbc.update("INSERT INTO OUTBOX_EVENT VALUES (20,20,'{\"operation\":\"DEBIT\"}'),"
+                + "(21,21,'{\"operation\":\"CREDIT\"}')");
+
+        assertThat(report(1)).contains("(1 transactions)", "TRANSFER OUT - " + name,
+                "Completed money in: PHP 0.00", "Completed money out: PHP 40.00")
+                .doesNotContain("TRANSFER IN");
+        assertThat(report(recipient)).contains("(1 transactions)", "TRANSFER IN - Jamie Rivera",
+                "Completed money in: PHP 40.00", "Completed money out: PHP 0.00")
+                .doesNotContain("TRANSFER OUT");
+    }
+
+    @Test void loanPayoutIsStillIncomingButRepaymentDoesNotCreateAPhantomCredit() throws Exception {
+        jdbc.update("INSERT INTO LEDGER_TRANSACTION (transaction_id,from_account_id,to_account_id,amount,"
+                + "source_currency,target_currency,transaction_type,reference_no,status) VALUES "
+                + "(20,1,3,100,'PHP','PHP','LOAN_DISBURSEMENT','LOAN-PAYOUT','SUCCESS'),"
+                + "(21,1,3,20,'PHP','PHP','LOAN_REPAYMENT','LOAN-PAYMENT','SUCCESS')");
+        jdbc.update("INSERT INTO OUTBOX_EVENT VALUES (20,20,'{\"operation\":\"CREDIT\"}'),"
+                + "(21,21,'{\"operation\":\"DEBIT\"}')");
+        assertThat(report(3)).contains("(2 transactions)", "LOAN DISBURSEMENT - PayPink Loans",
+                "Completed money in: PHP 125.00", "Completed money out: PHP 0.00")
+                .doesNotContain("LOAN REPAYMENT");
     }
 }
