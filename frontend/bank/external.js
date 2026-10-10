@@ -81,7 +81,7 @@ function externalTransferPage(accounts) {
     </section><aside class="transfer-guide"><h2>Recent transfers</h2><p>PESONet transfers keep processing when you leave this screen. Reopen a receipt to check its status.</p><div id="external-history">${externalHistoryMarkup(rows)}</div></aside></div>`;
 }
 function externalHistoryMarkup(rows) {
-  return rows.length ? rows.map(r => `<button class="btn btn-secondary" type="button" data-external-receipt="${escapeHtml(r.reference)}">${escapeHtml(r.recipientName)} · ${escapeHtml(money(r.amount))} · ${r.rail}<br>${r.status === 'PENDING' ? 'Pending — batch processing' : r.status === 'FAILED' ? 'Failed' : 'Completed'}</button>`).join('') : '<p class="muted">Your transfers will appear here.</p>';
+  return rows.length ? rows.map(r => `<button class="btn btn-secondary" type="button" data-external-receipt="${escapeHtml(r.reference)}">${escapeHtml(r.recipientName)} · ${escapeHtml(money(r.amount))} · ${escapeHtml(r.rail)}<br>${transferOutcome(r.status) === 'pending' ? 'Pending — awaiting confirmation' : transferOutcome(r.status) === 'failed' ? 'Unsuccessful' : 'Completed'}</button>`).join('') : '<p class="muted">Your transfers will appear here.</p>';
 }
 function reviewExternalTransfer() {
   const f = state.transfer;
@@ -90,10 +90,13 @@ function reviewExternalTransfer() {
   const recipient = externalRecipients.find(r => r.number === f.externalNumber);
   const amount = Number(f.amount);
   f.error = '';
+  f.externalReview = null;
   if (!source || !recipient) f.error = 'Choose valid sending and receiving accounts.';
   else if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > .00001) f.error = 'Enter a positive amount with at most two decimal places.';
   else if (amount > Number(source.currentBalance)) f.error = 'Not enough available balance for this amount.';
   else if (f.rail === 'INSTAPAY' && amount > 50000) f.error = 'InstaPay allows up to PHP 50,000 per transfer. Choose PESONet for a larger amount.';
+  else if (!['INSTAPAY','PESONET'].includes(f.rail)) f.error = 'Choose InstaPay or PESONet.';
+  if (f.error) { renderPage(); return; }
   const refKey = typeof generateUUID === 'function' ? generateUUID() : ('PAY-' + Math.random().toString(36).slice(2) + Date.now());
   f.externalReview = {mock:true,reference:`PAY-${refKey}`,recipientName:recipient.name,destinationAccountNumber:recipient.number,bank:recipient.bank,sourceAccountId:source.accountId,amount,currency:'PHP',rail:f.rail};
   showDialog('Review your transfer', `<p class="notice">Please check the recipient details before confirming.</p><dl class="detail-list">${detail('From',escapeHtml(maskedNumber(source.accountNumber)))}${detail('Recipient',escapeHtml(recipient.name))}${detail('Bank',escapeHtml(recipient.bank))}${detail('Account',escapeHtml(maskedNumber(recipient.number)))}${detail('Method',f.rail)}${detail('Amount',escapeHtml(money(amount)))}${detail('Processing',f.rail === 'PESONET' ? 'Pending for about 90 seconds; money deducted on completion' : 'Immediate')}</dl>`, '<button class="btn btn-secondary" data-action="close-dialog">Go back</button><button class="btn btn-primary" data-action="confirm-transfer">Confirm transfer</button>');
@@ -110,16 +113,23 @@ async function sendExternalTransfer() {
   const generation = state.generation;
   f.sending = true; dialog.close(); renderPage();
   try {
-    const receipt = await api('/external/transfers',{method:'POST',body:request});
+    let receipt = await api('/external/transfers',{method:'POST',body:request});
     if (generation !== state.generation) return;
     delete state.session.pendingExternal;
     saveSession();
     f.receipt = receipt;
     f.externalReview = null;
     await refresh();
+    if (generation !== state.generation || !state.session) return;
     await loadExternalHistory();
+    if (generation !== state.generation || !state.session) return;
     renderPage();
-    toast('Transfer complete. The external recipient has been credited.');
+    receipt = f.receipt;
+    const outcome = transferOutcome(receipt.status);
+    toast(outcome === 'completed' ? 'Transfer complete. The external recipient has been credited.'
+      : outcome === 'failed' ? 'Your external transfer was not completed.'
+      : 'Your external transfer is still processing. Check its status before sending again.', outcome === 'failed');
+    if (outcome !== 'completed') return;
 
     // Broadcast external transfer event for instant real-time admin sync
     try {
@@ -137,7 +147,7 @@ async function sendExternalTransfer() {
         destinationAccountNumber: `${receipt.bank || 'External'} · ${receipt.destinationAccountNumber}`,
         amount: receipt.amount,
         currency: receipt.currency || 'PHP',
-        status: receipt.status || 'COMPLETED',
+        status: 'COMPLETED',
         date: receipt.date || new Date().toISOString(),
         recipientName: receipt.recipientName || 'External Customer',
         bank: receipt.bank || 'External Bank',
@@ -161,7 +171,8 @@ async function sendExternalTransfer() {
 function mockReceipt(receipt) {
   const current = settleExternal().find(r => r.reference === receipt.reference) || receipt;
   state.transfer.receipt = current;
-  return heading(current.status === 'PENDING' ? 'Transfer pending.' : current.status === 'FAILED' ? 'Transfer failed.' : 'Transfer complete.', 'Track your transfer and save your receipt.') + `<section class="transfer-receipt"><h2>${current.status === 'PENDING' ? 'Waiting for the PESONet batch' : current.status === 'FAILED' ? 'Transfer unsuccessful' : 'Transfer completed'}</h2><div class="receipt-amount">${escapeHtml(money(current.amount))}</div><dl class="detail-list">${detail('Recipient',escapeHtml(current.recipientName))}${detail('Bank',escapeHtml(current.bank))}${detail('Account',escapeHtml(maskedNumber(current.destinationAccountNumber)))}${detail('Method',current.rail)}${detail('Status',statusPill(current.status))}${detail('Reference',escapeHtml(current.reference))}${detail('Submitted',escapeHtml(txDate({date:current.date}).toLocaleString('en-PH')))}</dl>${current.status === 'PENDING' ? '<p role="status">Your transfer is waiting to be processed. No money has been deducted yet. Keep sufficient funds in your account.</p>' : ''}${current.status === 'FAILED' ? '<p role="status">The account was unavailable or had insufficient funds when processing began. No money was deducted.</p>' : ''}<div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
+  const outcome = transferOutcome(current.status);
+  return heading(outcome === 'pending' ? 'Transfer pending.' : outcome === 'failed' ? 'Transfer unsuccessful.' : 'Transfer complete.', 'Track your transfer and save your receipt.') + `<section class="transfer-receipt"><h2>${outcome === 'pending' ? 'Awaiting confirmation' : outcome === 'failed' ? 'Transfer unsuccessful' : 'Transfer completed'}</h2><div class="receipt-amount">${escapeHtml(money(current.amount))}</div><dl class="detail-list">${detail('Recipient',escapeHtml(current.recipientName))}${detail('Bank',escapeHtml(current.bank))}${detail('Account',escapeHtml(maskedNumber(current.destinationAccountNumber)))}${detail('Method',escapeHtml(current.rail))}${detail('Status',statusPill(current.status || 'PENDING'))}${detail('Reference',escapeHtml(current.reference))}${detail('Submitted',escapeHtml(txDate({date:current.date}).toLocaleString('en-PH')))}</dl>${outcome === 'pending' ? '<p role="status">Your transfer is still processing. Check its status before sending again.</p>' : ''}${outcome === 'failed' ? '<p role="status">The bank reported that this transfer did not complete.</p>' : ''}<div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
 }
 document.addEventListener('change', event => {
   if (!state.transfer) return;

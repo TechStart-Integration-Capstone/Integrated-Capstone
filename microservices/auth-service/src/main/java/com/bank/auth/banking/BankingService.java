@@ -210,13 +210,14 @@ public class BankingService {
                         + "WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
                         + "CASE WHEN t.transaction_type IN ('DEBIT','CREDIT') THEN t.transaction_type END) AS operation, "
                         + "t.status, t.transaction_date, c.first_name + ' ' + c.last_name AS counterparty_name, "
-                        + "target.account_number AS counterparty_account, CAST(NULL AS VARCHAR(64)) AS request_reference FROM LEDGER_TRANSACTION t "
+                        + "target.account_number AS counterparty_account, CASE WHEN t.transaction_type = 'P2P_REMITTANCE' "
+                        + "THEN t.reference_no END AS request_reference FROM LEDGER_TRANSACTION t "
                         + "JOIN ACCOUNT a ON a.account_id = CASE WHEN t.transaction_type = 'LOAN_DISBURSEMENT' "
                         + "THEN t.to_account_id ELSE t.from_account_id END "
                         + "LEFT JOIN ACCOUNT target ON target.account_id = t.to_account_id AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN','P2P_REMITTANCE') "
                         + "LEFT JOIN CUSTOMER c ON c.customer_id = target.customer_id WHERE a.customer_id = ? "
                         + "UNION ALL SELECT -t.transaction_id, t.transaction_id, a.account_id, a.account_number, t.amount, t.target_currency, "
-                        + "'TRANSFER_IN', 'CREDIT', t.status, t.transaction_date, c.first_name + ' ' + c.last_name, source.account_number, NULL "
+                        + "'TRANSFER_IN', 'CREDIT', t.status, t.transaction_date, c.first_name + ' ' + c.last_name, source.account_number, t.reference_no "
                         + "FROM LEDGER_TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id "
                         + "JOIN ACCOUNT source ON source.account_id = t.from_account_id "
                         + "LEFT JOIN CUSTOMER c ON c.customer_id = source.customer_id "
@@ -235,7 +236,7 @@ public class BankingService {
                     LocalDateTime date = rs.getTimestamp("transaction_date").toLocalDateTime();
                     return new Activity(rs.getObject("activity_id", Long.class), rs.getLong("account_id"), rs.getString("account_number"),
                             rs.getBigDecimal("amount"), rs.getString("source_currency"), type, rs.getString("operation"),
-                            rs.getString("request_reference") != null ? rs.getString("request_reference")
+                            rs.getString("request_reference") != null && !rs.getString("request_reference").isBlank() ? rs.getString("request_reference")
                                     : BankingIdentifiers.reference(rs.getLong("ledger_id"), date), rs.getString("status"), date,
                             rail == null ? rs.getString("counterparty_name") : rail.name(),
                             rail == null ? rs.getString("counterparty_account") : rail.number());

@@ -1,4 +1,35 @@
 # Changelog
+- 2026-10-11 — Customer fix 18: identify own-account transfers by account number — [aly]
+  - frontend/bank/bank.js spending excludes PayPink transfers only when the counterparty account number matches an account in the signed-in profile. Matching customer names no longer hide payments to somebody else; renamed or differently named owned accounts remain excluded. Pending/failed entries still do not count as spending.
+  - Validation for fixes 16–18: JavaScript syntax checks and all 106 frontend tests passed, including 18 new scripts/test_bank_refresh_errors_spending.mjs cases. Covers manual/periodic loan refresh, overlapping loads, failures, session changes, API detail/fallback handling and spending/chart totals. DOM/network are mocked; live browser/service acceptance pending.
+  - All original review items 1–18 are implemented locally. Fixes 16–18 require no database migration or Java rebuild; user handles frontend image rebuild/container recreation. Earlier backend rebuilds remain as recorded. No deployment performed.
+
+- 2026-10-11 — Customer fix 17: display specific API error details — [aly]
+  - frontend/bank/bank.js prefers a nonblank string detail from problem responses, followed by message/reason/error/title. Non-string values are skipped. Existing network, authorization, rate-limit and generic fallbacks remain; HTTP status and response data are retained on the error.
+  - Regression cases cover detail priority, legacy fields, missing/malformed bodies and fallback messages. Frontend only; no database or Java change.
+
+- 2026-10-11 — Customer fix 16: refresh customer loan data — [aly]
+  - frontend/bank/bank.js refresh now awaits loans, eligibility and schedule progress after updating the profile/history. A loan-load failure reports a partial refresh instead of saying all data is current; prior loan data and input drafts remain available.
+  - frontend/bank/loans.js shares in-flight loads within the same owner/session, while retaining session guards. Old requests cannot clear a new request or announce completion after a session change. Later refreshes fetch again.
+  - Frontend only; no database migration or Java rebuild. User handles frontend image rebuild/container recreation; no deployment performed.
+
+- 2026-10-11 — Customer fix 15: preserve loan application drafts during redraws — [aly]
+  - frontend/bank/loans.js records account, amount and term on input/change before submission, preserving them through in-app Refresh, balance visibility changes and asynchronous loan loads. Existing session reset still clears drafts. Offers retain the submitted account so subsequent draft edits cannot change the account displayed in their agreement.
+  - Validation for fixes 12–15: all 76 auth-service tests and 88 frontend tests passed, plus external.js/loans.js syntax and git diff checks. Includes three new loan draft/offer tests; DOM/network tests are mocked and SQL query tests use H2. Live SQL Server/browser acceptance pending.
+  - Fix 11 was already complete and its 16 notification tests remain passing. No database migration needed for fixes 12–15. User handles auth-service JAR/image and frontend image rebuilds/container recreation; no deployment performed. Findings 16–18 not started.
+
+- 2026-10-11 — Customer fix 14: show external transfer outcomes accurately — [aly]
+  - frontend/bank/external.js chooses toasts, receipt headings and history labels from confirmed status. Pending/unknown results remain pending and failed results show unsuccessful; completion broadcasts from submission require confirmed success. Pending/failed receipts no longer assert that no debit occurred.
+  - Added session checks after refresh/history awaits to suppress messages and submission broadcasts from a previous session. Regression coverage includes eight outcome variants and a session change during refresh. Frontend only; no database or Java change for this fix.
+
+- 2026-10-11 — Customer fix 13: stop invalid external transfer reviews — [aly]
+  - frontend/bank/external.js clears stale review data and returns after validation errors, before reading invalid source/recipient details or opening confirmation. Also validates the selected rail.
+  - Nine invalid-input cases verify no review/submission is created; a correction test verifies valid inputs can proceed afterward. Frontend only; no database or Java change for this fix.
+
+- 2026-10-11 — Customer fix 12: keep PayPink remittance references consistent — [aly]
+  - auth-service BankingService and TransactionReportService now use the stored P2P_REMITTANCE reference for sender/receiver history and PDFs, matching the transfer receipt and unposted request. Legacy non-remittance display references remain unchanged; missing/blank remittance references retain the generated fallback.
+  - Three new H2 regressions cover both account legs/reports, request-to-posted reference continuity, and legacy/missing-reference fallback. No data rewrite or migration; auth-service rebuild required.
+
 - 2026-10-11 — Customer fix 11: show PayPink transfer notifications — [aly]
   - Added P2P_REMITTANCE to frontend/bank/notifications.js history filtering so sender transfers appear in the inbox, unread badge and subsequent-update popups. Recognized status matching is case-insensitive; unposted entries from fix 10 retain their reference-based notification identity.
   - Pending messages await confirmation without asserting a hold; failed messages no longer claim reversal or refund, and cancellation messages avoid claiming restored funds. Existing incoming, external and loan notification flows remain supported.

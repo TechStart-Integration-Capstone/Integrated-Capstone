@@ -15,7 +15,7 @@ const schedule={referenceNo:'A-PRIVATE-LOAN',installments:[
 ]};
 
 function banking() {
-  const calls=[],dialogs=[],notices=[];
+  const calls=[],dialogs=[],notices=[],listeners={};
   let refreshes=0,closes=0;
   const node={innerHTML:'',open:false,addEventListener(){},focus(){},close(){closes++;this.open=false;}};
   const context=vm.createContext({
@@ -26,7 +26,7 @@ function banking() {
       get(key){return this.values.get(key);}
       [Symbol.iterator](){return this.values[Symbol.iterator]();}
     },
-    document:{querySelector:()=>node,addEventListener(){},title:''},
+    document:{querySelector:()=>node,addEventListener(type,fn){(listeners[type] ||= []).push(fn);},title:''},
     window:{PayPinkSavingsLive:{reset(){}}},
     sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},
     dismissTransferPopups(){},
@@ -59,9 +59,63 @@ function banking() {
       form:{accountNo:'A-ACCOUNT'},formError:'A-ERROR',error:'A-LOAD-ERROR'});
   }
   login();
-  return {...s,context,calls,dialogs,notices,login,respond,seed,
+  return {...s,context,calls,dialogs,notices,listeners,login,respond,seed,
     refreshes:()=>refreshes,closes:()=>closes};
 }
+
+test('unsubmitted loan inputs survive redraws and an asynchronous loan reload',async()=>{
+  const b=banking();
+  b.state.profile.accounts=[
+    {accountNumber:'SOURCE',accountType:'EVERYDAY_ACCOUNT',status:'ACTIVE',currency:'PHP',currentBalance:500},
+    {accountNumber:'OTHER',accountType:'SAVINGS_ACCOUNT',status:'ACTIVE',currency:'PHP',currentBalance:100}
+  ];
+  for(const [name,value,type,id] of [
+    ['amount','12345.67','input','loan-amount'],
+    ['accountNo','OTHER','change','loan-account'],
+    ['termMonths','24','change','loan-term']
+  ]){
+    const event={target:{name,value,id,closest:selector=>selector==='#loan-apply-form'?{}:null}};
+    b.listeners[type].forEach(fn=>fn(event));
+  }
+  const check=()=>{
+    const html=b.loansPage();
+    assert.match(html,/value="12345.67"/);
+    assert.match(html,/value="OTHER" selected/);
+    assert.match(html,/value="24" selected/);
+  };
+  check();
+  b.state.hideBalances=true;
+  check();
+  const pending=b.loadLoans();
+  b.respond(0,[]);b.respond(1,{eligible:true});
+  await pending;
+  check();
+  b.login('B');
+  assert.equal(Object.keys(b.loanState.form).length,0);
+});
+
+test('editing a draft does not change the account shown for an existing loan offer',async()=>{
+  const b=banking();
+  const applying=b.applyForLoan({values:{accountNo:'001100001234',amount:'5000',termMonths:'12'}});
+  b.respond(0,{referenceNo:'OFFER',offer:{amount:5000,termMonths:12,monthlyInstallment:450,annualRate:10}});
+  await applying;
+  const event={target:{id:'loan-account',name:'accountNo',value:'001100009876',
+    closest:selector=>selector==='#loan-apply-form'?{}:null}};
+  b.listeners.change.forEach(fn=>fn(event));
+  assert.equal(b.loanState.form.accountNo,'001100009876');
+  vm.runInContext('showLoanTerms()',b.context);
+  assert.match(b.dialogs[0][1],/1234/);
+  assert.doesNotMatch(b.dialogs[0][1],/9876/);
+});
+
+test('loan draft listeners ignore other forms and fields',()=>{
+  const b=banking();
+  for(const event of [
+    {target:{id:'unrelated',name:'amount',value:'99',closest:()=>null}},
+    {target:{id:'unrelated',name:'unexpected',value:'99',closest:()=>({})}}
+  ]) b.listeners.input.forEach(fn=>fn(event));
+  assert.equal(Object.keys(b.loanState.form).length,0);
+});
 
 test('logout clears all loan data, drafts, errors and payment keys immediately',()=>{
   const b=banking(); b.seed(); b.loanState.loading=true; b.loanState.busy=true;

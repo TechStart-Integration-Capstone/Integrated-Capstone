@@ -62,7 +62,8 @@ async function api(path, {method = 'GET', body, authenticated = true, headers: c
     throw new Error('Your session has ended. Please log in again.');
   }
   if (!response.ok) {
-    const errorMsg = data.error || data.message || data.reason || (response.status === 429
+    const errorMsg = [data?.detail, data?.message, data?.reason, data?.error, data?.title]
+      .find(value => typeof value === 'string' && value.trim()) || (response.status === 429
       ? 'Too many requests. Please wait a moment and try again.' : 'We couldn’t complete your request. Please try again.');
     const error = new Error(errorMsg);
     error.status = response.status;
@@ -219,7 +220,8 @@ function overview() {
 
 // Money out that leaves the customer: moving money between their own accounts is not spending.
 const isSpending = tx => isSuccess(tx) && tx.operation === 'DEBIT'
-  && !(['TRANSFER_OUT','TRANSFER','P2P_REMITTANCE'].includes(tx.type) && tx.counterpartyName && tx.counterpartyName === state.profile.fullName);
+  && !(['TRANSFER_OUT','TRANSFER','P2P_REMITTANCE'].includes(tx.type) && tx.counterpartyAccountNumber
+    && state.profile.accounts.some(account => account.accountNumber === tx.counterpartyAccountNumber));
 const spendingCategory = tx => tx.type?.startsWith('EXT_') || ['INSTAPAY','PESONET'].includes(tx.type) ? 'InstaPay & PESONet'
   : ['TRANSFER_OUT','TRANSFER','P2P_REMITTANCE'].includes(tx.type) ? 'Transfers to others'
   : tx.type === 'LOAN_REPAYMENT' ? 'Loan payments' : tx.type === 'WITHDRAWAL' ? 'Withdrawals' : 'Payments';
@@ -333,7 +335,11 @@ async function refresh(manual = false) {
     state.profile = profile; state.activity = activity; state.updated = new Date(); state.error = '';
     state.recipients = recipients;
     updateTransferNotifications(activity);
-    if (manual) toast('Your accounts are up to date.');
+    const loansUpdated = typeof loadLoans === 'function' ? await loadLoans() : true;
+    if (generation !== state.generation || !state.session) return;
+    if (manual) toast(loansUpdated === false
+      ? 'Your accounts were refreshed, but loan data could not be updated. Please try again.'
+      : 'Your accounts are up to date.', loansUpdated === false);
   } catch (error) {
     if (generation === state.generation && state.session) state.error = error.message;
   } finally {

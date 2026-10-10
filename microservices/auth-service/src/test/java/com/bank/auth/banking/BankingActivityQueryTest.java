@@ -115,6 +115,37 @@ class BankingActivityQueryTest {
         assertThat(serviceFor(42).activity("token")).hasSize(3);
     }
 
+    @Test void remittanceReferenceMatchesReceiptsForBothAccountsAndReports() throws Exception {
+        assertThat(serviceFor(42).activity("token")).filteredOn(a -> Math.abs(a.transactionId()) == 11)
+                .extracting(BankingService.Activity::reference).containsOnly("TX-PH-B");
+        assertThat(serviceFor(99).activity("token")).singleElement()
+                .satisfies(a -> assertThat(a.reference()).isEqualTo("TX-PH-A"));
+        assertThat(report(1)).contains("TX-PH-A", "TX-PH-B");
+        assertThat(report(2)).contains("TX-PH-B");
+        assertThat(report(3)).contains("TX-PH-A");
+    }
+
+    @Test void requestReferenceSurvivesPostingIntoHistoryAndReport() throws Exception {
+        request(10, "Processing");
+        assertThat(serviceFor(42).activity("token")).anyMatch(a -> a.reference().equals("REQUEST-10"));
+        jdbc.update("UPDATE LEDGER_TRANSACTION SET reference_no='REQUEST-10' WHERE transaction_id=10");
+        jdbc.update("UPDATE app.REMITTANCE SET status='Posted'");
+        assertThat(serviceFor(42).activity("token")).filteredOn(a -> a.reference().equals("REQUEST-10"))
+                .singleElement().satisfies(a -> assertThat(a.transactionId()).isEqualTo(10));
+        assertThat(report(1)).contains("REQUEST-10");
+        assertThat(report(3)).contains("REQUEST-10");
+    }
+
+    @Test void legacyRowsRetainTheirDisplayReferencesAndMissingRemittanceReferenceFallsBack() throws Exception {
+        jdbc.update("UPDATE LEDGER_TRANSACTION SET transaction_type='TRANSFER_OUT' WHERE transaction_id=10");
+        jdbc.update("UPDATE LEDGER_TRANSACTION SET reference_no=NULL WHERE transaction_id=11");
+        var rows = serviceFor(42).activity("token");
+        assertThat(rows).allMatch(a -> a.reference().startsWith("PP-"));
+        for (var row : rows) assertThat(report(row.accountId())).contains(row.reference());
+        jdbc.update("UPDATE LEDGER_TRANSACTION SET reference_no='  ' WHERE transaction_id=11");
+        assertThat(serviceFor(42).activity("token")).allMatch(a -> a.reference().startsWith("PP-"));
+    }
+
     @Test void ownAccountRequestHasOnlySenderLegUntilPosted() throws Exception {
         request(15, "Processing");
         jdbc.update("UPDATE app.REMITTANCE SET target_account_id=2");

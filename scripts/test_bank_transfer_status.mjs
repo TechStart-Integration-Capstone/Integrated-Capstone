@@ -137,6 +137,70 @@ function banking(responses) {
     receiptHtml(){return context.subject.transferReceipt(context.subject.state.transfer.receipt);}};
 }
 
+for (const change of [
+  {source:'missing'}, {externalNumber:'invalid'}, {amount:'0'}, {amount:'-1'},
+  {amount:'NaN'}, {amount:'1.001'}, {amount:'501'}, {amount:'50001',balance:100000},
+  {rail:'INVALID'}
+]) {
+  test('external validation blocks review and submission: '+JSON.stringify(change),async()=>{
+    const b=banking([]);
+    Object.assign(b.state.transfer,{mode:'external',source:'1',externalNumber:'001234567890',
+      amount:'20',rail:'INSTAPAY',externalReview:{reference:'stale'},...change});
+    if(change.balance)b.state.profile.accounts[0].currentBalance=change.balance;
+    const before=b.node.innerHTML;
+    vm.runInContext('reviewExternalTransfer()',b.context);
+    assert.ok(b.state.transfer.error);
+    assert.equal(b.state.transfer.externalReview,null);
+    assert.equal(b.node.innerHTML,before);
+    await b.sendTransfer();
+    assert.equal(b.calls.length,0);
+    assert.equal(b.state.session.pendingExternal,undefined);
+  });
+}
+
+test('valid external request can still be reviewed after correcting an error',()=>{
+  const b=banking([]);
+  Object.assign(b.state.transfer,{mode:'external',source:'1',externalNumber:'001234567890',amount:'0',rail:'INSTAPAY'});
+  vm.runInContext('reviewExternalTransfer()',b.context);
+  b.state.transfer.amount='20.50';
+  vm.runInContext('reviewExternalTransfer()',b.context);
+  assert.equal(b.state.transfer.error,'');
+  assert.equal(b.state.transfer.externalReview.amount,20.5);
+  assert.match(b.node.innerHTML,/Review your transfer/);
+});
+
+for(const status of ['PENDING','Processing','FAILED','CANCELLED','UNKNOWN',null,'COMPLETED','SUCCESS']){
+  test('external result '+status+' has matching toast, receipt and broadcast',async()=>{
+    const completed=['SUCCESS','COMPLETED'].includes(status);
+    const receipt={reference:'EXT-1',status,amount:20,rail:'PESONET',mock:true,
+      date:'2026-10-11T00:00:00',recipientName:'Recipient',destinationAccountNumber:'001234567890'};
+    const b=banking([{body:receipt},{body:[]}]);
+    Object.assign(b.state.transfer,{mode:'external',externalReview:{
+      sourceAccountId:1,destinationAccountNumber:receipt.destinationAccountNumber,amount:20,rail:'PESONET',reference:'KEY'}
+    });
+    await b.sendTransfer();
+    assert.equal(b.notices.length,1);
+    assert.equal(b.notices[0].message.includes('Transfer complete.'),completed);
+    assert.equal(b.broadcasts.length,completed?1:0);
+    const html=vm.runInContext('mockReceipt(state.transfer.receipt)',b.context);
+    assert.equal(html.includes('Transfer completed'),completed);
+    assert.equal(html.includes('Transfer unsuccessful'),['FAILED','CANCELLED'].includes(status));
+    if(!completed)assert.doesNotMatch(html,/credited|No money has been deducted|No money was deducted/);
+  });
+}
+
+test('session change while external submission refreshes suppresses old toast and broadcast',async()=>{
+  const b=banking([{body:{status:'COMPLETED',reference:'EXT-1'}}]);
+  Object.assign(b.state.transfer,{mode:'external',externalReview:{
+    sourceAccountId:1,destinationAccountNumber:'001234567890',amount:20,rail:'INSTAPAY',reference:'KEY'}
+  });
+  vm.runInContext('refresh=async()=>{state.generation++;state.session=null;}',b.context);
+  await b.sendTransfer();
+  assert.equal(b.notices.length,0);
+  assert.equal(b.broadcasts.length,0);
+  assert.equal(b.calls.length,1);
+});
+
 test('unposted history rows open their own details without colliding with ledger IDs',async()=>{
   const b=banking([]);
   b.state.activity=[

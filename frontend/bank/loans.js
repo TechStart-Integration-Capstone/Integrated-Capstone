@@ -73,10 +73,15 @@ async function loadLoanProgress(loans) {
 
 const paymentsLeft = p => `${p.remaining} of ${p.total} monthly ${p.total === 1 ? 'payment' : 'payments'}`;
 
-async function loadLoans() {
-  if (!ensureLoanOwner() || loanState.loading) return;
+let loanLoad = null;
+function loadLoans() {
+  if (!ensureLoanOwner()) return Promise.resolve(false);
+  if (loanLoad?.generation === state.generation && loanLoad.owner === loanState.owner) return loanLoad.promise;
+  const request = {generation:state.generation, owner:loanState.owner, promise:null};
+  loanLoad = request;
   loanState.loading = true;
   const current = loanSessionGuard();
+  request.promise = (async () => {
   try {
     const [loans, eligibility] = await Promise.all([loanApi(''), loanApi('/eligibility').catch(() => null)]);
     if (!current()) return;
@@ -84,14 +89,19 @@ async function loadLoans() {
     if (!current()) return;
     loanState.loans = loans; loanState.eligibility = eligibility; loanState.loaded = true; loanState.error = '';
     loanState.progress = progress;
+    return true;
   } catch (error) {
     if (current()) loanState.error = error.message;
+    return false;
   } finally {
+    if (loanLoad === request) loanLoad = null;
     if (current()) {
       loanState.loading = false;
       if (['loans','overview'].includes(state.page)) renderPage();
     }
   }
+  })();
+  return request.promise;
 }
 
 function loansPage() {
@@ -137,7 +147,7 @@ function showLoanTerms() {
   const offer = loanState.offer, o = offer?.offer;
   if (!o) return;
   const totalRepay = Number(o.monthlyInstallment) * Number(o.termMonths);
-  const account = maskedNumber(loanState.form.accountNo || '');
+  const account = maskedNumber(offer.accountNo || loanState.form.accountNo || '');
   showDialog('Review your loan agreement', `<p class="muted">Please check the key facts and read the terms before you accept.</p>
     <dl class="detail-list">${detail('You’ll receive',`<strong>${escapeHtml(money(o.amount))}</strong> in ${escapeHtml(account)}`)}${detail('Term',`${escapeHtml(o.termMonths)} monthly installments`)}${detail('Interest rate',`${escapeHtml(o.annualRate)}% a year`)}${detail('Monthly installment',escapeHtml(money(o.monthlyInstallment)))}${detail('Total to repay',`About ${escapeHtml(money(totalRepay))} (${escapeHtml(money(totalRepay - Number(o.amount)))} interest)`)}</dl>
     <div class="loan-terms" tabindex="0" role="region" aria-label="Loan terms and conditions"><h3>Terms and conditions</h3><ol>
@@ -208,7 +218,7 @@ async function applyForLoan(form) {
   try {
     const offer = await loanApi('/applications', {method:'POST', body, idempotencyKey:loanState.applyKey});
     if (generation !== state.generation) return;
-    loanState.offer = offer; loanState.applyKey = null; loanState.applyFingerprint = '';
+    loanState.offer = {...offer, accountNo:body.accountNo}; loanState.applyKey = null; loanState.applyFingerprint = '';
   } catch (error) {
     if (generation === state.generation) loanState.formError = error.message;
   } finally {
@@ -323,6 +333,15 @@ async function payLoan(form) {
     if (current() && form.isConnected) { button.disabled = false; button.textContent = 'Pay now'; }
   }
 }
+
+function rememberLoanDraft(event) {
+  const input = event.target;
+  if (!input.closest('#loan-apply-form') || !['accountNo','amount','termMonths'].includes(input.name)
+      || !ensureLoanOwner() || loanState.busy) return;
+  loanState.form[input.name] = input.value;
+}
+document.addEventListener('input', rememberLoanDraft);
+document.addEventListener('change', rememberLoanDraft);
 
 document.addEventListener('submit', event => {
   if (event.target.id === 'loan-apply-form') { event.preventDefault(); applyForLoan(event.target); }
