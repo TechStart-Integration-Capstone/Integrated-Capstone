@@ -1,15 +1,5 @@
 # Changelog
 
-- 2026-10-10 — Mobile Branding & Launcher Icons Realignment (`AndroidManifest.xml`, `build.gradle.kts`, `index.html`, `manifest.json`, `paypink_app_icon.png`):
-  - **Android Launcher Icon & Branding**: Generated high-resolution 1024x1024 PayPink brand app icon asset (`paypink_app_icon.png`) featuring glowing rose-pink emblem on a dark glassmorphic card. Automatically generated and set `ic_launcher.png` and `ic_launcher_round.png` across all Android mipmap densities (`mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`).
-  - **App & Package Metadata Alignment**: Updated `AndroidManifest.xml` app label from `paypink_mobile` to `PayPink`. Updated Android `namespace` and `applicationId` in `build.gradle.kts` to `com.paypink.mobile`. Updated Web app title (`PayPink Mobile`), iOS title, description, theme color (`#EC4899`), and PWA launcher settings in `index.html` and `manifest.json`.
-  - **Validation**: Zero analyzer warnings (`flutter analyze` 0 issues), all 51/51 mobile unit and widget tests pass clean (`flutter test`). — [dom & Antigravity]
-
-- 2026-10-10 — Mobile Pull-to-Refresh & Haptic Tactile Feedback Integration (`dashboard_screen.dart`, `transactions_screen.dart`, `accounts_screen.dart`, `remittance_screen.dart`):
-  - **Pull-to-Refresh Gestures**: Wrapped `DashboardScreen`, `TransactionsScreen`, and `AccountsScreen` in native `RefreshIndicator` widgets (`AlwaysScrollableScrollPhysics`) with `PayPinkTheme.wine` spinners to refresh backend data on pull down.
-  - **Haptic Feedback**: Integrated native `HapticFeedback.mediumImpact()` on pull-to-refresh triggers and successful transfer receipts, and `HapticFeedback.selectionClick()` on quick action circle buttons and filter chip selections.
-  - **Validation**: Zero analyzer warnings (`flutter analyze` 0 issues), all 51/51 mobile unit and widget tests pass clean (`flutter test`). — [dom & Antigravity]
-
 - 2026-10-10 — SessionLockWrapper Scope Alignment for Authenticated Sessions Only (`main.dart`):
   - **Inactivity Auto-Lock Scoping:** Updated `MaterialApp.builder` in `main.dart` to require `_isAuthenticated == true` before wrapping `child` in `SessionLockWrapper`.
   - **Prevent Pre-Login Lock Screen:** Idle timeout and backgrounding timers are now scoped strictly to active authenticated sessions, eliminating unwanted PIN lock overlays on the `LoginRegisterScreen`.

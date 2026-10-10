@@ -61,17 +61,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final hasLiveAccounts = accounts.isNotEmpty;
     final totalLinked = accounts.length;
 
-    return RefreshIndicator(
-      color: PayPinkTheme.wine,
-      onRefresh: () async {
-        HapticFeedback.mediumImpact();
-        widget.onRetry?.call();
-        await Future<void>.delayed(const Duration(milliseconds: 600));
-      },
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-        child: Column(
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -277,7 +270,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
           const SizedBox(height: 90),
         ],
       ),
-    ),
     );
   }
 
