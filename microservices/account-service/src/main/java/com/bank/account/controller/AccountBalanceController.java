@@ -2,6 +2,7 @@ package com.bank.account.controller;
 
 import com.bank.account.savings.SavingsService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
@@ -19,5 +20,11 @@ public class AccountBalanceController {
     @GetMapping("/api/v1/accounts/savings/balance-summary")
     public Map<String, Object> balanceSummary(@RequestHeader("X-Auth-Customer-Id") Long customer) {
         return service.balanceSummary(customer);
+    }
+
+    @GetMapping("/api/v1/accounts/savings/accounts/{id}/breakdown")
+    public Map<String, Object> breakdown(@RequestHeader("X-Auth-Customer-Id") Long customer,
+                                         @PathVariable("id") Long accountId) {
+        return service.breakdown(customer, accountId);
     }
 }

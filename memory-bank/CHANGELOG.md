@@ -1,4 +1,10 @@
 # Changelog
+- 2026-10-11 — Customer fix 22: keep account savings breakdown available independently of Savings Hub — [aly]
+  - Moved the existing GET /api/v1/accounts/savings/accounts/{id}/breakdown route from conditional SavingsController to unconditional AccountBalanceController in microservices/account-service. My accounts can read the breakdown with app.savings.enabled unset, false or true; optional Savings Hub write routes remain gated.
+  - Retained SavingsService ownership/active PHP savings-account checks and authoritative core balances/reservations. Existing savings schema and core availability are still required; no database migration or feature-flag change.
+  - Validation: all 45 account-service tests passed, including five new MockMvc/H2 cases covering the three flag states, personal/circle allocations, account/customer restrictions and core failure. Live browser/service acceptance pending.
+  - User handles account-service JAR/image rebuild and container recreation; no deployment performed. Review findings 20 and 21 remain open.
+
 - 2026-10-11 — Customer fix 19: require the current MPIN for changes — [aly]
   - Updated auth-service BankingService.setMpin for the shared /api/v1/auth/banking/mpin endpoint. Existing MPINs require a nonblank, correctly formatted and matching currentMpin. First-time setup still works without it; both mpin/pin request aliases remain supported.
   - Read the authoritative stored hash and fail on read errors. Save with a conditional update against that same hash so concurrent setup/change cannot overwrite another successful update; write errors return 503 and conflicts return 409. Existing hashes remain compatible; no data rewrite.
