@@ -1,31 +1,69 @@
 # Changelog
-- 2026-10-10 — Applied customer fix 4 repayment-status migration to Azure SQL — [dom]
+- 2026-10-11 — Customer fix 10: include unposted transfers in history and reports — [aly]
+  - Updated auth-service BankingService and TransactionReportService to include sender-owned TRANSFER requests from app.REMITTANCE when no matching ledger entry exists. Shared UnpostedTransferQuery maps unfinished lifecycle states to PENDING and preserves FAILED/CANCELLED outcomes; loan and external instructions retain their existing flows.
+  - Requests do not create incoming credits or contribute to completed totals. A matching source/reference ledger entry suppresses the request to prevent duplicates after posting. The combined history retains its latest-200 limit; report date boundaries and 10,000-row cap still apply.
+  - Unposted history entries expose transactionId=null and their existing remittance reference. frontend/bank/bank.js uses reference-based keys for those rows so details cannot collide with ledger IDs or other requests. Deploy updated auth-service and frontend together.
+  - Validation: all 73 auth-service tests passed, including 15 new H2 query/report regression cases; all 50 frontend transfer/session tests and JavaScript syntax check passed. Tests cover lifecycle states, ownership, receiver isolation, own-account requests, duplicate suppression, Philippine report date boundaries, combined history limit, row selection and completed totals.
+  - No database migration needed. User handles auth-service JAR/image and frontend image rebuilds/container recreation. No deployment performed; live SQL Server/browser verification pending. Findings 11–18 not started.
+
+- 2026-10-11 — Customer fix 9: accurately label profile account balances — [aly]
+  - In frontend/bank/bank.js, account details and the PayPink transfer source now label currentBalance as Total account balance. Both explain that reserved funds are included in the total and cannot be transferred. The profile API supplies no per-account available balance; the overview continues to use its separate live core summary.
+  - Validation: JavaScript syntax check and all 49 existing transfer/session regressions passed with mocked DOM/network. No transfer authorization or reservation logic changed.
+  - Frontend only; no database migration or Java rebuild. User handles frontend image rebuild/container recreation. No deployment performed; live browser verification pending. Findings 10–18 not started.
+
+- 2026-10-11 — Customer fix 8: overview balances independent of Savings Hub — [aly]
+  - Moved the existing /api/v1/accounts/savings/balance-summary route from the conditional SavingsController to the always-registered AccountBalanceController in microservices/account-service. Customer overview can load balances when app.savings.enabled is false or unset; optional savings routes remain gated.
+  - Preserved active-customer validation, owned PHP account selection and live core balances after reservations. Core failures still return 503 instead of partial or cached balances. Existing frontend URL remains compatible.
+  - Validation: all 40 account-service tests passed, including six new endpoint regressions using Spring MVC, real service/H2 queries and mocked core responses. Covers enabled/disabled/unset configuration, ownership/currency filtering, absent/invalid/inactive customers, empty accounts, partial core failure and disabled savings operations.
+  - No database migration or frontend change required for fix 8. User handles account-service JAR/image rebuild and container recreation. No deployment performed; live browser/service acceptance pending. Findings 9–18 not started.
+
+- 2026-10-11 — Correct customer bug-fix attribution — [aly]
+  - Credited this conversation's customer fixes 1–7 and related database migrations to [aly], as requested. Recorded [aly] as the attribution for this user's subsequent work; existing unrelated team entries retain their authors.
+
+- 2026-10-11 — Customer fix 7: isolate loan data between sessions — [aly]
+  - Clear loan cache/form/payment keys on session changes; guard overview ownership and delayed loan/schedule/payment responses. Old loan 401 responses cannot log out the new session.
+  - Loan list/progress commits only after the full load belongs to the current session; stale completions cannot clear another customer's loading flag, reopen schedule/payment dialogs or alter payment keys. Current-session authorization failures retain normal logout behavior.
+  - Validation: JavaScript syntax checks, all 17 new scripts/test_bank_loan_sessions.mjs tests and all 32 transfer regressions passed. Covers logout, same-user re-login, owner changes, delayed list/progress/schedule/payment/application responses and stale/current 401s with mocked DOM/network.
+  - Frontend only; no database change or Java rebuild. User handles frontend image rebuild/container recreation; live browser/service verification remains pending. No deployment performed; findings 8–18 untouched.
+
+- 2026-10-11 — Customer fix 6: preserve transfer requests on HTTP 409 — [aly]
+  - PayPink and external transfer submission retain their saved request/key after conflicts. Conflicts no longer trigger a reversal result, and unresolved external requests cannot be discarded through the old Start new transfer shortcut.
+  - Validation: both JavaScript syntax checks and all 32 tests in scripts/test_bank_transfer_status.mjs passed, including repeated conflicts, restored sessions, unchanged request bodies/keys, conflict-to-completion, reference-based GET retries, both external rails and unchanged insufficient-funds handling.
+  - Frontend only; no database change or Java rebuild. User handles frontend image rebuild/container recreation. No deployment performed; live browser/service verification remains pending. Findings 7–18 untouched.
+
+- 2026-10-11 — Customer fix 5: pending transfer results in /bank — [aly]
+  - Retain unresolved transfer requests and references, check their status through the existing GET endpoint, and show status-specific results. Completion toasts and ledger broadcasts require confirmed completion.
+  - Pending receipts expose Check transfer status; failed/unknown outcomes never display success. Persisted recipient/date/key/reference survive retries and reloads. Status-check errors retain the original instruction; only confirmed completion broadcasts a completed transfer.
+  - Validation: JavaScript syntax check and all 24 tests in scripts/test_bank_transfer_status.mjs passed. Covers processing states, mixed-case terminal statuses, pending-to-posted/failed transitions, failed status checks, restored requests, escaping, stable keys and session changes. Tests exercise browser logic with mocked DOM/network; live browser/service acceptance remains pending.
+  - Frontend only: no database change or Java rebuild needed. User handles frontend image rebuild/container recreation; no deployment performed. Findings 6–18 not started.
+
+- 2026-10-10 — Applied customer fix 4 repayment-status migration to Azure SQL — [aly]
   - Applied only the guarded LOAN_REPAYMENT.status batch from scripts/migrate_phase6_loans.sql to paypink.database.windows.net / paypink, as requested.
   - Verified t24.LOAN_REPAYMENT.status is NVARCHAR(24), NOT NULL, with default POSTED. All five existing repayments were backfilled to POSTED; a transactional before/after comparison verified every original repayment field remained unchanged.
   - Database work for fix 4 is complete. User will rebuild JARs/images and recreate containers; no application rebuild/restart performed. Live multi-service acceptance and historical orphan reconciliation remain pending.
 
-- 2026-10-10 — Customer fix 4: recover delayed loan repayments — [dom]
+- 2026-10-10 — Customer fix 4: recover delayed loan repayments — [aly]
   - Loan-service persists a pending repayment before dispatch, retries with the original key, and finalizes the loan/schedule/outbox together after confirmed posting. Unresolved repayments block additional payments on that loan.
   - Added a guarded repayment-status migration to both Phase 6 script copies, recovery scheduling, conflict handling and auto-debit status reconciliation. Existing repayments default to POSTED; terminal failures remain recorded without reducing the loan.
   - Validation: all 49 loan-service tests passed, including delayed recovery, pending-payment blocking, ownership/idempotency validation, rejection, auto-debit recovery, real H2 rollback after outbox failure and concurrent completion without duplicate allocations/events.
   - Rollout documented in docs/loan-repayment-recovery.md. Rebuild/recreate loan-service; its existing startup migration adds the status column. No live migration or deployment for fix 4. Live SQL Server acceptance and separate reconciliation of historical repayments without saved intent remain outstanding; findings 5–18 untouched.
 
-- 2026-10-10 — Applied customer fix 3 clearing-account migration to Azure SQL — [dom]
+- 2026-10-10 — Applied customer fix 3 clearing-account migration to Azure SQL — [aly]
   - At the user's request, applied scripts/migrate_external_clearing.sql to the explicitly selected paypink.database.windows.net / paypink database. Verified the prerequisite bank owner and absence of the account before executing.
   - Migration committed; verified exactly one PH1000000EXT account (account_id 13), owned by paypink_bank, INTERNAL/PHP/ACTIVE, with current and held balances both zero. No credentials recorded.
   - Updated rollout documentation and context. Service JAR/image rebuilds, restarts and multi-service acceptance checks remain pending; no application deployment performed.
 
-- 2026-10-10 — Customer fix 3: external settlement through the remittance saga — [dom]
+- 2026-10-10 — Customer fix 3: external settlement through the remittance saga — [aly]
   - Auth-service now commits a durable instruction before invoking a private transaction-service endpoint. Added server-owned clearing destination, risk-screened saga dispatch, queued ledger-row completion and recovery wiring. No direct external balance debit remains in auth-service.
   - Added idempotent zero-balance external clearing-account migration, Compose/CI wiring and docs/external-settlement.md; deployment verification fails if this required migration fails.
   - Validation: all 20 auth-service banking integration tests and 54 transaction-service external/saga/recovery/hold/internal-transfer tests passed with zero failures/errors. Covers queue commitment before HTTP, ownership, risk rejection/missing score/unavailability, protected reservations, replay and recovery after local ledger failure.
   - Local changes only; no deployment or database migration executed. SQL Server and multi-service acceptance remain required before release. Fixes 4–18 were not started.
 
-- 2026-10-09 — Customer bug fix 2: PESONet respects held funds (`auth-service`) — [dom]
+- 2026-10-09 — Customer bug fix 2: PESONet respects held funds (`auth-service`) — [aly]
   - Settlement checks available balance and retains held balance between successive batch debits. Added database regressions for holds placed after submission and reservations across multiple batch payments.
   - Validation complete: all 18 `BankingTransferIntegrationTest` tests passed with zero failures/errors, including both new reservation regressions. Confirmed the completed test report when resuming fix 2 only; source and tests were unchanged since that run. Local only; auth-service rebuild required, no migration or deployment.
 
-- 2026-10-09 — Customer bug fix 1: preserve reservations after core posting (`transaction-service`) — [dom]
+- 2026-10-09 — Customer bug fix 1: preserve reservations after core posting (`transaction-service`) — [aly]
   - Removed the second held-balance subtraction from `RemittanceLedgerService.commitLedgerMutation` after T24 has already settled the hold. Added a regression covering PHP 21,100 of unrelated reservations.
   - Validation: 29 transaction-service saga/recovery/hold tests passed. Local source change only; no migration or deployment.
 

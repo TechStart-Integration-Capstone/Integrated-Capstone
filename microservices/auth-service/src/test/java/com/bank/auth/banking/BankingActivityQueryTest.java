@@ -6,6 +6,8 @@ import com.bank.auth.security.JwtTokenProvider;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -35,6 +37,10 @@ class BankingActivityQueryTest {
                 + "source_currency VARCHAR(10), target_currency VARCHAR(10), transaction_type VARCHAR(30), reference_no VARCHAR(64), status VARCHAR(20), "
                 + "transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
         jdbc.execute("CREATE TABLE OUTBOX_EVENT (event_id BIGINT PRIMARY KEY, transaction_id BIGINT, payload VARCHAR(4000))");
+        jdbc.execute("CREATE SCHEMA app");
+        jdbc.execute("CREATE TABLE app.REMITTANCE (remittance_id BIGINT PRIMARY KEY, reference_no VARCHAR(64), "
+                + "caller_customer_id BIGINT, source_account_id BIGINT, target_account_id BIGINT, amount DECIMAL(18,4), "
+                + "currency VARCHAR(10), transaction_type VARCHAR(30), status VARCHAR(30), created_at TIMESTAMP)");
         jdbc.update("INSERT INTO CUSTOMER VALUES (42,'Jamie','Rivera'), (99,'Alex','Cruz')");
         jdbc.update("INSERT INTO ACCOUNT VALUES (1,42,'001100000001','EVERYDAY_ACCOUNT','PHP',100,'ACTIVE'), (2,42,'001100000002','SAVINGS_ACCOUNT','PHP',0,'ACTIVE'), "
                 + "(3,99,'001100000003','EVERYDAY_ACCOUNT','PHP',0,'ACTIVE')");
@@ -51,6 +57,90 @@ class BankingActivityQueryTest {
                 mock(JwtTokenProvider.class), mock(BankingLedger.class)));
         doReturn(customer).when(service).authenticatedCustomer(anyString());
         return service;
+    }
+
+    private void request(long id, String status) {
+        jdbc.update("INSERT INTO app.REMITTANCE VALUES(?,?,42,1,3,999,'PHP','TRANSFER',?,CURRENT_TIMESTAMP)",
+                id, "REQUEST-" + id, status);
+    }
+
+    private String report(long accountId) throws Exception {
+        var banking = mock(BankingService.class);
+        when(banking.profile(anyString())).thenReturn(new BankingService.Profile("Jamie", "Jamie Rivera", "jamie", "jamie@example.com",
+                List.of(new BankingService.Account(accountId, "00110000000" + accountId, "EVERYDAY_ACCOUNT", "PHP", BigDecimal.ZERO, "ACTIVE"))));
+        var today = LocalDate.now(java.time.ZoneId.of("Asia/Manila"));
+        return new String(new TransactionReportService(banking, jdbc).generate("token", accountId,
+                today.minusDays(1), today), StandardCharsets.ISO_8859_1);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"Initiated,PENDING", "Authorized,PENDING", "Reserved,PENDING", "Processing,PENDING",
+            "PROCESSING,PENDING", "T24_POSTED,PENDING", "Failed,FAILED", "REJECTED,FAILED",
+            "Cancelled,CANCELLED", "REVERSED,CANCELLED"})
+    void senderSeesUnpostedRequestsWithoutCountingThemAsCompleted(String raw, String expected) throws Exception {
+        request(10, raw); // Deliberately collides with an existing ledger ID.
+        assertThat(serviceFor(42).activity("token")).filteredOn(a -> a.reference().equals("REQUEST-10"))
+                .singleElement().satisfies(a -> {
+                    assertThat(a.transactionId()).isNull();
+                    assertThat(a.status()).isEqualTo(expected);
+                    assertThat(a.operation()).isEqualTo("DEBIT");
+                    assertThat(a.type()).isEqualTo("P2P_REMITTANCE");
+                    assertThat(a.counterpartyName()).isEqualTo("Alex Cruz");
+                });
+        assertThat(serviceFor(99).activity("token")).noneMatch(a -> a.reference().equals("REQUEST-10"));
+        assertThat(report(1)).contains("REQUEST-10", "(" + expected + ")", "999.00",
+                "Completed money out: PHP 30.00", "Completed money in: PHP 0.00");
+        assertThat(report(3)).doesNotContain("REQUEST-10");
+    }
+
+    @Test void excludesOtherOwnersAndLoanOrExternalInstructions() throws Exception {
+        for (int id = 20; id < 25; id++) request(id, "Failed");
+        jdbc.update("UPDATE app.REMITTANCE SET caller_customer_id=99 WHERE remittance_id=20");
+        jdbc.update("UPDATE app.REMITTANCE SET source_account_id=3 WHERE remittance_id=21");
+        jdbc.update("UPDATE app.REMITTANCE SET transaction_type='LOAN_REPAYMENT' WHERE remittance_id=22");
+        jdbc.update("UPDATE app.REMITTANCE SET transaction_type='LOAN_DISBURSEMENT' WHERE remittance_id=23");
+        jdbc.update("UPDATE app.REMITTANCE SET transaction_type='EXT_INSTAPAY_BDO' WHERE remittance_id=24");
+        assertThat(serviceFor(42).activity("token")).hasSize(3);
+        assertThat(report(1)).doesNotContain("REQUEST-");
+    }
+
+    @Test void postingReplacesRequestWithoutDuplicateHistoryOrReportEntries() throws Exception {
+        request(10, "Processing");
+        assertThat(serviceFor(42).activity("token")).hasSize(4);
+        jdbc.update("UPDATE LEDGER_TRANSACTION SET reference_no='REQUEST-10' WHERE transaction_id=10");
+        // Ledger presence suppresses the request even if its status has not caught up yet.
+        assertThat(serviceFor(42).activity("token")).hasSize(3).allMatch(a -> a.transactionId() != null);
+        assertThat(report(1)).contains("(2 transactions)", "Completed money out: PHP 30.00").doesNotContain("999.00");
+        jdbc.update("UPDATE app.REMITTANCE SET status='Posted'");
+        assertThat(serviceFor(42).activity("token")).hasSize(3);
+    }
+
+    @Test void ownAccountRequestHasOnlySenderLegUntilPosted() throws Exception {
+        request(15, "Processing");
+        jdbc.update("UPDATE app.REMITTANCE SET target_account_id=2");
+        assertThat(serviceFor(42).activity("token")).filteredOn(a -> a.reference().equals("REQUEST-15"))
+                .singleElement().satisfies(a -> assertThat(a.accountId()).isEqualTo(1));
+        assertThat(report(2)).doesNotContain("REQUEST-15");
+    }
+
+    @Test void reportRespectsPhilippineDateBoundariesForRequests() throws Exception {
+        request(15, "Failed");
+        request(16, "Failed");
+        var today = LocalDate.now(java.time.ZoneId.of("Asia/Manila"));
+        var end = java.sql.Timestamp.from(today.plusDays(1).atStartOfDay(TransactionReportService.ZONE).toInstant());
+        jdbc.update("UPDATE app.REMITTANCE SET created_at=? WHERE remittance_id=15", end);
+        jdbc.update("UPDATE app.REMITTANCE SET created_at=? WHERE remittance_id=16",
+                java.sql.Timestamp.from(end.toInstant().minusSeconds(1)));
+        assertThat(report(1)).contains("REQUEST-16").doesNotContain("REQUEST-15");
+    }
+
+    @Test void latest200LimitAppliesAfterCombiningLedgerAndRequests() {
+        for (int id = 100; id < 302; id++) request(id, "Processing");
+        jdbc.update("UPDATE app.REMITTANCE SET created_at=DATEADD('DAY',1,CURRENT_TIMESTAMP)");
+        var rows = serviceFor(42).activity("token");
+        assertThat(rows).hasSize(200).allMatch(a -> a.transactionId() == null);
+        assertThat(rows.get(0).reference()).isEqualTo("REQUEST-301");
+        assertThat(rows.get(199).reference()).isEqualTo("REQUEST-102");
     }
 
     @Test void receiverSeesIncomingTransferAsCreditFromSender() {

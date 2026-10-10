@@ -23,6 +23,13 @@ const accountName = type => ({SAVINGS_ACCOUNT:'Savings account', EVERYDAY_ACCOUN
 const formattedAccountNumber = number => /^\d{12}$/.test(number) ? number.replace(/^(\d{3})(\d)(\d{7})(\d)$/,'$1 $2 $3 $4') : number;
 const accountNumber = account => state.visibleAccounts.has(account.accountId) ? formattedAccountNumber(account.accountNumber) : `•••• •••• ${account.accountNumber.slice(-4)}`;
 const isSuccess = tx => ['SUCCESS', 'COMPLETED'].includes(tx.status);
+const activityKey = tx => tx.transactionId == null ? `remittance:${tx.reference}` : String(tx.transactionId);
+const transferOutcome = status => {
+  const normalized = String(status || '').toUpperCase();
+  if (['POSTED','SUCCESS','COMPLETED'].includes(normalized)) return 'completed';
+  if (['FAILED','REJECTED','CANCELLED','REVERSED'].includes(normalized)) return 'failed';
+  return 'pending';
+};
 const friendlyType = tx => tx.type?.startsWith('EXT_') ? (tx.type.includes('PESONET') ? 'PESONet transfer' : 'InstaPay transfer') : ({CREDIT:'Money received', DEBIT:'Payment', WELCOME_GIFT:'Welcome gift', TRANSFER_OUT:'Transfer sent', TRANSFER_IN:'Transfer received', P2P_REMITTANCE:'Transfer sent', TRANSFER:'Account transfer', INSTAPAY:'InstaPay transfer', PESONET:'PESONet transfer', WITHDRAWAL:'Withdrawal', DEPOSIT:'Deposit', LOAN_DISBURSEMENT:'Loan received', LOAN_REPAYMENT:'Loan payment'}[tx.type] || String(tx.type || 'Transaction').replaceAll('_',' ').toLowerCase().replace(/^./, c => c.toUpperCase()));
 const txDate = tx => new Date(tx.date.endsWith('Z') || /[+-]\d\d:\d\d$/.test(tx.date) ? tx.date : `${tx.date}Z`);
 const shortDate = tx => txDate(tx).toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
@@ -289,7 +296,7 @@ function transactionTable(items, filtered = false) {
   return `<div class="table-wrap"><table><thead><tr><th scope="col">Transaction</th><th class="table-date" scope="col">Date</th><th scope="col">Status</th><th scope="col">Amount</th></tr></thead><tbody>${items.map(tx => {
     const credit = tx.operation === 'CREDIT';
     const sign = isSuccess(tx) ? credit ? '+' : tx.operation === 'DEBIT' ? '−' : '' : '';
-    return `<tr><td><button class="transaction-name transaction-link" data-action="transaction-details" data-id="${tx.transactionId}"><span class="circle-icon ${credit ? 'incoming' : ''}">${icon(credit ? 'down' : tx.operation === 'DEBIT' ? 'up' : 'activity')}</span><span><strong>${escapeHtml(friendlyType(tx))}</strong><small>Account •••• ${escapeHtml(tx.accountNumber.slice(-4))}</small></span></button></td><td class="table-date muted">${escapeHtml(shortDate(tx))}</td><td>${statusPill(tx.status)}</td><td class="amount ${credit && isSuccess(tx) ? 'credit' : ''}">${state.hideBalances ? '••••••' : sign + escapeHtml(money(tx.amount,tx.currency))}</td></tr>`;
+    return `<tr><td><button class="transaction-name transaction-link" data-action="transaction-details" data-id="${escapeHtml(activityKey(tx))}"><span class="circle-icon ${credit ? 'incoming' : ''}">${icon(credit ? 'down' : tx.operation === 'DEBIT' ? 'up' : 'activity')}</span><span><strong>${escapeHtml(friendlyType(tx))}</strong><small>Account •••• ${escapeHtml(tx.accountNumber.slice(-4))}</small></span></button></td><td class="table-date muted">${escapeHtml(shortDate(tx))}</td><td>${statusPill(tx.status)}</td><td class="amount ${credit && isSuccess(tx) ? 'credit' : ''}">${state.hideBalances ? '••••••' : sign + escapeHtml(money(tx.amount,tx.currency))}</td></tr>`;
   }).join('')}</tbody></table></div>`;
 }
 
@@ -349,6 +356,7 @@ async function refresh(manual = false) {
 function startSession(response) {
   state.session = {token:response.token,fullName:response.fullName,expiresAt:Date.now() + response.expiresInMs};
   state.generation++; state.busy = false;
+  if (typeof resetLoansFor === 'function') resetLoansFor(null);
   saveSession();
   scheduleExpiry(); renderShell(); refresh();
 }
@@ -365,6 +373,7 @@ function logout(message = 'You’ve been logged out. See you again soon.') {
   clearTimeout(expiryTimer);
   try { sessionStorage.removeItem(SESSION_KEY); } catch { /* No persisted session. */ }
   state.generation++; state.session = null; state.profile = null; state.activity = [];
+  if (typeof resetLoansFor === 'function') resetLoansFor(null);
   state.page = 'overview'; state.visibleAccounts.clear(); state.hideBalances = false; state.transfer = null;
   state.recipients = {favorites:[],recent:[]}; state.dialogReceipt = null; clearTimeout(recipientTimer);
   state.query = ''; state.accountFilter = ''; state.statusFilter = ''; state.error = ''; state.updated = null; state.busy = false;
@@ -384,7 +393,7 @@ function accountDialog(id) {
   if (!account) return;
   showDialog(accountName(account.accountType), `<dl class="detail-list">${detail('Account holder',escapeHtml(state.profile.fullName))}
     ${detail('Account number',`${escapeHtml(accountNumber(account))}<button class="icon-btn" data-action="dialog-account-visibility" data-id="${id}" aria-label="${state.visibleAccounts.has(id) ? 'Hide' : 'Show'} account number">${icon(state.visibleAccounts.has(id) ? 'eye-off' : 'eye')}</button><button class="icon-btn" data-action="copy-account" data-id="${id}" aria-label="Copy account number">${icon('copy')}</button>`)}
-    ${detail('Available balance',balance(account.currentBalance,account.currency))}${detail('Status',statusPill(account.status))}</dl>`,
+    ${detail('Total account balance',balance(account.currentBalance,account.currency))}${detail('Status',statusPill(account.status))}</dl><p>Reserved funds are included in the total and cannot be transferred.</p>`,
     `<button class="btn btn-primary" data-action="account-activity" data-id="${id}">View transactions ${icon('arrow')}</button>`);
 }
 
@@ -460,7 +469,7 @@ document.addEventListener('click', async event => {
       break;
     }
     case 'transaction-details': {
-      const tx = state.activity.find(item => item.transactionId === id);
+      const tx = state.activity.find(item => activityKey(item) === button.dataset.id);
       if (!tx) break;
       const external = tx.type?.startsWith('EXT_');
       const outgoing = external || ['TRANSFER_OUT','P2P_REMITTANCE'].includes(tx.type);
@@ -538,7 +547,7 @@ function transferPage() {
     + `<div class="transfer-layout"><section class="transfer-panel"><div class="section-heading"><h2>Fund transfer</h2><span class="pill pill-green">No transfer fee</span></div>
       ${pending ? `<div class="notice" role="status">${form.sending ? 'Your transfer is being processed. Please wait.' : 'Your last transfer is awaiting confirmation. Check its status safely before making another transfer.'}<dl class="pending-details"><dt>Amount</dt><dd>${escapeHtml(money(pending.amount))}</dd><dt>To account</dt><dd>${escapeHtml(pending.destinationAccountNumber)}</dd></dl>${!form.sending ? '<button class="btn btn-primary" data-action="retry-transfer">Check transfer status</button>' : ''}</div>` : ''}
       ${form.error ? `<div class="form-error" role="alert">${escapeHtml(form.error)}</div>` : ''}
-      <form id="transfer-form"><fieldset ${pending || form.sending ? 'disabled' : ''}><div class="form-field"><label for="transfer-source">Transfer from</label><select id="transfer-source" required>${accounts.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.source ? 'selected' : ''}>${escapeHtml(label(a))}</option>`).join('')}</select><small>${source ? `Available balance: ${balance(source.currentBalance)}.${['EVERYDAY_ACCOUNT','STRESS_TEST_ACCOUNT'].includes(source.accountType) ? ' Your default Everyday account.' : ''}` : 'No active PHP accounts are available.'}</small></div>
+      <form id="transfer-form"><fieldset ${pending || form.sending ? 'disabled' : ''}><div class="form-field"><label for="transfer-source">Transfer from</label><select id="transfer-source" required>${accounts.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.source ? 'selected' : ''}>${escapeHtml(label(a))}</option>`).join('')}</select><small>${source ? `Total account balance: ${balance(source.currentBalance)}. Reserved funds are included in the total and cannot be transferred.${['EVERYDAY_ACCOUNT','STRESS_TEST_ACCOUNT'].includes(source.accountType) ? ' Your default Everyday account.' : ''}` : 'No active PHP accounts are available.'}</small></div>
       <div class="transfer-tabs" role="group" aria-label="Recipient type"><button type="button" data-action="transfer-mode" data-mode="own" class="${form.mode === 'own' ? 'selected' : ''}" aria-pressed="${form.mode === 'own'}">My own account</button><button type="button" data-action="transfer-mode" data-mode="other" class="${form.mode === 'other' ? 'selected' : ''}" aria-pressed="${form.mode === 'other'}">Another PayPink account</button><button type="button" data-action="transfer-mode" data-mode="external">Outside PayPink</button></div>
       ${form.mode === 'own' ? `<div class="form-field"><label for="transfer-destination">Transfer to</label><select id="transfer-destination" required ${!destinations.length ? 'disabled' : ''}>${destinations.length ? destinations.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.destination ? 'selected' : ''}>${escapeHtml(label(a))}</option>`).join('') : '<option value="">No other accounts available</option>'}</select></div>` : `${recipientPicker()}<div class="form-field"><label for="recipient-number">Recipient account number</label><input id="recipient-number" value="${escapeHtml(form.number)}" maxlength="30" pattern="[A-Za-z0-9\\-]{3,30}" autocomplete="off" spellcheck="false" required placeholder="Enter the full PayPink account number"><small>Enter the full number to look up the account holder.</small></div><div id="recipient-status" aria-live="polite">${recipientStatus()}</div>`}
       <div class="form-field"><label for="transfer-amount">Amount</label><div class="amount-input"><span>PHP</span><input id="transfer-amount" type="number" inputmode="decimal" min="0.01" step="0.01" max="99999999999999.99" value="${escapeHtml(form.amount)}" required placeholder="0.00"></div></div>
@@ -590,12 +599,15 @@ async function sendTransfer() {
   const request = state.session.pendingTransfer || form.review;
   if (!request) return;
   const generation = state.generation;
+  request.idempotencyKey ||= generateUUID();
+  request.recipientName ||= form.recipient?.fullName || (form.mode === 'own' ? state.profile.fullName : 'PayPink customer');
+  request.submittedAt ||= new Date().toISOString();
   state.session.pendingTransfer = request;
   saveSession();
   form.sending = true; form.error = '';
   dialog.close(); renderPage();
   try {
-    const idempKey = request.idempotencyKey || (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'idemp-' + Date.now());
+    const idempKey = request.idempotencyKey;
     const payload = {
       sourceAccountId: String(request.sourceAccountId),
       targetAccountId: String(request.destinationAccountNumber),
@@ -603,7 +615,9 @@ async function sendTransfer() {
       currency: 'PHP'
     };
 
-    const res = await api('/api/v1/remittance/transfer', {
+    const res = request.referenceNo
+      ? await api(`/api/v1/remittance/${encodeURIComponent(request.referenceNo)}/status`)
+      : await api('/api/v1/remittance/transfer', {
       method: 'POST',
       body: payload,
       headers: {
@@ -615,17 +629,20 @@ async function sendTransfer() {
 
     if (generation !== state.generation || !state.session) return;
 
-    delete state.session.pendingTransfer; saveSession();
+    const outcome = transferOutcome(res.status);
+    if (res.referenceNo) request.referenceNo = res.referenceNo;
+    if (outcome !== 'pending') delete state.session.pendingTransfer;
+    saveSession();
 
     const receipt = {
-      reference: res.referenceNo || ('PP-' + Date.now()),
+      reference: res.referenceNo || request.referenceNo || 'Awaiting confirmation',
       ftReference: res.ftReference,
-      status: (res.status === 'POSTED' || res.status === 'COMPLETED') ? 'SUCCESS' : res.status,
+      status: outcome === 'completed' ? 'SUCCESS' : String(res.status || 'PENDING').toUpperCase(),
       amount: res.amount || request.amount,
       currency: 'PHP',
-      recipientName: form.recipient ? form.recipient.fullName : (form.mode === 'own' ? state.profile.fullName : 'PayPink customer'),
+      recipientName: request.recipientName,
       destinationAccountNumber: request.destinationAccountNumber,
-      date: new Date().toISOString(),
+      date: request.submittedAt,
       riskScore: res.riskScore,
       riskDecision: res.riskDecision,
       reason: res.reason
@@ -633,7 +650,12 @@ async function sendTransfer() {
 
     form.receipt = receipt; form.review = null;
     await refresh();
-    toast('Transfer complete. Screened by Risk Engine & posted via T24 Core.');
+    if (generation !== state.generation || !state.session) return;
+    if (outcome !== 'completed') {
+      toast(outcome === 'pending' ? 'Your transfer is still processing. Check its status before sending again.' : 'Your transfer was not completed.', outcome === 'failed');
+      return;
+    }
+    toast('Transfer complete.');
 
     // Real-time synchronization broadcast across banking and admin tabs
     try {
@@ -667,7 +689,7 @@ async function sendTransfer() {
   } catch (error) {
     if (generation !== state.generation || !state.session) return;
     form.error = error.message;
-    if (error.message && (error.message.includes('rejected') || error.message.includes('revers') || error.message.includes('T24') || error.message.includes('Core banking'))) {
+    if (error.status !== 409 && !request.referenceNo && error.message && (error.message.includes('rejected') || error.message.includes('revers') || error.message.includes('T24') || error.message.includes('Core banking'))) {
       if (typeof showTransferPopup === 'function') {
         showTransferPopup({
           id: 'reversal-' + Date.now(),
@@ -695,18 +717,30 @@ async function sendTransfer() {
       };
       await refresh();
     }
-    // Preserve the exact request and key after timeouts/server failures: a retry checks the same transfer.
-    if ([400,403,404,409,422,429].includes(error.status)) { delete state.session.pendingTransfer; saveSession(); form.review = null; }
+    // Conflicts can mean the original transfer is still running. Keep its exact request/key for retry.
+    if (!request.referenceNo && [400,403,404,422,429].includes(error.status)) { delete state.session.pendingTransfer; saveSession(); form.review = null; }
   } finally {
     if (generation === state.generation && state.session) { form.sending = false; renderPage(); }
   }
 }
 
 function transferReceipt(receipt) {
+  const outcome = transferOutcome(receipt.status);
+  const pending = outcome === 'pending';
+  const completed = outcome === 'completed';
+  const title = completed ? 'All sent.' : pending ? 'Transfer pending.' : 'Transfer not completed.';
+  const description = completed ? 'Your transfer is complete. Both account balances have been updated.'
+    : pending ? 'We are waiting for confirmation. Check the status before sending again.'
+    : 'The bank reported that this transfer did not complete.';
+  const resultTitle = completed ? 'Transfer successful' : pending ? 'Awaiting confirmation' : 'Transfer unsuccessful';
+  const resultIcon = completed ? 'check' : pending ? 'refresh' : 'close';
+  const checkButton = pending ? `<button class="btn btn-primary" data-action="retry-transfer" ${state.transfer?.sending ? 'disabled' : ''}>${state.transfer?.sending ? 'Checking status…' : 'Check transfer status'}</button>` : '';
+  const error = state.transfer?.error ? `<p class="form-error" role="alert">${escapeHtml(state.transfer.error)}</p>` : '';
+  const reason = !completed && receipt.reason ? `<p role="status">${escapeHtml(receipt.reason)}</p>` : '';
   const ftItem = receipt.ftReference ? detail('T24 Core reference', escapeHtml(receipt.ftReference)) : '';
   const riskItem = (receipt.riskScore !== undefined && receipt.riskScore !== null) ? detail('Risk evaluation', `Score ${escapeHtml(receipt.riskScore)} (${escapeHtml(receipt.riskDecision || 'APPROVED')})`) : '';
-  return heading('All sent.', 'Your transfer is complete. Both account balances have been updated.')
-    + `<section class="transfer-receipt"><span class="receipt-check">${icon('check')}</span><h2>Transfer successful</h2><div class="receipt-amount">${escapeHtml(money(receipt.amount,receipt.currency))}</div><p class="receipt-recipient">${escapeHtml(receipt.recipientName || 'PayPink customer')}</p><p class="muted">${escapeHtml(maskedNumber(receipt.destinationAccountNumber))}</p><dl class="detail-list">${detail('Reference number',escapeHtml(receipt.reference))}${ftItem}${riskItem}${detail('Status',statusPill(receipt.status))}${detail('Transfer fee','₱0.00')}${detail('Date & time',escapeHtml(txDate({date:receipt.date}).toLocaleString('en-PH')))}</dl><div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button><button class="btn btn-primary" data-action="new-transfer">Done</button></div></section>`;
+  return heading(title, description)
+    + `<section class="transfer-receipt"><span class="receipt-check ${pending ? 'receipt-check-pending' : completed ? '' : 'receipt-check-failed'}">${icon(resultIcon)}</span><h2>${resultTitle}</h2><div class="receipt-amount">${escapeHtml(money(receipt.amount,receipt.currency))}</div><p class="receipt-recipient">${escapeHtml(receipt.recipientName || 'PayPink customer')}</p><p class="muted">${escapeHtml(maskedNumber(receipt.destinationAccountNumber))}</p>${error}${reason}<dl class="detail-list">${detail('Reference number',escapeHtml(receipt.reference))}${ftItem}${riskItem}${detail('Status',statusPill(pending ? 'PENDING' : receipt.status))}${detail('Transfer fee','₱0.00')}${detail('Date & time',escapeHtml(txDate({date:receipt.date}).toLocaleString('en-PH')))}</dl><div class="dialog-actions"><button class="btn btn-secondary" data-action="save-receipt">Save receipt</button>${checkButton}<button class="btn ${pending ? 'btn-secondary' : 'btn-primary'}" data-action="new-transfer">Done</button></div></section>`;
 }
 
 function transferReversedView(reversed) {

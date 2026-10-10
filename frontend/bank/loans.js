@@ -2,13 +2,27 @@
 
 // Phase 6 Loans: apply → offer → accept → my loans → schedule → pay. All money moves server-side.
 const LOANS_API = '/api/v1/loans';
-const loanState = {owner:null, loans:[], progress:{}, eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}};
+const loanState = {owner:null, generation:null, loans:[], progress:{}, eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}};
 
 function resetLoansFor(owner) {
-  Object.assign(loanState, {owner, loans:[], progress:{}, eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}});
+  Object.assign(loanState, {owner, generation:state.generation, loans:[], progress:{}, eligibility:null, loaded:false, loading:false, error:'', offer:null, applyKey:null, applyFingerprint:'', payKeys:{}, busy:false, formError:'', form:{}});
+}
+
+function ensureLoanOwner() {
+  const owner = state.session && state.profile ? state.profile.username : null;
+  if (loanState.owner !== owner || loanState.generation !== state.generation) resetLoansFor(owner);
+  return owner !== null;
+}
+
+function loanSessionGuard() {
+  const generation = state.generation, owner = loanState.owner;
+  return () => Boolean(state.session && generation === state.generation
+    && loanState.generation === generation && owner === loanState.owner && owner === state.profile?.username);
 }
 
 async function loanApi(path, {method = 'GET', body, idempotencyKey} = {}) {
+  const generation = state.generation, session = state.session;
+  if (!session) throw new Error('Your session has ended.');
   const headers = {Accept:'application/json', Authorization:`Bearer ${state.session.token}`};
   if (body) headers['Content-Type'] = 'application/json';
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
@@ -22,6 +36,8 @@ async function loanApi(path, {method = 'GET', body, idempotencyKey} = {}) {
     throw error;
   }
   const data = await response.json().catch(() => ({}));
+  // An expired response belongs to the session that sent it, not whoever is now signed in.
+  if (generation !== state.generation || session !== state.session) throw new Error('Loan request belongs to an earlier session.');
   if (response.status === 401) { logout('Your session has ended. Please log in again.'); throw new Error('Your session has ended.'); }
   if (!response.ok) {
     const error = new Error(data.detail || data.message || 'We couldn’t complete your request. Please try again.');
@@ -58,26 +74,28 @@ async function loadLoanProgress(loans) {
 const paymentsLeft = p => `${p.remaining} of ${p.total} monthly ${p.total === 1 ? 'payment' : 'payments'}`;
 
 async function loadLoans() {
-  if (!state.session || !state.profile || loanState.loading) return;
-  if (loanState.owner !== state.profile.username) resetLoansFor(state.profile.username);
+  if (!ensureLoanOwner() || loanState.loading) return;
   loanState.loading = true;
-  const generation = state.generation;
+  const current = loanSessionGuard();
   try {
     const [loans, eligibility] = await Promise.all([loanApi(''), loanApi('/eligibility').catch(() => null)]);
-    if (generation !== state.generation) return;
+    if (!current()) return;
+    const progress = await loadLoanProgress(loans);
+    if (!current()) return;
     loanState.loans = loans; loanState.eligibility = eligibility; loanState.loaded = true; loanState.error = '';
-    loanState.progress = await loadLoanProgress(loans);
-    if (generation !== state.generation) return;
+    loanState.progress = progress;
   } catch (error) {
-    if (generation === state.generation) loanState.error = error.message;
+    if (current()) loanState.error = error.message;
   } finally {
-    loanState.loading = false;
-    if (generation === state.generation && ['loans','overview'].includes(state.page)) renderPage();
+    if (current()) {
+      loanState.loading = false;
+      if (['loans','overview'].includes(state.page)) renderPage();
+    }
   }
 }
 
 function loansPage() {
-  if (loanState.owner !== state.profile.username) resetLoansFor(state.profile.username);
+  if (!ensureLoanOwner()) return '';
   if (!loanState.loaded && !loanState.loading && !loanState.error) queueMicrotask(loadLoans);
   const accounts = state.profile.accounts.filter(a => a.status === 'ACTIVE' && a.currency === 'PHP');
   const terms = [3,6,9,12,18,24,36,48,60];
@@ -150,6 +168,7 @@ function autoDebitAlert(loan) {
 
 // Overview banner for loans whose automatic payment failed.
 function loanAlertsBanner() {
+  if (!ensureLoanOwner()) return '';
   if (!loanState.loaded && !loanState.loading && !loanState.error && state.profile) queueMicrotask(loadLoans);
   const missed = loanState.loans.filter(missedAutoDebit);
   if (!missed.length) return '';
@@ -169,6 +188,7 @@ function myLoansMarkup() {
 }
 
 async function applyForLoan(form) {
+  if (!ensureLoanOwner()) return;
   const values = Object.fromEntries(new FormData(form));
   loanState.form = values;
   const amount = Number(values.amount);
@@ -197,6 +217,7 @@ async function applyForLoan(form) {
 }
 
 async function acceptOffer(referenceNo) {
+  if (!ensureLoanOwner()) return;
   const generation = state.generation;
   loanState.busy = true; loanState.formError = ''; renderPage();
   try {
@@ -218,20 +239,30 @@ async function acceptOffer(referenceNo) {
 }
 
 async function showSchedule(loanId) {
+  if (!ensureLoanOwner()) return;
+  const current = loanSessionGuard();
   try {
     const data = await loanApi(`/${loanId}/schedule`);
+    if (!current()) return;
     showDialog(`Repayment schedule · ${data.referenceNo}`, `<div class="table-wrap"><table><thead><tr><th scope="col">#</th><th scope="col">Due</th><th scope="col">Principal</th><th scope="col">Interest</th><th scope="col">Paid</th><th scope="col">Status</th></tr></thead><tbody>${data.installments.map(r => `<tr><td>${r.installmentNo}</td><td>${escapeHtml(loanDate(r.dueDate))}</td><td class="amount">${balance(r.principalDue)}</td><td class="amount">${balance(r.interestDue)}</td><td class="amount">${balance(r.amountPaid)}</td><td>${loanPill(r.status)}</td></tr>`).join('')}</tbody></table></div>`,
       '<button class="btn btn-primary" data-action="close-dialog">Done</button>');
-  } catch (error) { toast(error.message, true); }
+  } catch (error) { if (current()) toast(error.message, true); }
 }
 
 async function showPayForm(loanId) {
+  if (!ensureLoanOwner()) return;
+  const current = loanSessionGuard();
   const loan = loanState.loans.find(l => l.loanId === loanId);
   if (!loan) return;
   // Refresh the payoff figure so "Full balance" matches what the server will accept right now.
   let progress = loanState.progress[loanId];
-  try { progress = loanProgressFrom(loan, await loanApi(`/${loanId}/schedule`)); loanState.progress[loanId] = progress; }
+  try {
+    progress = loanProgressFrom(loan, await loanApi(`/${loanId}/schedule`));
+    if (!current()) return;
+    loanState.progress[loanId] = progress;
+  }
   catch { /* Fall back to the figure loaded with the page, if any. */ }
+  if (!current()) return;
   const suggested = (Number(loan.nextDue?.amount || 0) + Number(loan.penaltyDue || 0)).toFixed(2);
   const option = (id, label, amount, checked) => `<label class="loan-pay-option"><input type="radio" name="option" value="${id}" data-amount="${escapeHtml(amount)}" ${checked ? 'checked' : ''}><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(money(amount))}</small></span></label>`;
   const options = progress ? `<fieldset class="loan-pay-options"><legend>How much would you like to pay?</legend>
@@ -262,6 +293,8 @@ document.addEventListener('input', event => {
 });
 
 async function payLoan(form) {
+  if (!ensureLoanOwner()) return;
+  const current = loanSessionGuard();
   const loanId = Number(form.dataset.id);
   const amount = Number(new FormData(form).get('amount'));
   const errorBox = form.querySelector('#loan-pay-error'), button = form.querySelector('[type="submit"]');
@@ -277,15 +310,17 @@ async function payLoan(form) {
   button.disabled = true; button.textContent = 'Paying…';
   try {
     const receipt = await loanApi(`/${loanId}/repayments`, {method:'POST', body:{amount:Number(amount.toFixed(2))}, idempotencyKey:key});
+    if (!current()) return;
     delete loanState.payKeys[loanId];
     dialog.close();
     toast(receipt.loanStatus === 'CLOSED' ? 'Payment received. Your loan is fully paid!' : `Payment of ${money(receipt.amount)} received.`);
     await Promise.all([loadLoans(), refresh()]);
   } catch (error) {
+    if (!current()) return;
     if (!error.retryable) delete loanState.payKeys[loanId]; // keep the key only when a retry is safe and useful
     if (form.isConnected) { errorBox.textContent = error.message; errorBox.hidden = false; }
   } finally {
-    if (form.isConnected) { button.disabled = false; button.textContent = 'Pay now'; }
+    if (current() && form.isConnected) { button.disabled = false; button.textContent = 'Pay now'; }
   }
 }
 

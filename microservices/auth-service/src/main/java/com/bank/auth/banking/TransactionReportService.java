@@ -36,21 +36,31 @@ public class TransactionReportService {
         var end = Timestamp.from(to.plusDays(1).atStartOfDay(ZONE).toInstant());
         // Outgoing rows are the account's own ledger rows. Transfers posted by transaction-service (P2P_REMITTANCE)
         // and loan payouts are a single row for both sides, so the account's incoming leg is added as a CREDIT.
+        // Sender requests without a ledger entry are also listed, but never count toward completed totals.
         var rows = jdbc.query("SELECT * FROM (SELECT t.transaction_date, t.reference_no, t.transaction_type, t.status, "
             + "COALESCE("
             + "(SELECT TOP 1 JSON_VALUE(o.payload, '$.operation') FROM OUTBOX_EVENT o WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
             + "CASE WHEN t.transaction_type IN ('CREDIT','WELCOME_GIFT','TRANSFER_IN') THEN 'CREDIT' WHEN t.transaction_type IN ('DEBIT','TRANSFER_OUT') OR t.transaction_type LIKE 'EXT_%' THEN 'DEBIT' END) AS operation, "
-            + "t.amount, c.first_name + ' ' + c.last_name AS counterparty, t.transaction_id, 0 AS leg FROM LEDGER_TRANSACTION t "
+            + "t.amount, c.first_name + ' ' + c.last_name AS counterparty, t.transaction_id, 0 AS leg, "
+            + "CAST(NULL AS VARCHAR(64)) AS request_reference FROM LEDGER_TRANSACTION t "
             + "LEFT JOIN ACCOUNT a ON a.account_id = t.to_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
             + "WHERE t.from_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ? "
             + "UNION ALL SELECT t.transaction_date, t.reference_no, CASE WHEN t.transaction_type = 'P2P_REMITTANCE' THEN 'TRANSFER_IN' ELSE t.transaction_type END, "
-            + "t.status, 'CREDIT', t.amount, c.first_name + ' ' + c.last_name, t.transaction_id, 1 FROM LEDGER_TRANSACTION t "
+            + "t.status, 'CREDIT', t.amount, c.first_name + ' ' + c.last_name, t.transaction_id, 1, NULL FROM LEDGER_TRANSACTION t "
             + "LEFT JOIN ACCOUNT a ON a.account_id = t.from_account_id LEFT JOIN CUSTOMER c ON c.customer_id = a.customer_id "
-            + "WHERE t.to_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ?) statement "
+            + "WHERE t.to_account_id = ? AND t.transaction_date >= ? AND t.transaction_date < ? "
+            + "UNION ALL SELECT r.created_at, r.reference_no, 'P2P_REMITTANCE', " + UnpostedTransferQuery.STATUS
+            + ", 'DEBIT', r.amount, c.first_name + ' ' + c.last_name, r.remittance_id, 2, r.reference_no "
+            + "FROM app.REMITTANCE r JOIN ACCOUNT source ON source.account_id = r.source_account_id "
+            + "LEFT JOIN ACCOUNT target ON target.account_id = r.target_account_id "
+            + "LEFT JOIN CUSTOMER c ON c.customer_id = target.customer_id "
+            + "WHERE r.source_account_id = ? AND r.caller_customer_id = source.customer_id "
+            + "AND r.created_at >= ? AND r.created_at < ? AND " + UnpostedTransferQuery.ELIGIBLE + ") statement "
             + "ORDER BY transaction_date, transaction_id, leg OFFSET 0 ROWS FETCH NEXT 10001 ROWS ONLY",
-            (rs, n) -> new Row(rs.getTimestamp(1).toLocalDateTime(), BankingIdentifiers.reference(rs.getLong(8), rs.getTimestamp(1).toLocalDateTime()), rs.getString(3), rs.getString(4), rs.getString(5), rs.getBigDecimal(6),
+            (rs, n) -> new Row(rs.getTimestamp(1).toLocalDateTime(), rs.getString(10) != null ? rs.getString(10)
+                    : BankingIdentifiers.reference(rs.getLong(8), rs.getTimestamp(1).toLocalDateTime()), rs.getString(3), rs.getString(4), rs.getString(5), rs.getBigDecimal(6),
                     "LOAN_DISBURSEMENT".equals(rs.getString(3)) ? "PayPink Loans" : rs.getString(7)),
-            accountId, start, end, accountId, start, end);
+            accountId, start, end, accountId, start, end, accountId, start, end);
         if (rows.size() > 10000) throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "This period contains over 10,000 transactions. Choose a shorter date range.");
         return pdf(profile, account, from, to, rows);
     }

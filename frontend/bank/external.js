@@ -69,7 +69,7 @@ function externalTransferPage(accounts) {
   return heading('Send outside PayPink.', 'Choose how you want to transfer.') + `<div class="transfer-layout"><section class="transfer-panel">
     <div class="transfer-tabs"><button type="button" data-action="transfer-mode" data-mode="own">My own account</button><button type="button" data-action="transfer-mode" data-mode="other">Another PayPink account</button><button type="button" class="selected" data-action="transfer-mode" data-mode="external">Outside PayPink</button></div>
 
-    ${state.session.pendingExternal ? `<div class="notice">${f.sending ? 'Submitting transfer…' : 'Your transfer needs confirmation. Retry safely using the same request.'}<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;"><button type="button" class="btn btn-secondary" data-action="confirm-transfer" ${f.sending ? 'disabled' : ''}>Check transfer status</button><button type="button" class="btn btn-secondary" data-action="dismiss-pending-external" ${f.sending ? 'disabled' : ''}>Start new transfer</button></div></div>` : ''}${f.error ? `<div class="form-error" role="alert">${escapeHtml(f.error)}</div>` : ''}
+    ${state.session.pendingExternal ? `<div class="notice">${f.sending ? 'Submitting transfer…' : 'Your transfer needs confirmation. Retry safely using the same request.'}<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;"><button type="button" class="btn btn-secondary" data-action="confirm-transfer" ${f.sending ? 'disabled' : ''}>Check transfer status</button></div></div>` : ''}${f.error ? `<div class="form-error" role="alert">${escapeHtml(f.error)}</div>` : ''}
     <form id="transfer-form"><fieldset ${state.session.pendingTransfer || state.session.pendingExternal || f.sending ? 'disabled' : ''}>
     <div class="form-field"><label for="transfer-source">Transfer from</label><select id="transfer-source" required>${accounts.map(a => `<option value="${a.accountId}" ${String(a.accountId) === f.source ? 'selected' : ''}>${escapeHtml(accountName(a.accountType))} · ${escapeHtml(a.accountNumber.slice(-4))} · ${balance(a.currentBalance)}</option>`).join('')}</select><small>${f.rail === 'PESONET' ? 'The amount will be deducted when your transfer is processed, after approximately 90 seconds.' : 'The amount will be deducted when you confirm.'}</small></div>
     <div class="form-field"><label for="external-rail">Choose how you want to transfer</label><select id="external-rail"><option value="INSTAPAY" ${f.rail === 'INSTAPAY' ? 'selected' : ''}>InstaPay — instant</option><option value="PESONET" ${f.rail === 'PESONET' ? 'selected' : ''}>PESONet — batch processing</option></select><small>${f.rail === 'PESONET' ? 'Processed in batches. Your transfer will remain pending for approximately 90 seconds.' : 'Completed immediately on confirmation. Up to PHP 50,000 per transfer.'}</small></div>
@@ -154,7 +154,8 @@ async function sendExternalTransfer() {
   } catch (error) {
     if (generation !== state.generation) return;
     f.error = error.message;
-    if ([400,403,404,409,422,429].includes(error.status)) { delete state.session.pendingExternal; saveSession(); }
+    // A conflict does not prove that the original transfer failed; retry the saved instruction.
+    if ([400,403,404,422,429].includes(error.status)) { delete state.session.pendingExternal; saveSession(); }
   } finally { if (generation === state.generation) { f.sending = false; renderPage(); } }
 }
 function mockReceipt(receipt) {
@@ -173,19 +174,6 @@ document.addEventListener('click', event => {
     const receipt = settleExternal().find(r => r.reference === button.dataset.externalReceipt);
     if (receipt && state.transfer) { state.transfer.receipt = receipt; renderPage(); }
     return;
-  }
-  const dismissBtn = event.target.closest('[data-action="dismiss-pending-external"]');
-  if (dismissBtn) {
-    if (state.session) {
-      delete state.session.pendingExternal;
-      saveSession();
-    }
-    if (state.transfer) {
-      state.transfer.sending = false;
-      state.transfer.error = '';
-      state.transfer.externalReview = null;
-    }
-    renderPage();
   }
 });
 setInterval(() => { if (state.session && state.page === 'transfer') loadExternalHistory(); }, 2000);
