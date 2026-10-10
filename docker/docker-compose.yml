@@ -23,6 +23,7 @@ services:
       - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/06_interest.sql:ro
       - ./../scripts/migrate_phase10_rbac_roles.sql:/mssql-server-setup-scripts.d/07_rbac_roles.sql:ro
       - ./../scripts/migrate_mpin.sql:/mssql-server-setup-scripts.d/08_mpin.sql:ro
+      - ./../scripts/migrate_external_clearing.sql:/mssql-server-setup-scripts.d/09_external_clearing.sql:ro
     healthcheck:
       test:
         [

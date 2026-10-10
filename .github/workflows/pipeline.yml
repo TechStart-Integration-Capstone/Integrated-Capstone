@@ -184,6 +184,14 @@ jobs:
             cat "scripts/migrate_mpin.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
           fi
 
+      - name: Prepare external clearing account
+        run: |
+          SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
+          if ! docker exec azure-sql-master test -f "$SQLCMD"; then
+            SQLCMD="/opt/mssql-tools/bin/sqlcmd"
+          fi
+          docker exec azure-sql-master sh -c '"$1" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -i /mssql-server-setup-scripts.d/09_external_clearing.sql' sh "$SQLCMD"
+
       - name: Start application microservices
         run: |
           docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env \
@@ -352,6 +360,8 @@ jobs:
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
             fi
           done
+          # Required by external settlement; fail deployment verification if provisioning fails.
+          docker exec -i azure-sql-master "$SQLCMD" -S localhost -U sa -P "$PASS" -C -b < scripts/migrate_external_clearing.sql
           PG_USER="audit_user"
           if ! docker exec postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db -c "SELECT 1" &>/dev/null; then
             PG_USER="postgres"

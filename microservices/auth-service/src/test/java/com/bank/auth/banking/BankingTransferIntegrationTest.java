@@ -34,7 +34,11 @@ class BankingTransferIntegrationTest {
         @Bean JdbcTemplate jdbc(DataSource source) { return new JdbcTemplate(source); }
         @Bean PlatformTransactionManager transactionManager(DataSource source) { return new DataSourceTransactionManager(source); }
         @Bean BankingService banking() { return mock(BankingService.class); }
-        @Bean ExternalTransferService external(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) { return new ExternalTransferService(banking,jdbc,ledger); }
+        @Bean ExternalSettlementClient settlement() { return mock(ExternalSettlementClient.class); }
+        @Bean ExternalTransferService external(BankingService banking, JdbcTemplate jdbc, ExternalSettlementClient settlement,
+                                               PlatformTransactionManager manager) {
+            return new ExternalTransferService(banking,jdbc,settlement,manager);
+        }
         @Bean BankingLedger ledger(JdbcTemplate jdbc) { return new BankingLedger(jdbc, new ObjectMapper()); }
         @Bean BankingRecipientService recipients(BankingService banking, JdbcTemplate jdbc) { return new BankingRecipientService(banking,jdbc); }
         @Bean BankingTransferService transfers(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) {
@@ -46,6 +50,7 @@ class BankingTransferIntegrationTest {
     @Autowired BankingTransferService transfers;
     @Autowired BankingRecipientService recipients;
     @Autowired ExternalTransferService external;
+    @Autowired ExternalSettlementClient settlement;
 
     @Test void accountNumberMigrationPreservesAccountsBalancesAndFavorites() {
         jdbc.update("INSERT INTO BANKING_FAVORITE(customer_id,account_id) VALUES(42,3)");
@@ -91,7 +96,7 @@ class BankingTransferIntegrationTest {
         assertThat(count("AUDIT_LOG")).isZero();
     }
 
-    @Test void pesonetWaitsBeforeDebitingAndPostsOnlyOnce() {
+    @Test void pesonetWaitsBeforeDispatchAndRetriesSameCommittedInstruction() {
         var request=new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("20"),"PESONET","delayed_payment_001");
         assertThat(external.transfer("owner",request).status()).isEqualTo("PENDING");
         assertThat(external.transfer("owner",request).status()).isEqualTo("PENDING");
@@ -99,23 +104,28 @@ class BankingTransferIntegrationTest {
         assertThat(balance(1)).isEqualByComparingTo("50");
         assertThat(count("OUTBOX_EVENT")).isZero();
         assertThat(count("AUDIT_LOG")).isZero();
+        verifyNoInteractions(settlement);
         jdbc.update("UPDATE LEDGER_TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
         external.settleBatch(); external.settleBatch();
-        assertThat(balance(1)).isEqualByComparingTo("30");
-        assertThat(external.history("owner").get(0).status()).isEqualTo("COMPLETED");
+        assertThat(balance(1)).isEqualByComparingTo("50");
+        assertThat(external.history("owner").get(0).status()).isEqualTo("PENDING");
         assertThat(count("LEDGER_TRANSACTION")).isEqualTo(1);
-        assertThat(count("OUTBOX_EVENT")).isEqualTo(1);
-        assertThat(count("AUDIT_LOG")).isEqualTo(1);
+        assertThat(count("OUTBOX_EVENT")).isZero();
+        assertThat(count("AUDIT_LOG")).isZero();
+        String reference=jdbc.queryForObject("SELECT reference_no FROM LEDGER_TRANSACTION",String.class);
+        verify(settlement,times(2)).settle(reference,42L);
     }
 
-    @Test void competingPendingPaymentsCannotOverdraw() {
+    @Test void pendingPaymentsCannotBeDebitedByAuthEvenWhenCoreIsUnavailable() {
+        doThrow(new org.springframework.web.client.ResourceAccessException("timeout")).when(settlement).settle(anyString(),anyLong());
         external.transfer("owner",new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("40"),"PESONET","delayed_payment_001"));
         external.transfer("owner",new ExternalTransferService.Request(1L,"009876543210",new BigDecimal("40"),"PESONET","delayed_payment_002"));
         jdbc.update("UPDATE LEDGER_TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
         external.settleBatch();
-        assertThat(balance(1)).isEqualByComparingTo("10");
-        assertThat(external.history("owner")).extracting(ExternalTransferService.Receipt::status).containsExactlyInAnyOrder("COMPLETED","FAILED");
-        assertThat(count("OUTBOX_EVENT")).isEqualTo(1);
+        assertThat(balance(1)).isEqualByComparingTo("50");
+        assertThat(external.history("owner")).extracting(ExternalTransferService.Receipt::status).containsOnly("PENDING");
+        assertThat(count("OUTBOX_EVENT")).isZero();
+        verify(settlement,times(2)).settle(anyString(),eq(42L));
     }
 
     @Test void pesonetPreservesFundsReservedAfterSubmission() {
@@ -124,7 +134,7 @@ class BankingTransferIntegrationTest {
         jdbc.update("UPDATE LEDGER_TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
         external.settleBatch();
         assertThat(balance(1)).isEqualByComparingTo("50");
-        assertThat(external.history("owner").get(0).status()).isEqualTo("FAILED");
+        assertThat(external.history("owner").get(0).status()).isEqualTo("PENDING");
         assertThat(count("OUTBOX_EVENT")).isZero();
         assertThat(jdbc.queryForObject("SELECT held_balance FROM ACCOUNT WHERE account_id=1",BigDecimal.class)).isEqualByComparingTo("20");
     }
@@ -136,14 +146,43 @@ class BankingTransferIntegrationTest {
         jdbc.update("UPDATE LEDGER_TRANSACTION SET transaction_date=?",java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusSeconds(91)));
         external.settleBatch();
         external.settleBatch();
-        assertThat(balance(1)).isEqualByComparingTo("30");
-        assertThat(external.history("owner")).extracting(ExternalTransferService.Receipt::status).containsExactlyInAnyOrder("COMPLETED","FAILED");
-        assertThat(count("OUTBOX_EVENT")).isEqualTo(1);
+        assertThat(balance(1)).isEqualByComparingTo("50");
+        assertThat(external.history("owner")).extracting(ExternalTransferService.Receipt::status).containsOnly("PENDING");
+        assertThat(count("OUTBOX_EVENT")).isZero();
         assertThat(jdbc.queryForObject("SELECT held_balance FROM ACCOUNT WHERE account_id=1",BigDecimal.class)).isEqualByComparingTo("20");
+    }
+
+    @Test void instapayCommitsBeforeCallingCoreAndReusesReceiptOnRetry() {
+        doAnswer(invocation -> {
+            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM LEDGER_TRANSACTION WHERE reference_no=? AND status='PENDING'",
+                    Integer.class,invocation.getArgument(0, String.class))).isEqualTo(1);
+            return null; // Core is still processing.
+        }).when(settlement).settle(anyString(),eq(42L));
+        var request=new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("20"),"INSTAPAY","instant_payment_001");
+        var first=external.transfer("owner",request);
+        var retry=external.transfer("owner",request);
+        assertThat(first).isEqualTo(retry);
+        assertThat(first.status()).isEqualTo("PENDING");
+        assertThat(balance(1)).isEqualByComparingTo("50");
+        assertThat(count("LEDGER_TRANSACTION")).isEqualTo(1);
+        verify(settlement,times(2)).settle(anyString(),eq(42L));
+    }
+
+    @Test void externalOwnerAndIdempotencyDetailsAreValidatedBeforeDispatch() {
+        var request=new ExternalTransferService.Request(1L,"001234567890",new BigDecimal("20"),"INSTAPAY","instant_payment_001");
+        assertThatThrownBy(()->external.transfer("recipient",request)).isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(settlement);
+        external.transfer("owner",request);
+        assertThatThrownBy(()->external.transfer("owner",new ExternalTransferService.Request(1L,"001234567890",
+                new BigDecimal("21"),"INSTAPAY","instant_payment_001"))).isInstanceOf(ResponseStatusException.class);
+        verify(settlement).settle(anyString(),eq(42L));
+        assertThat(count("LEDGER_TRANSACTION")).isEqualTo(1);
     }
 
     @BeforeEach void prepare() {
         reset(banking);
+        reset(settlement);
         Customer owner = mock(Customer.class); when(owner.getCustomerId()).thenReturn(42L);
         Customer recipient = mock(Customer.class); when(recipient.getCustomerId()).thenReturn(99L);
         when(banking.authenticatedCustomer("owner")).thenReturn(owner);

@@ -111,11 +111,23 @@ public class RemittanceOrchestratorService {
         }
     }
 
+    /** Only the private settlement service can supply an existing external ledger reference/type. */
+    public RemittanceResponse processExternalRemittance(RemittanceRequest request, String reference, Long customerId) {
+        if (!RemittanceRequest.isExternalType(request.getTransactionType()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid external transfer type");
+        return execute(request, reference, "external-" + reference, customerId, reference);
+    }
+
+    private RemittanceResponse execute(RemittanceRequest request, String idempotencyKey,
+                                       String correlationId, Long callerCustomerId) {
+        return execute(request, idempotencyKey, correlationId, callerCustomerId, null);
+    }
+
     private RemittanceResponse execute(
             RemittanceRequest request,
             String idempotencyKey,
             String correlationId,
-            Long callerCustomerId) {
+            Long callerCustomerId, String externalReference) {
 
         log.info("[remittance-orchestrator] Processing transfer callerCustomerId={} sourceAcc={} targetAcc={} amount={} idemp={} corrId={}",
                 callerCustomerId, request.getSourceAccountId(), request.getTargetAccountId(), request.getAmount(), idempotencyKey, correlationId);
@@ -127,7 +139,7 @@ public class RemittanceOrchestratorService {
         if (redisKey != null) {
             // Check Redis cache first
             String cachedJson = redisTemplate.opsForValue().get(redisKey);
-            if (cachedJson != null) {
+            if (cachedJson != null && externalReference == null) {
                 try {
                     log.info("[remittance-orchestrator] Redis idempotency cache hit for key={}", idempotencyKey);
                     RemittanceResponse cachedResp = objectMapper.readValue(cachedJson, RemittanceResponse.class);
@@ -149,7 +161,9 @@ public class RemittanceOrchestratorService {
                 // Validate request details match (comparing Long vs Long)
                 if (!existing.getSourceAccountId().equals(srcAcc.id())
                         || !existing.getTargetAccountId().equals(tgtAcc.id())
-                        || existing.getAmount().compareTo(request.getAmount()) != 0) {
+                        || existing.getAmount().compareTo(request.getAmount()) != 0
+                        || (externalReference != null && (!externalReference.equals(existing.getReferenceNo())
+                            || !request.getTransactionType().equals(existing.getTransactionType())))) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT,
                             "This Idempotency-Key was already used for a transfer with different request details.");
                 }
@@ -216,7 +230,7 @@ public class RemittanceOrchestratorService {
 
         try {
             // ── Step 1: Initiated ────────────────────────────────────────────────────
-            String referenceNo = deriveReferenceNo(callerCustomerId, idempotencyKey);
+            String referenceNo = externalReference != null ? externalReference : deriveReferenceNo(callerCustomerId, idempotencyKey);
 
             // ── Step 2 & 3: Validated & Authenticated ────────────────────────────────
             RemittanceLedgerService.AccountInfo sourceAcc = ledgerService.resolveAccount(request.getSourceAccountId());
@@ -255,10 +269,10 @@ public class RemittanceOrchestratorService {
                         correlationId
                 );
 
-                if ("UNAVAILABLE".equalsIgnoreCase(risk.decision())) {
+                if (risk == null || risk.score() == null || "UNAVAILABLE".equalsIgnoreCase(risk.decision())) {
                     log.warn("[remittance-orchestrator] Risk screening UNAVAILABLE ref={}", referenceNo);
                     // Publish UNAVAILABLE decision to audit log before aborting
-                    riskDecisionPublisher.publish(referenceNo, risk);
+                    if (risk != null) riskDecisionPublisher.publish(referenceNo, risk);
                     try {
                         ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
                                 Remittance.STEP_FRAUD_CHECK, "Risk screening service unavailable", risk, "risk-engine");
@@ -284,7 +298,8 @@ public class RemittanceOrchestratorService {
             }
 
             // ── Step 5: Limit Check (For funds transfers within bank) ────────────────
-            if (RemittanceRequest.TYPE_TRANSFER.equals(request.getTransactionType())) {
+            if (RemittanceRequest.TYPE_TRANSFER.equals(request.getTransactionType())
+                    || RemittanceRequest.isExternalType(request.getTransactionType())) {
                 RemittanceLedgerService.CustomerLimits limits = ledgerService.getCustomerLimits(callerCustomerId);
                 if (request.getAmount().compareTo(limits.perTxLimit()) > 0) {
                     String reason = String.format("Transaction amount (₱%s) exceeds per-transaction limit of ₱%s",
@@ -328,6 +343,11 @@ public class RemittanceOrchestratorService {
             }
 
             // ── Step 8 & 9: T24 Core Adapter & Ledger Commit (Direct Dispatch) ───────
+            if (risk != null) {
+                remittance.setRiskScore(risk.score());
+                remittance.setRiskDecision(risk.decision());
+                remittanceRepository.save(remittance);
+            }
             return executeCoreBankingSagaInternal(remittance, request, sourceAcc, targetAcc, risk, correlationId, redisKey);
 
         } finally {
