@@ -335,6 +335,7 @@ class UserProfile {
   final String username;
   final String email;
   final List<BankAccount> accounts;
+  final bool hasMpin;
 
   UserProfile({
     required this.firstName,
@@ -342,6 +343,7 @@ class UserProfile {
     required this.username,
     required this.email,
     required this.accounts,
+    this.hasMpin = false,
   });
 
   BankAccount? get checkingAccount =>
@@ -368,6 +370,7 @@ class UserProfile {
     String? username,
     String? email,
     List<BankAccount>? accounts,
+    bool? hasMpin,
   }) {
     return UserProfile(
       firstName: firstName ?? this.firstName,
@@ -375,17 +378,21 @@ class UserProfile {
       username: username ?? this.username,
       email: email ?? this.email,
       accounts: accounts ?? this.accounts,
+      hasMpin: hasMpin ?? this.hasMpin,
     );
   }
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final list = (json['accounts'] as List?) ?? [];
+    final rawHasMpin = json['hasMpin'];
+    final bool hasMpin = rawHasMpin is bool ? rawHasMpin : (rawHasMpin?.toString().toLowerCase() == 'true');
     return UserProfile(
       firstName: json['firstName']?.toString() ?? '',
       fullName: json['fullName']?.toString() ?? '',
       username: json['username']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       accounts: list.map((a) => BankAccount.fromJson(a as Map<String, dynamic>)).toList(),
+      hasMpin: hasMpin,
     );
   }
 }
@@ -521,6 +528,7 @@ class AccountService {
   }) async {
     final savedUser = await SecureTokenStorage.getUsername() ?? fallbackUsername ?? '';
     final savedName = await SecureTokenStorage.getFullName() ?? savedUser;
+    final customerId = await SecureTokenStorage.getCustomerId();
 
     final cacheHeaders = bypassCache ? {'Cache-Control': 'no-cache, no-store'} : null;
     final queryParams = bypassCache ? {'_t': DateTime.now().millisecondsSinceEpoch.toString()} : null;
@@ -561,7 +569,7 @@ class AccountService {
         }
       }
 
-      // 3. Fallback: GET /api/v1/accounts
+      // 3. Fallback endpoint: GET /api/v1/accounts
       final response = await _api.get(
         ApiConfig.accountsPath,
         headers: cacheHeaders,
@@ -591,38 +599,13 @@ class AccountService {
       debugPrint('[AccountService] fetchProfile error: $e');
     }
 
-    // Default structure matching live Azure SQL schema
+    // Strict Cloud Target: Return clean user profile structure if cloud backend profile fetching failed
     return UserProfile(
       firstName: savedName.split(' ').first,
       fullName: savedName,
       username: savedUser,
       email: '$savedUser@paypink.ph',
-      accounts: [
-        BankAccount(
-          accountId: 1,
-          accountNumber: '001173612613',
-          accountType: 'SAVINGS_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 183715.00,
-          status: 'ACTIVE',
-        ),
-        BankAccount(
-          accountId: 2,
-          accountNumber: '001373612611',
-          accountType: 'CHECKING_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 50474.85,
-          status: 'ACTIVE',
-        ),
-        BankAccount(
-          accountId: 3,
-          accountNumber: '001973612615',
-          accountType: 'STRESS_TEST_ACCOUNT',
-          currency: 'PHP',
-          currentBalance: 1049.00,
-          status: 'ACTIVE',
-        ),
-      ],
+      accounts: const [],
     );
   }
 

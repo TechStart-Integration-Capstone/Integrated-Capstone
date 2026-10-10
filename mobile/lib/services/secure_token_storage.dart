@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'api_client.dart';
 import 'web_storage_stub.dart' if (dart.library.html) 'web_storage_web.dart';
 
 /// User authentication payloads and JWT session keys stored inside
@@ -110,8 +111,10 @@ class SecureTokenStorage {
   static const String _pinOwnerKey = 'paypink_mpin_owner';
 
   /// Hashes and securely persists user MPIN, remembering which user it belongs to.
+  /// Also synchronizes authoritative hash to Azure SQL database via auth-service.
   static Future<void> savePin(String pin, {String? owner}) async {
-    final bytes = utf8.encode('paypink_salt_${pin.trim()}');
+    final cleanPin = pin.trim();
+    final bytes = utf8.encode('paypink_salt_$cleanPin');
     final digest = sha256.convert(bytes);
     await _write(_pinHashKey, digest.toString());
     final given = owner?.trim() ?? '';
@@ -119,35 +122,128 @@ class SecureTokenStorage {
     if (resolvedOwner.isNotEmpty) {
       await _write(_pinOwnerKey, resolvedOwner);
     }
+
+    // Persist authoritative MPIN to database via API Gateway -> auth-service
+    try {
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        final resp = await ApiClient().post(
+          '/auth/banking/mpin',
+          body: {'mpin': cleanPin, 'pin': cleanPin},
+          requiresAuth: true,
+        ).timeout(const Duration(seconds: 4));
+        if (resp.statusCode == 200 || resp.statusCode == 201) {
+          debugPrint('[SecureTokenStorage] MPIN successfully persisted to connected database.');
+        } else {
+          debugPrint('[SecureTokenStorage] Remote MPIN DB save status: ${resp.statusCode} ${resp.body}');
+        }
+      }
+    } catch (e) {
+      debugPrint('[SecureTokenStorage] Remote MPIN DB save notice: $e');
+    }
   }
 
-  /// True when this device already holds an MPIN for [username].
+  /// True when this device holds an MPIN for [username] or customer has an MPIN in DB.
   /// A different user signing in on the same device must create their own.
   static Future<bool> hasPinFor(String username) async {
-    if (!await hasPin()) return false;
-    final owner = await _read(_pinOwnerKey);
     final user = username.trim().toLowerCase();
-    if (owner == null || owner.isEmpty) {
-      // MPIN saved before owners were recorded: adopt it for this user.
-      if (user.isNotEmpty) await _write(_pinOwnerKey, user);
-      return true;
+
+    // 1. If stored locally for this user
+    final storedHash = await _read(_pinHashKey);
+    final owner = await _read(_pinOwnerKey);
+    if (storedHash != null && storedHash.isNotEmpty) {
+      if (owner == null || owner.isEmpty || owner == user) {
+        if (owner == null || owner.isEmpty) {
+          if (user.isNotEmpty) await _write(_pinOwnerKey, user);
+        }
+        return true;
+      }
     }
-    return owner == user;
+
+    // 2. Query remote DB status if authenticated session is present
+    try {
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        final resp = await ApiClient().get(
+          '/auth/banking/mpin/status',
+          requiresAuth: true,
+        ).timeout(const Duration(seconds: 3));
+
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          if (data is Map && data['hasMpin'] == true) {
+            if (user.isNotEmpty) await _write(_pinOwnerKey, user);
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return false;
   }
 
-  /// Verifies input PIN against securely persisted SHA-256 hash
+  /// Verifies input PIN against real DB first, with fallback to locally stored SHA-256 hash.
   static Future<bool> verifyPin(String pin) async {
+    final cleanPin = pin.trim();
+
+    // 1. Authoritative check against real connected Azure SQL DB
+    try {
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        final resp = await ApiClient().post(
+          '/auth/banking/mpin/verify',
+          body: {'mpin': cleanPin, 'pin': cleanPin},
+          requiresAuth: true,
+        ).timeout(const Duration(seconds: 4));
+
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          if (data is Map && data['valid'] == true) {
+            // Keep local hash cache in sync
+            final bytes = utf8.encode('paypink_salt_$cleanPin');
+            final digest = sha256.convert(bytes);
+            await _write(_pinHashKey, digest.toString());
+            return true;
+          } else if (data is Map && data['valid'] == false) {
+            return false;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[SecureTokenStorage] Remote MPIN verify fallback: $e');
+    }
+
+    // 2. Fallback to local hash
     final storedHash = await _read(_pinHashKey);
     if (storedHash == null) return false;
-    final bytes = utf8.encode('paypink_salt_${pin.trim()}');
+    final bytes = utf8.encode('paypink_salt_$cleanPin');
     final digest = sha256.convert(bytes);
     return storedHash == digest.toString();
   }
 
-  /// Checks if the user has already configured an MPIN
+  /// Checks if the user has already configured an MPIN (locally or in connected DB)
   static Future<bool> hasPin() async {
     final storedHash = await _read(_pinHashKey);
-    return storedHash != null && storedHash.isNotEmpty;
+    if (storedHash != null && storedHash.isNotEmpty) return true;
+
+    try {
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        final resp = await ApiClient().get(
+          '/auth/banking/mpin/status',
+          requiresAuth: true,
+        ).timeout(const Duration(seconds: 3));
+
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          if (data is Map && data['hasMpin'] == true) {
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+
+    return false;
   }
 
   /// Clears user MPIN

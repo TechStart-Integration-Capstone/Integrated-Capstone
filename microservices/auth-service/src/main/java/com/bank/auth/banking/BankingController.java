@@ -129,6 +129,52 @@ public class BankingController {
         return banking.activity(token);
     }
 
+    public record SetMpinRequest(String mpin, String pin, String currentMpin) {
+        public String resolvedMpin() {
+            String val = (mpin != null && !mpin.isBlank()) ? mpin : pin;
+            return val != null ? val.trim() : null;
+        }
+    }
+    public record VerifyMpinRequest(String mpin, String pin) {
+        public String resolvedMpin() {
+            String val = (mpin != null && !mpin.isBlank()) ? mpin : pin;
+            return val != null ? val.trim() : null;
+        }
+    }
+
+    @Operation(summary = "Check MPIN configuration status", description = "Returns whether the customer has configured an MPIN in the database.")
+    @GetMapping("/mpin/status")
+    public Map<String, Object> mpinStatus(@Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String token) {
+        var customer = banking.authenticatedCustomer(token);
+        boolean hasPin = banking.hasMpin(token);
+        return Map.of("hasMpin", hasPin, "username", customer.getUsername());
+    }
+
+    @Operation(summary = "Set or update MPIN", description = "Persists the customer's 6-digit MPIN into the database.")
+    @PostMapping("/mpin")
+    public Map<String, Object> setMpin(@Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String token, @RequestBody SetMpinRequest request) {
+        String targetMpin = request != null ? request.resolvedMpin() : null;
+        if (targetMpin == null || !targetMpin.matches("^\\d{6}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MPIN must be exactly 6 digits.");
+        }
+        banking.setMpin(token, targetMpin, request.currentMpin());
+        return Map.of("success", true, "message", "MPIN saved successfully.");
+    }
+
+    @Operation(summary = "Verify MPIN", description = "Verifies input MPIN against the customer's persisted MPIN in the database.")
+    @PostMapping("/mpin/verify")
+    public Map<String, Object> verifyMpin(@Parameter(hidden = true) @RequestHeader(value = "Authorization", required = false) String token, @RequestBody VerifyMpinRequest request) {
+        String targetMpin = request != null ? request.resolvedMpin() : null;
+        if (targetMpin == null || !targetMpin.matches("^\\d{6}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MPIN must be exactly 6 digits.");
+        }
+        boolean valid = banking.verifyMpin(token, targetMpin);
+        if (!valid) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Incorrect MPIN. Please try again.");
+        }
+        return Map.of("valid", true);
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> status(ResponseStatusException ex) {
         return ResponseEntity.status(ex.getStatusCode()).body(Map.of("message", Objects.requireNonNullElse(ex.getReason(), "Request failed.")));

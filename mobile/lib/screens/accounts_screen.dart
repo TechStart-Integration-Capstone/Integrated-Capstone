@@ -187,13 +187,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
               final Color iconColor = isSavings
                   ? PayPinkTheme.wine
                   : (isChecking
-                      ? PayPinkTheme.indigo
+                      ? const Color(0xFFE11D48)
                       : (isEveryday ? PayPinkTheme.green : PayPinkTheme.amber));
 
               final Color iconBg = isSavings
                   ? PayPinkTheme.pinkSubtle
                   : (isChecking
-                      ? PayPinkTheme.indigoBg
+                      ? const Color(0xFFFFF1F2)
                       : (isEveryday ? PayPinkTheme.greenBg : PayPinkTheme.amberBg));
 
               return Padding(
@@ -545,10 +545,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E2640) : PayPinkTheme.indigoBg,
+                      color: isDark ? const Color(0xFF381525) : PayPinkTheme.pinkSubtle,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.real_estate_agent_rounded, color: isDark ? const Color(0xFF818CF8) : PayPinkTheme.indigo, size: 18),
+                    child: Icon(Icons.real_estate_agent_rounded, color: isDark ? const Color(0xFFFB7185) : PayPinkTheme.wine, size: 18),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -583,14 +583,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E2640) : PayPinkTheme.indigoBg,
+                  color: isDark ? const Color(0xFF143322) : PayPinkTheme.greenBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '• $status',
                   style: PayPinkTheme.body(
                     fontSize: 10,
-                    color: isDark ? const Color(0xFF818CF8) : PayPinkTheme.indigo,
+                    color: isDark ? const Color(0xFF4ADE80) : PayPinkTheme.green,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
