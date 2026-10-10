@@ -45,9 +45,10 @@ function toast(message, error = false) {
 }
 
 async function api(path, {method = 'GET', body, authenticated = true, headers: customHeaders = {}} = {}) {
+  const generation = state.generation, session = state.session;
   const headers = {Accept:'application/json', ...customHeaders};
   if (body) headers['Content-Type'] = 'application/json';
-  if (authenticated && state.session) headers.Authorization = `Bearer ${state.session.token}`;
+  if (authenticated && session) headers.Authorization = `Bearer ${session.token}`;
   let response;
   const targetUrl = path.startsWith('/api/') ? path : `${API}${path}`;
   try {
@@ -57,6 +58,10 @@ async function api(path, {method = 'GET', body, authenticated = true, headers: c
     throw new Error('We couldn’t reach the bank. Check your connection and try again.');
   }
   const data = await response.json().catch(() => ({}));
+  // Delayed responses belong to the session that sent the request.
+  if (authenticated && (generation !== state.generation || session !== state.session)) {
+    throw new Error('Request belongs to an earlier session.');
+  }
   if (response.status === 401 && authenticated) {
     logout('Your session has ended. Please log in again.');
     throw new Error('Your session has ended. Please log in again.');

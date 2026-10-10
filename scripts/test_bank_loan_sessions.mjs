@@ -40,7 +40,7 @@ function banking() {
     refresh=async()=>refreshCounter();
     toast=message=>notify(message);
     showDialog=(...args)=>show(...args);
-    globalThis.subject={state,loanState,startSession,logout,loadLoans,loansPage,loanAlertsBanner,
+    globalThis.subject={state,loanState,api,startSession,logout,loadLoans,loansPage,loanAlertsBanner,
       showSchedule,showPayForm,payLoan,applyForLoan,acceptOffer,ensureLoanOwner};
   `,context);
   const s=context.subject;
@@ -62,6 +62,67 @@ function banking() {
   return {...s,context,calls,dialogs,notices,listeners,login,respond,seed,
     refreshes:()=>refreshes,closes:()=>closes};
 }
+
+for (const status of [200,401]) {
+  for (const username of ['A','B']) {
+    test(`shared API ignores delayed ${status} after login as ${username}`,async()=>{
+      const b=banking();
+      const pending=b.api('/me');
+      assert.equal(b.calls[0].options.headers.Authorization,'Bearer '+b.state.session.token);
+      const oldToken=b.state.session.token;
+      b.logout();b.login(username);
+      // A login can receive the same token; session lifetime must still distinguish it.
+      if(username==='A')b.state.session.token=oldToken;
+      const session=b.state.session,profile=b.state.profile;
+      const notices=b.notices.length,closes=b.closes();
+      b.respond(0,{fullName:'Old private profile'},status);
+      await assert.rejects(pending,/earlier session/);
+      assert.equal(b.state.session,session);
+      assert.equal(b.state.profile,profile);
+      assert.equal(b.notices.length,notices);
+      assert.equal(b.closes(),closes);
+    });
+  }
+}
+
+test('shared API checks session again after reading the response body',async()=>{
+  const b=banking();const pending=b.api('/me');
+  let finishBody;
+  b.calls[0].resolve({ok:false,status:401,json:()=>new Promise(resolve=>{finishBody=resolve;})});
+  await flush();
+  b.logout();b.login('B');
+  const session=b.state.session,notices=b.notices.length;
+  finishBody({});await assert.rejects(pending,/earlier session/);
+  assert.equal(b.state.session,session);assert.equal(b.notices.length,notices);
+});
+
+test('shared API current-session 401 logs out once despite concurrent expired requests',async()=>{
+  const b=banking();
+  const first=b.api('/me'),second=b.api('/transactions');
+  b.respond(0,{},401);await assert.rejects(first,/session has ended/);
+  assert.equal(b.state.session,null);assert.equal(b.state.profile,null);
+  assert.equal(b.notices.length,1);
+  b.respond(1,{},401);await assert.rejects(second,/earlier session/);
+  assert.equal(b.notices.length,1);
+});
+
+test('shared API unauthenticated login failure does not log out an active session',async()=>{
+  const b=banking();
+  const pending=b.api('/login',{authenticated:false,method:'POST',body:{username:'A',password:'test'}});
+  assert.equal(b.calls[0].options.headers.Authorization,undefined);
+  b.login('B');
+  const session=b.state.session;
+  b.respond(0,{detail:'Invalid credentials'},401);
+  await assert.rejects(pending,error=>error.status===401&&error.message==='Invalid credentials');
+  assert.equal(b.state.session,session);assert.equal(b.notices.length,0);
+});
+
+test('shared API still returns successful responses from the current session',async()=>{
+  const b=banking();const pending=b.api('/me');
+  const result={fullName:'Current customer'};
+  b.respond(0,result);
+  assert.equal(await pending,result);assert.equal(b.notices.length,0);
+});
 
 test('unsubmitted loan inputs survive redraws and an asynchronous loan reload',async()=>{
   const b=banking();

@@ -1,4 +1,10 @@
 # Changelog
+- 2026-10-11 — Customer fix 21: prevent old API responses from ending a newer session — [aly]
+  - frontend/bank/bank.js captures the session and generation when sending shared API requests, then checks both after reading the response body. Responses from an earlier authenticated session are rejected before logout or returning data; current-session 401 handling and unauthenticated login errors retain their behavior.
+  - Added eight regressions in scripts/test_bank_loan_sessions.mjs covering delayed 401/success responses across different and same-customer logins (including a reused token), session changes while parsing JSON, concurrent expired requests, unauthenticated failures and current-session success.
+  - Validation: bank.js syntax check and all 114 frontend regression tests passed with mocked DOM/network. Live browser/service acceptance pending.
+  - No database migration or JAR rebuild needed. User handles frontend image rebuild/container recreation; no deployment performed. Review finding 20 remains open.
+
 - 2026-10-11 — Customer fix 22: keep account savings breakdown available independently of Savings Hub — [aly]
   - Moved the existing GET /api/v1/accounts/savings/accounts/{id}/breakdown route from conditional SavingsController to unconditional AccountBalanceController in microservices/account-service. My accounts can read the breakdown with app.savings.enabled unset, false or true; optional Savings Hub write routes remain gated.
   - Retained SavingsService ownership/active PHP savings-account checks and authoritative core balances/reservations. Existing savings schema and core availability are still required; no database migration or feature-flag change.
