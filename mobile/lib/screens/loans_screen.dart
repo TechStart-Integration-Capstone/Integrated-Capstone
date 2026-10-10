@@ -4,6 +4,7 @@ import '../theme/paypink_theme.dart';
 import '../widgets/bottom_sheets.dart';
 import '../widgets/loan_application_sheet.dart';
 import '../widgets/loan_payment_sheet.dart';
+import '../widgets/paypink_shimmer.dart';
 
 /// One place for everything loans: your loans (payments left, next payment, missed auto-debit),
 /// Pay, Details & schedule, and Apply. Mirrors the web Loans page (frontend/bank/loans.js).
@@ -137,9 +138,9 @@ class _LoansScreenState extends State<LoansScreen> {
                   _sectionTitle('Your loans', loans.isEmpty ? null : '${loans.length} active', ink, muted),
                   const SizedBox(height: 10),
                   if (_loading && loans.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 28),
-                      child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine, strokeWidth: 2.5)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: PayPinkShimmer.accountCardSkeleton(isDark: isDark),
                     )
                   else if (loans.isEmpty)
                     _emptyLoans(isDark, ink, muted)

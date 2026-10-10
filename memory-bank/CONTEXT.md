@@ -2,6 +2,8 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-10 (SessionLockWrapper Scope Alignment: updated MaterialApp.builder in main.dart to scope SessionLockWrapper to _isAuthenticated == true, ensuring auto-lock timers run only for logged-in sessions; all 51/51 mobile tests pass clean by [dom & Antigravity])_
+_Last Updated: 2026-10-10 (Mobile PayPinkShimmer Skeleton Loaders Integration: replaced generic progress spinners in accounts_screen.dart and loans_screen.dart with PayPinkShimmer card and transaction list skeletons during data loading; all 51/51 mobile tests pass by [dom & Antigravity])_
 _Last Updated: 2026-10-10 (Mobile MPIN Database Persistence Audit & CI/CD Pipeline Wiring: resolved silent HTTP 400 rejection via dual-key 'mpin'/'pin' support in BankingController and SecureTokenStorage; wired scripts/migrate_mpin.sql into GitHub Actions pipeline.yml Stages 2 and 3, docker-compose.yml, and schema-azuresql.sql; live Azure SQL persistence verified for lviernes and arosales; 54/54 auth-service tests and 38/38 mobile tests pass clean by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Reverted web app UI changes to original team baseline, focusing strictly on mobile app dark mode refinements and Azure SQL MPIN database persistence; 38/38 mobile tests pass clean by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Personal Loan Details modal & Accounts screen theme alignment: purged indigo/blue relics in favor of signature PayPink wine/rose gradient hero cards, adaptive dark mode contrast for due dates, status badges, and Schedule action buttons; 38/38 mobile tests pass by [dom & Antigravity])_

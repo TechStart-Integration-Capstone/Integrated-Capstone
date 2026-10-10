@@ -1,5 +1,15 @@
 # Changelog
 
+- 2026-10-10 — SessionLockWrapper Scope Alignment for Authenticated Sessions Only (`main.dart`):
+  - **Inactivity Auto-Lock Scoping:** Updated `MaterialApp.builder` in `main.dart` to require `_isAuthenticated == true` before wrapping `child` in `SessionLockWrapper`.
+  - **Prevent Pre-Login Lock Screen:** Idle timeout and backgrounding timers are now scoped strictly to active authenticated sessions, eliminating unwanted PIN lock overlays on the `LoginRegisterScreen`.
+  - **Validation:** All 51/51 Flutter unit and widget tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-10 — Mobile PayPinkShimmer Skeleton Loaders Integration (`accounts_screen.dart`, `loans_screen.dart`):
+  - **PayPinkShimmer Integration**: Replaced generic `CircularProgressIndicator` spinners in `AccountsScreen` ([`accounts_screen.dart`](file:///c:/Users/FTM83759/Downloads/integrated2/Integrated-Capstone/mobile/lib/screens/accounts_screen.dart)) and `LoansScreen` ([`loans_screen.dart`](file:///c:/Users/FTM83759/Downloads/integrated2/Integrated-Capstone/mobile/lib/screens/loans_screen.dart)) with `PayPinkShimmer.accountCardSkeleton` and `PayPinkShimmer.transactionSkeletonList` components.
+  - **Enhanced UX**: Account cards and loans hub now display luxury brand-tailored animated shimmer skeletons during data fetching and state transitions.
+  - **Validation**: All 51/51 Flutter unit and widget tests pass clean (`flutter test`). — [dom & Antigravity]
+
 - 2026-10-10 — Mobile MPIN Database Audit, Dual-Key Compatibility & CI/CD Pipeline Migration Wiring (`BankingController.java`, `secure_token_storage.dart`, `pipeline.yml`, `docker-compose.yml`, `schema-azuresql.sql`):
   - **Audit & Resolution of Mobile MPIN Loop:** Audited and resolved the root cause of the mobile app repeatedly asking users to create a new MPIN. The mobile client was submitting `{"pin": "..."}`, whereas the backend `@Valid` model expected `{"mpin": "..."}`, causing a silent HTTP 400 rejection in `savePin()`.
   - **Dual-Key API Contract Resilience (`BankingController.java`, `secure_token_storage.dart`):** Updated `SetMpinRequest` and `VerifyMpinRequest` in `auth-service` to dynamically accept both `mpin` and `pin` keys. Aligned `SecureTokenStorage.savePin()` and `verifyPin()` in Flutter to send both keys and log authoritative server responses.

@@ -528,7 +528,6 @@ class AccountService {
   }) async {
     final savedUser = await SecureTokenStorage.getUsername() ?? fallbackUsername ?? '';
     final savedName = await SecureTokenStorage.getFullName() ?? savedUser;
-    final customerId = await SecureTokenStorage.getCustomerId();
 
     final cacheHeaders = bypassCache ? {'Cache-Control': 'no-cache, no-store'} : null;
     final queryParams = bypassCache ? {'_t': DateTime.now().millisecondsSinceEpoch.toString()} : null;

@@ -21,6 +21,7 @@ class SessionManager with WidgetsBindingObserver {
   }
 
   bool get isLocked => _isLocked;
+  DateTime get lastActivityTime => _lastActivityTime;
 
   void startListening() {
     WidgetsBinding.instance.addObserver(this);

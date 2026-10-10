@@ -187,7 +187,7 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
       darkTheme: PayPinkTheme.darkTheme,
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
       builder: (context, child) {
-        if (di.sl.isRegistered<SessionManager>()) {
+        if (_isAuthenticated && di.sl.isRegistered<SessionManager>()) {
           return SessionLockWrapper(
             sessionManager: di.sl<SessionManager>(),
             currentUsername: _currentUser,

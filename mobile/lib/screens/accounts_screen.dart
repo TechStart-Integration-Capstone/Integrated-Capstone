@@ -6,6 +6,7 @@ import '../widgets/bottom_sheets.dart';
 import '../widgets/dynamic_card_deck.dart';
 import '../widgets/loan_payment_sheet.dart';
 import '../services/account_service.dart';
+import '../widgets/paypink_shimmer.dart';
 
 class AccountsScreen extends StatefulWidget {
   final bool hideBalances;
@@ -280,9 +281,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
 
     if (widget.accounts == null && widget.loadError == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine)),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            PayPinkShimmer.accountCardSkeleton(isDark: isDark),
+            const SizedBox(height: 12),
+            PayPinkShimmer.transactionSkeletonList(isDark: isDark, count: 2),
+          ],
+        ),
       );
     }
 

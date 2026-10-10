@@ -26,8 +26,8 @@ class LoadingOverlayWrapper extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textInk = isDark ? PayPinkTheme.darkInk : PayPinkTheme.ink;
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
-    final cardBg = isDark ? PayPinkTheme.darkCard.withOpacity(0.92) : Colors.white.withOpacity(0.95);
-    final borderColor = isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink.withOpacity(0.4);
+    final cardBg = isDark ? PayPinkTheme.darkCard.withValues(alpha: 0.92) : Colors.white.withValues(alpha: 0.95);
+    final borderColor = isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink.withValues(alpha: 0.4);
 
     return Stack(
       children: [
@@ -43,7 +43,7 @@ class LoadingOverlayWrapper extends StatelessWidget {
             child: BackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
               child: Container(
-                color: barrierColor ?? (isDark ? Colors.black.withOpacity(0.65) : Colors.black.withOpacity(0.45)),
+                color: barrierColor ?? (isDark ? Colors.black.withValues(alpha: 0.65) : Colors.black.withValues(alpha: 0.45)),
                 child: Center(
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 28),
@@ -54,7 +54,7 @@ class LoadingOverlayWrapper extends StatelessWidget {
                       border: Border.all(color: borderColor, width: 1.2),
                       boxShadow: [
                         BoxShadow(
-                          color: PayPinkTheme.wine.withOpacity(0.18),
+                          color: PayPinkTheme.wine.withValues(alpha: 0.18),
                           blurRadius: 24,
                           spreadRadius: 2,
                           offset: const Offset(0, 8),
@@ -77,8 +77,8 @@ class LoadingOverlayWrapper extends StatelessWidget {
                                   isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
                                 ),
                                 backgroundColor: isDark
-                                    ? PayPinkTheme.pink.withOpacity(0.15)
-                                    : PayPinkTheme.pink.withOpacity(0.3),
+                                    ? PayPinkTheme.pink.withValues(alpha: 0.15)
+                                    : PayPinkTheme.pink.withValues(alpha: 0.3),
                               ),
                             ),
                             const PayPinkLogo(
