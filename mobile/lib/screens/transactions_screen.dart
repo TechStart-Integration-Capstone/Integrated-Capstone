@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
@@ -189,10 +190,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       }).toList();
     }
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      child: Column(
+    return RefreshIndicator(
+      color: PayPinkTheme.wine,
+      onRefresh: () async {
+        HapticFeedback.mediumImpact();
+        widget.onRefresh?.call();
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -435,6 +443,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           const SizedBox(height: 90),
         ],
       ),
+    ),
     );
   }
 
@@ -444,7 +453,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
 
     return GestureDetector(
-      onTap: () => setState(() => _filter = value),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _filter = value);
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(

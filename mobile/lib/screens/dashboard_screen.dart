@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
@@ -214,10 +215,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      child: Column(
+    return RefreshIndicator(
+      color: PayPinkTheme.wine,
+      onRefresh: () async {
+        HapticFeedback.mediumImpact();
+        widget.onRefreshData?.call();
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Greeting matching mockup
@@ -886,6 +894,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 90),
         ],
       ),
+    ),
     );
   }
 
@@ -899,7 +908,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final labelColor = isDark ? const Color(0xFFD1D5DB) : PayPinkTheme.ink;
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       child: Column(
         children: [
           Container(
