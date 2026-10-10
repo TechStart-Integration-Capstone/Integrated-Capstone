@@ -1,4 +1,10 @@
 # Changelog
+- 2026-10-11 — Customer fix 11: show PayPink transfer notifications — [aly]
+  - Added P2P_REMITTANCE to frontend/bank/notifications.js history filtering so sender transfers appear in the inbox, unread badge and subsequent-update popups. Recognized status matching is case-insensitive; unposted entries from fix 10 retain their reference-based notification identity.
+  - Pending messages await confirmation without asserting a hold; failed messages no longer claim reversal or refund, and cancellation messages avoid claiming restored funds. Existing incoming, external and loan notification flows remain supported.
+  - Validation: JavaScript syntax check and all 66 frontend regressions passed, including 16 new scripts/test_bank_notifications.mjs cases covering inbox/badge visibility, status wording, distinct unposted requests and details, transitions without repeated alerts, persisted reads, own-account legs, customer isolation and escaping. DOM/storage are mocked; live browser verification pending.
+  - Frontend only; no database migration or Java rebuild for fix 11. Pending/failed request visibility relies on the auth-service changes in fix 10. User handles frontend image rebuild/container recreation; no deployment performed. Findings 12–18 not started.
+
 - 2026-10-11 — Customer fix 10: include unposted transfers in history and reports — [aly]
   - Updated auth-service BankingService and TransactionReportService to include sender-owned TRANSFER requests from app.REMITTANCE when no matching ledger entry exists. Shared UnpostedTransferQuery maps unfinished lifecycle states to PENDING and preserves FAILED/CANCELLED outcomes; loan and external instructions retain their existing flows.
   - Requests do not create incoming credits or contribute to completed totals. A matching source/reference ledger entry suppresses the request to prevent duplicates after posting. The combined history retains its latest-200 limit; report date boundaries and 10,000-row cap still apply.
