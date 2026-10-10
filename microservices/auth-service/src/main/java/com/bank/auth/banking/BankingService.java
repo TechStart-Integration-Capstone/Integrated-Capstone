@@ -143,24 +143,36 @@ public class BankingService {
     @Transactional
     public void setMpin(String authorization, String mpin, String currentMpin) {
         Customer customer = authenticatedCustomer(authorization);
-        String existingHash = customer.getMpinHash();
-        if (existingHash == null || existingHash.isBlank()) {
-            try {
-                existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
-            } catch (Exception ignored) {}
+        if (mpin == null || !mpin.matches("[0-9]{6}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MPIN must be exactly 6 digits.");
         }
-        if (existingHash != null && !existingHash.isBlank() && currentMpin != null && !currentMpin.isBlank()) {
-            String checkHash = hashMpin(currentMpin);
-            if (!existingHash.equalsIgnoreCase(checkHash)) {
+        // Read the authoritative value: an absent/stale entity field must never permit a PIN reset.
+        final String existingHash;
+        try {
+            existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+        } catch (org.springframework.dao.DataAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Unable to check your MPIN. Please try again.");
+        }
+        if (existingHash != null && !existingHash.isBlank()) {
+            if (currentMpin == null || currentMpin.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter your current MPIN to change it.");
+            }
+            if (!currentMpin.trim().matches("[0-9]{6}") || !existingHash.equalsIgnoreCase(hashMpin(currentMpin))) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current MPIN is incorrect.");
             }
         }
-        String newHash = hashMpin(mpin);
-        customer.setMpinHash(newHash);
-        customers.save(customer);
+        // Compare-and-set also protects simultaneous first-time setup and concurrent changes.
+        final int updated;
         try {
-            jdbc.update("UPDATE CUSTOMER SET mpin_hash = ? WHERE customer_id = ?", newHash, customer.getCustomerId());
-        } catch (Exception ignored) {}
+            updated = jdbc.update("UPDATE CUSTOMER SET mpin_hash = ? WHERE customer_id = ? "
+                    + "AND (mpin_hash = ? OR (mpin_hash IS NULL AND ? IS NULL))",
+                    hashMpin(mpin), customer.getCustomerId(), existingHash, existingHash);
+        } catch (org.springframework.dao.DataAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Unable to save your MPIN. Please try again.");
+        }
+        if (updated != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Your MPIN changed during this request. Please try again with your current MPIN.");
+        }
     }
 
     @Transactional(readOnly = true)

@@ -1,4 +1,10 @@
 # Changelog
+- 2026-10-11 — Customer fix 19: require the current MPIN for changes — [aly]
+  - Updated auth-service BankingService.setMpin for the shared /api/v1/auth/banking/mpin endpoint. Existing MPINs require a nonblank, correctly formatted and matching currentMpin. First-time setup still works without it; both mpin/pin request aliases remain supported.
+  - Read the authoritative stored hash and fail on read errors. Save with a conditional update against that same hash so concurrent setup/change cannot overwrite another successful update; write errors return 503 and conflicts return 409. Existing hashes remain compatible; no data rewrite.
+  - Validation: all 92 auth-service tests passed, including 16 new MockMvc/H2 cases in BankingMpinTest covering missing/blank/wrong inputs, setup, aliases, ownership, verification, stale entity state, failed reads/writes and conflicting updates.
+  - Backend only; no /bank screen changes or database migration. User handles auth-service JAR/image rebuild and container recreation; no deployment performed, live SQL Server/mobile acceptance pending. Mobile savePin currently catches server errors and writes local state first; that separate client behavior was observed but not changed in this backend fix. Review findings 20–22 remain open.
+
 - 2026-10-11 — Customer fix 18: identify own-account transfers by account number — [aly]
   - frontend/bank/bank.js spending excludes PayPink transfers only when the counterparty account number matches an account in the signed-in profile. Matching customer names no longer hide payments to somebody else; renamed or differently named owned accounts remain excluded. Pending/failed entries still do not count as spending.
   - Validation for fixes 16–18: JavaScript syntax checks and all 106 frontend tests passed, including 18 new scripts/test_bank_refresh_errors_spending.mjs cases. Covers manual/periodic loan refresh, overlapping loads, failures, session changes, API detail/fallback handling and spending/chart totals. DOM/network are mocked; live browser/service acceptance pending.
