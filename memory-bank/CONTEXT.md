@@ -49,6 +49,11 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### Smooth balance refresh (2026-10-11)
+
+- Overview and My accounts savings breakdown retain in-memory display snapshots across navigation and periodic redraws, share pending reads and reuse results for 30 seconds. Refresh and Savings Hub writes invalidate the entries while keeping prior values visible. Per user preference, failed background updates silently retain values without error messages, toasts or additional timestamps; initial failures show a neutral unavailable state. Selected savings account persists through redraws. Login/logout and session/owner guards isolate cached data. Cached values are never used to authorize transfers.
+- Local frontend changes in bank.js and savings-live.js, with 18 new scripts/test_bank_balance_refresh.mjs cases covering display caching and refresh behavior. Both JavaScript syntax checks and all 132 frontend regressions passed with mocked DOM/network; live browser/service verification remains pending. No migration, Java rebuild or deployment. Frontend image rebuild/container recreation required to deploy.
+
 ### T24 response decoding fix (2026-10-11)
 
 - Local t24-adapter change: /ofs/process explicitly produces application/json; T24ClientService requests JSON and parses bytes independently of the response Content-Type. Only validated POSTED/REJECTED responses with a matching FT/OFS result are terminal. Empty/malformed/unknown responses and HTTP failures return PROCESSING/202 for existing saga recovery instead of immediate false rejection/reversal. Successful idempotent replay and confirmed business rejection remain intact.

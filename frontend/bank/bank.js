@@ -13,6 +13,55 @@ const state = {
 let toastTimer;
 let expiryTimer;
 let recipientTimer;
+// Display-only snapshots. Transfer approval always uses the live server checks.
+let balanceDisplays;
+const BALANCE_DISPLAY_TTL = 30000;
+
+function balanceDisplayState() {
+  if (!balanceDisplays || balanceDisplays.session !== state.session
+      || balanceDisplays.generation !== state.generation || balanceDisplays.owner !== state.profile?.username) {
+    balanceDisplays = {session:state.session, generation:state.generation, owner:state.profile?.username,
+      entries:new Map(), selectedAccount:''};
+  }
+  return balanceDisplays;
+}
+
+function balanceDisplayEntry(key) {
+  const cache = balanceDisplayState();
+  if (!cache.entries.has(key)) cache.entries.set(key, {data:null, checkedAt:null, error:false, pending:null});
+  return cache.entries.get(key);
+}
+
+function invalidateBalanceDisplays() {
+  const cache = balanceDisplayState();
+  // Replace entries so reads started before a refresh/mutation cannot overwrite newer results.
+  cache.entries.forEach((entry,key) => cache.entries.set(key,
+    {data:entry.data, checkedAt:null, error:false, pending:null}));
+}
+
+function readBalanceDisplay(key, path, validate) {
+  const cache = balanceDisplayState(), entry = balanceDisplayEntry(key);
+  if (entry.pending) return entry.pending;
+  if (entry.checkedAt !== null && Date.now() - entry.checkedAt < BALANCE_DISPLAY_TTL) return Promise.resolve(entry);
+  const current = () => balanceDisplayState() === cache && cache.entries.get(key) === entry;
+  entry.pending = (async () => {
+    try {
+      const data = await api(path);
+      if (!validate(data)) throw new Error('Invalid balance response');
+      if (current()) { entry.data = data; entry.error = false; }
+    } catch {
+      if (current()) entry.error = true;
+    } finally {
+      if (current()) { entry.checkedAt = Date.now(); entry.pending = null; }
+    }
+    return entry;
+  })();
+  return entry.pending;
+}
+
+const validBalanceFields = (data, fields) => data && fields.every(field =>
+  (typeof data[field] === 'number' || (typeof data[field] === 'string' && data[field].trim()))
+  && Number.isFinite(Number(data[field])));
 const maskedNumber = number => `•••• ${String(number || '').slice(-4)}`;
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -146,7 +195,8 @@ function renderPage() {
     if (active) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
   });
   if (state.page === 'savings' && state.profile) {
-    window.PayPinkSavingsLive.mount({api, owner: state.profile.username, profile: () => state.profile});
+    window.PayPinkSavingsLive.mount({api, owner: state.profile.username, profile: () => state.profile,
+      onBalanceChange:invalidateBalanceDisplays});
     return;
   }
   if (!state.profile) {
@@ -163,43 +213,56 @@ function renderPage() {
 }
 
 async function loadOverviewBalance() {
-  const card=document.querySelector('#overview-balance'),session=state.session;
+  const card=document.querySelector('#overview-balance'),cache=balanceDisplayState();
   if(!card)return;
-  try {
-    const data=await api('/api/v1/accounts/savings/balance-summary');
-    if(!card.isConnected||session!==state.session)return;
-    card.querySelector('[data-overview-available]').innerHTML=balance(data.availableBalance);
-    card.querySelector('[data-overview-total]').innerHTML=balance(data.totalBalance);
-    card.querySelector('[data-overview-count]').textContent=`Across ${data.accountCount} ${data.accountCount===1?'account':'accounts'}.`;
-  } catch {
-    if(card.isConnected&&session===state.session){
-      card.querySelector('[data-overview-available]').textContent='Unavailable';
-      card.querySelector('.balance-subtitle').textContent='We couldn’t check available funds. Use Refresh to try again.';
+  const entry=balanceDisplayEntry('overview');
+  const paint=()=>{
+    if(!card.isConnected||balanceDisplayState()!==cache||cache.entries.get('overview')!==entry)return;
+    const data=entry.data;
+    card.querySelector('[data-overview-available]').innerHTML=data?balance(data.availableBalance):entry.error?'Unavailable':'Loading…';
+    if(data){
+      card.querySelector('[data-overview-total]').innerHTML=balance(data.totalBalance);
+      card.querySelector('[data-overview-count]').textContent=`Across ${data.accountCount} ${Number(data.accountCount)===1?'account':'accounts'}.`;
     }
-  }
+    card.querySelector('.balance-subtitle').textContent='After reservations for goals, PinkCircles, and pending transactions.';
+  };
+  paint();
+  await readBalanceDisplay('overview','/api/v1/accounts/savings/balance-summary',
+    data=>validBalanceFields(data,['availableBalance','totalBalance','accountCount']));
+  paint();
 }
 
 async function loadSavingsBreakdown() {
   const panel=document.querySelector('#account-savings-breakdown');
   if(!panel)return;
   const select=panel.querySelector('select'), content=panel.querySelector('[data-breakdown-content]');
-  const accountId=select.value, session=state.session;
+  const accountId=select.value, cache=balanceDisplayState();
+  cache.selectedAccount=accountId;
+  const key='account:'+accountId, entry=balanceDisplayEntry(key);
   const token=Symbol();panel.requestToken=token;
-  content.innerHTML='<p role="status">Loading your savings breakdown…</p>';
-  try {
-    const data=await api('/api/v1/accounts/savings/accounts/'+encodeURIComponent(accountId)+'/breakdown');
-    if(!panel.isConnected||state.session!==session||panel.requestToken!==token)return;
+  const paint=()=>{
+    if(!panel.isConnected||balanceDisplayState()!==cache||cache.entries.get(key)!==entry||panel.requestToken!==token)return;
+    const data=entry.data;
+    if(!data){
+      content.innerHTML=entry.error?'<p role="status">Your savings breakdown is temporarily unavailable.</p>'
+        :'<p role="status">Loading your savings breakdown…</p>';
+      return;
+    }
     const row=(label,value)=>`<div><dt>${escapeHtml(label)}</dt><dd>${balance(value)}</dd></div>`;
     content.innerHTML=`<dl class="sv-funding">${row('Total account balance',data.accountBalance)}${row('Set aside for personal goals',data.personalReserved)}${row('Your PinkCircle contributions',data.circleReserved)}${Number(data.unlistedReservations)>0?row('Other savings reservations',data.unlistedReservations):''}${row('Available balance',data.availableBalance)}</dl><p>Set-aside money stays in your account. Release it in Savings Hub before spending or reallocating it.</p><details class="account-allocations"><summary>View allocations (${data.allocations.length})</summary>${data.allocations.length?`<dl class="sv-funding">${data.allocations.map(a=>row(a.name+' · '+(a.kind==='PINK_CIRCLE'?'PinkCircle · your contribution':'Personal goal'),a.amount)).join('')}</dl>`:'<p>No money is set aside for goals or PinkCircles in this account yet.</p>'}</details><p class="sv-modal-note">Account numbers are masked. Use Refresh for the latest balances.</p>`;
-  } catch(error) {
-    if(panel.isConnected&&state.session===session&&panel.requestToken===token)content.innerHTML='<p role="alert">We couldn’t load your savings breakdown. Use Refresh to try again.</p>';
-  }
+  };
+  paint();
+  await readBalanceDisplay(key,'/api/v1/accounts/savings/accounts/'+encodeURIComponent(accountId)+'/breakdown',
+    data=>validBalanceFields(data,['accountBalance','personalReserved','circleReserved','availableBalance'])&&Array.isArray(data.allocations));
+  paint();
 }
 
 function savingsAccountBreakdown() {
   const accounts=state.profile.accounts.filter(a=>['SAVINGS','SAVINGS_ACCOUNT'].includes(a.accountType)&&a.currency==='PHP'&&a.status==='ACTIVE');
   if(!accounts.length)return '';
-  return `<section id="account-savings-breakdown" class="sv-card sv-separate" aria-labelledby="account-savings-title"><h2 id="account-savings-title">Savings account breakdown</h2><div class="form-field"><label for="breakdown-account">Savings account</label><select id="breakdown-account">${accounts.map(a=>`<option value="${escapeHtml(a.accountId)}">Savings account ${escapeHtml(maskedNumber(a.accountNumber))}</option>`).join('')}</select></div><div data-breakdown-content aria-live="polite"></div></section>`;
+  const cache=balanceDisplayState();
+  if(!accounts.some(a=>String(a.accountId)===cache.selectedAccount))cache.selectedAccount=String(accounts[0].accountId);
+  return `<section id="account-savings-breakdown" class="sv-card sv-separate" aria-labelledby="account-savings-title"><h2 id="account-savings-title">Savings account breakdown</h2><div class="form-field"><label for="breakdown-account">Savings account</label><select id="breakdown-account">${accounts.map(a=>`<option value="${escapeHtml(a.accountId)}" ${String(a.accountId)===cache.selectedAccount?'selected':''}>Savings account ${escapeHtml(maskedNumber(a.accountNumber))}</option>`).join('')}</select></div><div data-breakdown-content aria-live="polite"></div></section>`;
 }
 document.addEventListener('change',event=>{if(event.target.id==='breakdown-account')loadSavingsBreakdown();});
 
@@ -213,7 +276,7 @@ function overview() {
   return heading(`Hello, ${escapeHtml(state.profile.firstName)}<span class="muted">.</span>`, 'Your everyday, at a glance. It’s good to have you here.')
     + (typeof loanAlertsBanner === 'function' ? loanAlertsBanner() : '')
     + `<div class="overview-grid"><section id="overview-balance" class="balance-card" aria-label="Available balance"><div class="balance-top"><span>Available balance <button class="icon-btn" data-action="balance-visibility" aria-label="${state.hideBalances ? 'Show' : 'Hide'} balances" aria-pressed="${state.hideBalances}">${icon(state.hideBalances ? 'eye-off' : 'eye')}</button></span><span>PHP</span></div>
-      <div class="big-balance" data-overview-available aria-live="polite">Loading?</div><div class="balance-subtitle">After reservations for goals, PinkCircles, and pending transactions.</div>
+      <div class="big-balance" data-overview-available aria-live="polite">Loading…</div><div class="balance-subtitle">After reservations for goals, PinkCircles, and pending transactions.</div>
       <div class="balance-bottom"><div class="overview-total"><span>Total balance</span><strong data-overview-total>${balance(total)}</strong><small data-overview-count>Across ${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}.</small></div><button data-action="navigate" data-page="accounts">View accounts ${icon('arrow')}</button></div></section>
       <section class="summary-card" aria-label="This month’s activity"><div class="summary-head"><h3>This month, so far</h3><span>${now.toLocaleDateString('en-PH',{month:'short',year:'numeric'})}</span></div>
         <div class="flow-row"><span class="circle-icon">${icon('down')}</span><div><small>Money in</small><strong>${balance(incoming)}</strong></div></div>
@@ -332,6 +395,7 @@ async function refresh(manual = false) {
   if (!state.session || state.busy) return;
   const generation = state.generation;
   state.busy = true;
+  invalidateBalanceDisplays();
   const button = document.querySelector('[data-action="refresh"]');
   if (button) button.disabled = true;
   try {
@@ -367,6 +431,7 @@ async function refresh(manual = false) {
 function startSession(response) {
   state.session = {token:response.token,fullName:response.fullName,expiresAt:Date.now() + response.expiresInMs};
   state.generation++; state.busy = false;
+  balanceDisplays = null;
   if (typeof resetLoansFor === 'function') resetLoansFor(null);
   saveSession();
   scheduleExpiry(); renderShell(); refresh();
@@ -384,6 +449,7 @@ function logout(message = 'You’ve been logged out. See you again soon.') {
   clearTimeout(expiryTimer);
   try { sessionStorage.removeItem(SESSION_KEY); } catch { /* No persisted session. */ }
   state.generation++; state.session = null; state.profile = null; state.activity = [];
+  balanceDisplays = null;
   if (typeof resetLoansFor === 'function') resetLoansFor(null);
   state.page = 'overview'; state.visibleAccounts.clear(); state.hideBalances = false; state.transfer = null;
   state.recipients = {favorites:[],recent:[]}; state.dialogReceipt = null; clearTimeout(recipientTimer);

@@ -17,9 +17,14 @@ window.PayPinkSavingsLive = (() => {
   const active = stamp => stamp === epoch && context;
   async function request(path = '', options = {}) {
     const stamp = epoch, transport = context.api;
-    const result = await transport(base + path, options);
-    if (!active(stamp)) throw new Error('Session changed.');
-    return result;
+    try {
+      const result = await transport(base + path, options);
+      if (!active(stamp)) throw new Error('Session changed.');
+      return result;
+    } finally {
+      // A write may have reached the bank even if its response was lost.
+      if (active(stamp) && options.method && options.method !== 'GET') context.onBalanceChange?.();
+    }
   }
   const btn = (action, label, id = '', mutation = false) => `<button type="button" class="btn btn-secondary" data-sv="${action}" data-id="${esc(id)}" ${busy || (mutation && pending()) ? 'disabled' : ''}>${label}</button>`;
   const bar = (amount, target, label) => `<div class="sv-progress" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${Number(target)}" aria-valuenow="${Math.min(Number(target),Number(amount))}"><span style="width:${Math.max(0,Math.min(100,100*Number(amount)/Number(target)||0))}%"></span></div>`;
