@@ -21,12 +21,17 @@ function Invoke-RestMethod {
         return @{businessDate='2020-10-04';missingDays=@($remaining);postingStatus='ACCRUING'}
     }
     if ($Uri -match '/accounts$') {
-        return @(
+        # Invoke-RestMethod emits a JSON array as one pipeline object in Windows PowerShell.
+        $response = @(
             [pscustomobject]@{accountId=1;accountType='SAVINGS';currency='PHP';status='ACTIVE';currentBalance=15000.1250;createdDate='2020-09-30T16:00:00';mayBeStale=($global:interestBackfillTestState.scenario -eq 'stale')},
             [pscustomobject]@{accountId=2;accountType='SAVINGS_ACCOUNT';currency='PHP';status='ACTIVE';currentBalance=123.45;createdDate='2020-10-01T16:00:00'},
             [pscustomobject]@{accountId=3;accountType='INTERNAL';currency='PHP';status='ACTIVE';currentBalance=50000;createdDate='2020-09-01T00:00:00'},
             [pscustomobject]@{accountId=4;accountType='SAVINGS';currency='PHP';status='CLOSED';currentBalance=0;createdDate='2020-09-01T00:00:00'}
         )
+        if ($global:interestBackfillTestState.scenario -eq 'empty') { $response = @() }
+        if ($global:interestBackfillTestState.scenario -eq 'no-savings') { $response = @($response | Where-Object { $_.accountType -eq 'INTERNAL' }) }
+        if ($global:interestBackfillTestState.scenario -eq 'single') { $response = @($response[0]) }
+        return ,$response
     }
     if ($Uri -match '/resolve\?businessDate=(.+)$') {
         $date = $Matches[1]
@@ -52,7 +57,7 @@ function Invoke-RestMethod {
     }
     throw "Unexpected request: $Uri"
 }
-foreach ($case in @('success','already-complete','stale','migration-failure','review-mismatch','verification-failure')) {
+foreach ($case in @('success','single','empty','no-savings','already-complete','stale','migration-failure','review-mismatch','verification-failure')) {
     $global:interestBackfillTestState.scenario = $case
     $global:interestBackfillTestState.migrations = 0
     $global:interestBackfillTestState.calls = New-Object 'System.Collections.Generic.List[string]'
@@ -61,18 +66,21 @@ foreach ($case in @('success','already-complete','stale','migration-failure','re
     if ($case -eq 'already-complete') { [void]$global:interestBackfillTestState.completed.Add('2020-10-01'); [void]$global:interestBackfillTestState.completed.Add('2020-10-02') }
     $failure = $null
     try { & $runner -Credential $credential -ThroughDate '2020-10-02' } catch { $failure = $_.Exception.Message }
-    if ($case -in @('success','already-complete')) {
+    if ($case -in @('success','single','already-complete')) {
         Assert-Backfill (!$failure) "Unexpected failure: $failure"
         Assert-Backfill ($global:interestBackfillTestState.completed.Count -eq 2) 'Exactly the requested elapsed days must be complete.'
-        if ($case -eq 'success') {
+        if ($case -in @('success','single')) {
             $first = @($global:interestBackfillTestState.proposals.Values | Where-Object { $_.businessDate -eq '2020-10-01' })[0]
             $second = @($global:interestBackfillTestState.proposals.Values | Where-Object { $_.businessDate -eq '2020-10-02' })[0]
             Assert-Backfill ($first.request.accounts.Count -eq 1) 'Exclude accounts opened after the Manila date cutoff.'
-            Assert-Backfill ($second.request.accounts.Count -eq 2) 'Include both savings account type names.'
+            $expectedCount = if ($case -eq 'single') { 1 } else { 2 }
+            Assert-Backfill ($second.request.accounts.Count -eq $expectedCount) 'Handle singleton and multi-account JSON arrays.'
             Assert-Backfill ([decimal]$first.request.accounts[0].eodBalance -eq [decimal]15000.1250) 'Keep decimal balances.'
         } else { Assert-Backfill ($global:interestBackfillTestState.proposals.Count -eq 0) 'A rerun must not re-file completed dates.' }
     } else {
         $expected = switch ($case) {
+            'empty' { 'Account list is empty' }
+            'no-savings' { 'No active savings accounts' }
             'stale' { 'stale savings account data' }
             'migration-failure' { 'Approval migration failed' }
             'review-mismatch' { 'Stored proposal balances' }

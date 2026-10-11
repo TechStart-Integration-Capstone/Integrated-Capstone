@@ -40,7 +40,10 @@ try {
     $accounts = @()
     if ($missing.Count) {
         # No pagination: this admin endpoint returns the complete account list.
-        $allAccounts = @(Invoke-RestMethod -Uri "$ApiBase/accounts" -Headers $headers -TimeoutSec 120)
+        # Assign first: wrapping Invoke-RestMethod directly in @() nests its JSON array
+        # in Windows PowerShell, so filters would receive the entire list as one account.
+        $accountResponse = Invoke-RestMethod -Uri "$ApiBase/accounts" -Headers $headers -TimeoutSec 120
+        $allAccounts = @($accountResponse | Where-Object { $null -ne $_ })
         if (!$allAccounts.Count) { throw 'Account list is empty; refusing to seal empty days without account evidence.' }
         if (@($allAccounts | Where-Object { $_.status -eq 'ACTIVE' -and $_.accountType -eq 'LOAN' }).Count) {
             throw 'Active LOAN accounts need their own balances and contract rates; this savings-only backfill cannot seal a complete day.'
