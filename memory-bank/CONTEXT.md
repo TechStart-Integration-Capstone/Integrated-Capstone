@@ -49,6 +49,12 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### Interest single-admin approval and requested October backfill (2026-10-11)
+
+- Fixed migration ordering that restored the legacy PostgreSQL different-admin trigger despite the existing single-admin API/UI policy. Bootstrap and approval migrations now preserve same-admin approval; Docker init and deployment explicitly run the single-admin migration last. Separate immutable filing/approval records, matching-resolution checks and missing-day posting blocks remain.
+- The user authorized current savings balances for a demo backfill through 2026-10-10. scripts/backfill_interest_savings.ps1 applies the approval repair and files/reviews/approves each missing date via authenticated APIs, preserving current-balance provenance in existing audit fields, account creation-date eligibility and completed dates. It does not invoke monthly posting. See docs/interest-eod.md for the command and connection parameters. All six offline script scenarios and 29 non-native interest tests passed; 24 native database tests were skipped (Docker unavailable).
+- Deployment/backfill is pending: the Interest page and PostgreSQL are on the other computer, which is unreachable from this workspace. The shared Azure SQL database is not the PostgreSQL interest store. No live migration or data population occurred in this task; run the helper on the other computer's updated project and verify the Interest page. Native DB migration acceptance also remains pending.
+
 ### Savings allocation expansion during refresh (2026-10-11)
 
 - Fixed the deferred customer finding about automatic refresh collapsing "View allocations": frontend/bank/bank.js now snapshots the native disclosure state before page/content replacement and remembers it per savings account in the existing session-scoped display state. Open/closed choices survive manual/periodic refresh, delayed success/failure, account switching, navigation and privacy redraws; session changes reset them. All 27 balance-refresh regressions and the JavaScript syntax check passed with mocked DOM/network. No database/backend changes or deployment; frontend image rebuild/container recreation and live browser/service verification remain pending. Credited to [aly]. The separate loan retry persistence and external-history session race findings remain deferred.

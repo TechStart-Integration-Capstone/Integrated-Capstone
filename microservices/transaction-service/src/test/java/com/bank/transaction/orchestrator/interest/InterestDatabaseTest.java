@@ -49,6 +49,14 @@ class InterestDatabaseTest {
         recoveryMigration = Files.readString(root.resolve("scripts/migrate_interest_recovery_postgres.sql"));
         pg.execute(migration);
         pg.execute(migration);
+        // Match Docker/deployment order: the later approval migration must not undo single-admin policy.
+        String approvalMigration = Files.readString(root.resolve("scripts/migrate_interest_approval_postgres.sql"));
+        String singleAdminMigration = Files.readString(root.resolve("scripts/migrate_interest_single_admin_postgres.sql"));
+        pg.execute(recoveryMigration);
+        pg.execute(approvalMigration);
+        pg.execute(singleAdminMigration);
+        pg.execute(approvalMigration); // a rerun must still allow the same admin
+        assertThat(pg.queryForObject("SELECT COUNT(*) FROM pg_trigger WHERE tgname = 'interest_approval_guard'", Integer.class)).isZero();
         ledger = new InterestLedger(sql, new TransactionTemplate(new DataSourceTransactionManager(primary)), new ObjectMapper());
         audit = new InterestAccrualStore(pg, new TransactionTemplate(new DataSourceTransactionManager(secondary)));
     }
