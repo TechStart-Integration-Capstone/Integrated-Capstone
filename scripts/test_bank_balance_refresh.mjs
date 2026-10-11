@@ -59,6 +59,16 @@ function banking(){
     }
     if(html.includes('id="account-savings-breakdown"')){
       const select={value:html.match(/<option value="([^"]+)" selected>/)?.[1]||'1'},content=element();
+      let contentHtml='',allocations=null;
+      Object.defineProperty(content,'innerHTML',{
+        get:()=>contentHtml,
+        set(value){
+          if(allocations)allocations.isConnected=false;
+          contentHtml=value;
+          allocations=value.includes('class="account-allocations"')?element():null;
+        }
+      });
+      content.querySelector=key=>key==='.account-allocations'?allocations:null;
       panel={...element(),querySelector:key=>key==='select'?select:content,select,content};
     }
   }});
@@ -136,6 +146,51 @@ test('breakdown keeps selection, per-account snapshots and privacy across redraw
   assert.doesNotMatch(b.panel().content.innerHTML,/300\.00|500\.00/);
   b.state.hideBalances=false;b.panel().select.value='1';await b.loadSavingsBreakdown();
   assert.match(b.panel().content.innerHTML,/400\.00/);assert.equal(b.calls.length,2);
+});
+
+for(const manual of [true,false]){
+  test((manual?'manual':'periodic')+' refresh preserves expanded allocations while balances update',async()=>{
+    const b=banking();b.render('accounts');b.respond(0,breakdown);await flush();
+    const details=()=>b.panel().content.querySelector('.account-allocations');
+    details().open=true;
+    const pending=manual?b.refresh(true):b.intervals[0]();
+    b.respond(1,structuredClone(profile));b.respond(2,[]);b.respond(3,{favorites:[],recent:[]});
+    if(pending)await pending;await flush();
+    assert.equal(details().open,true);
+    b.respond(4,{...breakdown,availableBalance:250});await flush();
+    assert.equal(details().open,true);assert.match(b.panel().content.innerHTML,/250\.00/);
+  });
+}
+
+test('allocation changes made during a balance request survive its response, including failures',async()=>{
+  const b=banking();b.render('accounts');b.respond(0,breakdown);await flush();
+  const details=()=>b.panel().content.querySelector('.account-allocations');
+  for(const open of [true,false]){
+    b.invalidateBalanceDisplays();b.render('accounts');
+    details().open=open;
+    b.respond(b.calls.length-1,open?{}:breakdown,open?503:200);await flush();
+    assert.equal(details().open,open);
+  }
+});
+
+test('allocation expansion belongs to its account and survives navigation and privacy redraws',async()=>{
+  const b=banking();b.render('accounts');b.respond(0,breakdown);await flush();
+  const details=()=>b.panel().content.querySelector('.account-allocations');
+  details().open=true;
+  b.panel().select.value='2';const pending=b.loadSavingsBreakdown();
+  b.respond(1,breakdown);await pending;assert.equal(details().open,false);
+  b.panel().select.value='1';await b.loadSavingsBreakdown();assert.equal(details().open,true);
+  b.render('activity');b.state.hideBalances=true;b.render('accounts');await flush();
+  assert.equal(details().open,true);assert.doesNotMatch(b.panel().content.innerHTML,/400\.00/);
+});
+
+test('a new session starts with allocations collapsed even for the same account',async()=>{
+  const b=banking();b.render('accounts');b.respond(0,breakdown);await flush();
+  b.panel().content.querySelector('.account-allocations').open=true;
+  b.render('accounts');await flush();
+  b.state.session={token:'B'};b.state.generation++;
+  b.render('accounts');b.respond(1,breakdown);await flush();
+  assert.equal(b.panel().content.querySelector('.account-allocations').open,false);
 });
 
 test('breakdown ignores a delayed response for a different selected account',async()=>{

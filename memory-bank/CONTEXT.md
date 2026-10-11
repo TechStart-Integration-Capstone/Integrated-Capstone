@@ -49,6 +49,10 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### Savings allocation expansion during refresh (2026-10-11)
+
+- Fixed the deferred customer finding about automatic refresh collapsing "View allocations": frontend/bank/bank.js now snapshots the native disclosure state before page/content replacement and remembers it per savings account in the existing session-scoped display state. Open/closed choices survive manual/periodic refresh, delayed success/failure, account switching, navigation and privacy redraws; session changes reset them. All 27 balance-refresh regressions and the JavaScript syntax check passed with mocked DOM/network. No database/backend changes or deployment; frontend image rebuild/container recreation and live browser/service verification remain pending. Credited to [aly]. The separate loan retry persistence and external-history session race findings remain deferred.
+
 ### Savings banner and transfer available balances (2026-10-11)
 
 - Local frontend change: successful Savings Hub confirmations expire after 4.5 seconds; unresolved notices stay visible. PayPink and external transfer source selectors show savings available funds from the existing owner-checked breakdown API, with session-scoped display caching and in-place updates. Non-savings source totals retain their existing labeling; transfer authorization stays server-side. All 136 Node regressions, three JavaScript syntax checks and headless browser checks passed (actual bank shell with mocked HTTP, no runtime errors); live service acceptance remains pending. No database/Java changes or deployment; frontend image rebuild/container recreation required. The three review findings (loan retry persistence, external-history session race, expanded allocation persistence) remain deferred.

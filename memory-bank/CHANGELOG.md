@@ -1,5 +1,10 @@
 # Changelog
 
+- 2026-10-11 — Preserve expanded savings allocations during refresh — [aly]
+  - frontend/bank/bank.js captures the live allocation disclosure state before page and balance-content redraws, retaining it per savings account within the current login session. Automatic/manual refresh, account switching, navigation, privacy toggles and delayed responses preserve the user's open/closed choice; a new session starts collapsed.
+  - Extended scripts/test_bank_balance_refresh.mjs with five regressions covering periodic/manual refresh, pending-request interaction and failure, account isolation/navigation/privacy, and session reset. All 27 balance-refresh tests and the JavaScript syntax check passed (mocked DOM/network); live browser/service verification remains pending.
+  - Frontend only; no database or backend changes. No deployment performed; rebuild/recreate the frontend container to deploy. The previously deferred allocation-expansion finding is resolved locally.
+
 - 2026-10-11 — Security & Reliability Hardening (`BankingService.java`, `main.dart`, `account_service.dart`, `remittance_service.dart`, `application.yml`):
   - **Enforce MPIN Validation (`BankingService.java`):** Required `currentMpin` validation before updating MPIN when an existing hash exists.
   - **Gate DevHttpOverrides (`main.dart`):** Restricted insecure certificate bypass strictly behind `kDebugMode` on mobile.
