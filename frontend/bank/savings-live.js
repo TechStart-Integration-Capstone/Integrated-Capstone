@@ -8,6 +8,20 @@ window.PayPinkSavingsLive = (() => {
   const date = value => value ? new Date(String(value).slice(0,10)+'T00:00:00+08:00').toLocaleDateString('en-PH',{timeZone:'Asia/Manila',year:'numeric',month:'long',day:'2-digit'}) : 'No date';
   const categories = {EMERGENCY:['🚨','Emergency'],HOLIDAY:['🎄','Holiday / Gifts'],TRAVEL:['✈️','Travel'],LIFESTYLE:['🎫','Lifestyle / Concert'],OTHER:['✨','Other']};
   let context, data, circles = [], history = [], tab = 'personal', summary = 'personal', selected, draft, retry, notice = '', failure = '', busy = false, loading = false, epoch = 0, readVersion = 0, timer, origin;
+  let noticeTimer;
+  function setNotice(message, temporary=false) {
+    clearTimeout(noticeTimer);
+    notice=message;
+    if(temporary){
+      const stamp=epoch;
+      noticeTimer=setTimeout(()=>{
+        if(stamp!==epoch)return;
+        notice='';
+        document.querySelector('#savings-live [data-sv-notice]')?.remove();
+      },4500);
+    }
+  }
+  function operationNotice(message) {setNotice(message,message==='Your savings request is confirmed.');}
   const goals = () => data?.goals || [];
   const personal = () => goals().filter(g => !g.circle_id);
   const accounts = () => (context?.profile()?.accounts || []).filter(a => ['SAVINGS','SAVINGS_ACCOUNT'].includes(a.accountType) && a.status === 'ACTIVE' && a.currency === 'PHP');
@@ -107,7 +121,7 @@ window.PayPinkSavingsLive = (() => {
   }
   function render() {
     const header=`<div class="sv-heading"><div><h1>PayPink Savings Hub</h1><p>Your goals, your pace.</p></div>${btn('refresh',loading?'Loading…':'Refresh')}</div>`;
-    const body=loading&&!data?'<p role="status">Loading your savings…</p>':failure?`<section class="sv-card" role="alert"><h2>Savings Hub is unavailable right now</h2><p>${esc(failure)}</p>${btn('refresh','Try again')}</section>`:data?`${notice?`<p class="notice" role="status">${esc(notice)}</p>`:''}${pending()?`<div class="notice" role="status"><p>A savings request is awaiting confirmation. Check its status before making another change.</p>${btn('check','Check pending request')}</div>`:''}${!accounts().length?'<p class="notice">You need an active PHP savings account to create a goal or join a PinkCircle.</p>':''}${overview()}<div class="sv-circle-tabs" role="group" aria-label="Savings views"><button data-sv="personal" aria-pressed="${tab==='personal'}">My Savings</button><button data-sv="circles" aria-pressed="${tab==='circles'}">PinkCircles</button></div>${tab==='personal'?personalView():circleView()}`:'<p>Loading your accounts…</p>';
+    const body=loading&&!data?'<p role="status">Loading your savings…</p>':failure?`<section class="sv-card" role="alert"><h2>Savings Hub is unavailable right now</h2><p>${esc(failure)}</p>${btn('refresh','Try again')}</section>`:data?`${notice?`<p class="notice" data-sv-notice role="status">${esc(notice)}</p>`:''}${pending()?`<div class="notice" role="status"><p>A savings request is awaiting confirmation. Check its status before making another change.</p>${btn('check','Check pending request')}</div>`:''}${!accounts().length?'<p class="notice">You need an active PHP savings account to create a goal or join a PinkCircle.</p>':''}${overview()}<div class="sv-circle-tabs" role="group" aria-label="Savings views"><button data-sv="personal" aria-pressed="${tab==='personal'}">My Savings</button><button data-sv="circles" aria-pressed="${tab==='circles'}">PinkCircles</button></div>${tab==='personal'?personalView():circleView()}`:'<p>Loading your accounts…</p>';
     return `<div id="savings-live" class="savings-view" aria-busy="${loading||busy}">${header}${body}</div>`;
   }
   async function load() {
@@ -124,7 +138,7 @@ window.PayPinkSavingsLive = (() => {
         const match=history.find(h=>h.idempotency_key===retry.key || h.operation_id===retry.operationId);
         if(match) {
           if(match.status==='PENDING')retry.operationId=match.operation_id;
-          else {notice=match.status==='CONFIRMED'?'Your savings request is confirmed.':'Your savings request was declined. No savings were changed by that request.';retry=null;}
+          else {setNotice(match.status==='CONFIRMED'?'Your savings request is confirmed.':'Your savings request was declined. No savings were changed by that request.',match.status==='CONFIRMED');retry=null;}
           persist();
         }
       }
@@ -141,7 +155,7 @@ window.PayPinkSavingsLive = (() => {
     load();
   }
   function reset() {
-    epoch++;readVersion++;clearTimeout(timer);context=null;data=null;circles=[];history=[];draft=null;retry=null;busy=false;loading=false;notice='';failure='';tab='personal';summary='personal';selected=null;close();
+    epoch++;readVersion++;clearTimeout(timer);clearTimeout(noticeTimer);context=null;data=null;circles=[];history=[];draft=null;retry=null;busy=false;loading=false;notice='';failure='';tab='personal';summary='personal';selected=null;close();
     const dialog=document.querySelector('#savings-live-dialog');if(dialog)dialog.innerHTML='';
   }
   function scheduleFields(s={}) {
@@ -188,8 +202,8 @@ window.PayPinkSavingsLive = (() => {
     if(retry) {
       if(retry.operationId) {
         const result=await request('/operations/'+retry.operationId);
-        if(result.status!=='PENDING'){notice=result.status==='CONFIRMED'?'Your savings request is confirmed.':'Your savings request was declined.';retry=null;persist();}
-      } else notice=await sendRetry();
+        if(result.status!=='PENDING'){setNotice(result.status==='CONFIRMED'?'Your savings request is confirmed.':'Your savings request was declined.',result.status==='CONFIRMED');retry=null;persist();}
+      } else operationNotice(await sendRetry());
     }
     await load();
   }
@@ -197,7 +211,7 @@ window.PayPinkSavingsLive = (() => {
     const d={...draft}, stamp=epoch, goal={accountId:Number(d.accountId),name:d.name,category:d.category,target:d.target,targetDate:d.targetDate};
     let created;
     try {created=await request('/goals',{method:'POST',body:goal});}
-    catch(error){if(!active(stamp)||error.status<500)throw error;close();notice='The goal could not be confirmed. Check your refreshed goals before creating another. '+error.message;await load();return;}
+    catch(error){if(!active(stamp)||error.status<500)throw error;close();setNotice('The goal could not be confirmed. Check your refreshed goals before creating another. '+error.message);await load();return;}
     const messages=['Goal created.'];
     if(d.initial>0) {
       try {messages.push(await operation({accountId:goal.accountId,type:'ALLOCATE',lines:[{goalId:created.goalId,amount:d.initial}]}));}
@@ -208,7 +222,7 @@ window.PayPinkSavingsLive = (() => {
       else try {await request('/goals/'+created.goalId+'/schedule',{method:'PUT',body:d.schedule});messages.push('Savings plan saved.');}
       catch(error){if(!active(stamp))throw error;messages.push('Savings plan was not saved. Open Savings plan on this goal to try again.');}
     }
-    notice=messages.join(' ');close();await load();
+    setNotice(messages.join(' '),messages.every(m=>['Goal created.','Your savings request is confirmed.','Savings plan saved.'].includes(m)));close();await load();
   }
   function activity(id) {
     const rows=history.map(h=>{try{return {...h,command:JSON.parse(h.request_json).command};}catch{return {...h,command:{lines:[]}};}}).filter(h=>h.command.lines.some(l=>l.goalId===id));
@@ -226,7 +240,7 @@ window.PayPinkSavingsLive = (() => {
     if(action==='activity')return activity(id);
     if(action==='maximum'){const f=b.closest('form');f.elements.amount.value=Number(f.dataset.maximum).toFixed(2);validateContribution(f);return;}
     if(action==='check'){
-      const stamp=epoch;busy=true;redraw();try{await checkPending();}catch(error){if(active(stamp)){notice=error.message;await load();}}finally{if(active(stamp)){busy=false;redraw();}}return;
+      const stamp=epoch;busy=true;redraw();try{await checkPending();}catch(error){if(active(stamp)){setNotice(error.message);await load();}}finally{if(active(stamp)){busy=false;redraw();}}return;
     }
     if(pending())return;
     if(action==='new'){draft={name:'',category:'OTHER',target:10000,targetDate:today(),initial:0,schedule:{enabled:false}};return wizard(1);}
@@ -260,25 +274,25 @@ window.PayPinkSavingsLive = (() => {
         const g=goals().find(g=>g.goal_id===id),n=positive(get('amount'));
         if(kind==='add'&&(!Number.isFinite(Number(f.dataset.maximum))||n>Number(f.dataset.maximum)))throw new Error('The amount exceeds what you can currently set aside. Reopen this dialog to refresh your available funds.');
         if(kind==='release'&&n>Number(g.savedAmount))throw new Error('The amount exceeds your reserved savings.');
-        notice=await operation({accountId:Number(g.account_id),type:kind==='release'?'RELEASE':'ALLOCATE',lines:[{goalId:id,amount:n}]});
+        operationNotice(await operation({accountId:Number(g.account_id),type:kind==='release'?'RELEASE':'ALLOCATE',lines:[{goalId:id,amount:n}]}));
       } else if(kind==='split'){
         const budget=positive(get('budget')),chosen=personal().map(g=>({g,n:positive(get(g.goal_id),true)})).filter(v=>v.n>0);
         if(!chosen.length)throw new Error('Choose at least one contribution.');
         if(new Set(chosen.map(v=>v.g.account_id)).size!==1)throw new Error('Split only between goals on the same savings account.');
         if(chosen.reduce((n,v)=>n+Math.round(v.n*100),0)>Math.round(budget*100))throw new Error('Your split exceeds the savings budget.');
         if(chosen.some(v=>v.n>Number(v.g.target_amount)-Number(v.g.savedAmount)))throw new Error('A contribution exceeds its remaining goal target.');
-        notice=await operation({accountId:Number(chosen[0].g.account_id),type:'ALLOCATE',lines:chosen.map(v=>({goalId:v.g.goal_id,amount:v.n}))});
-      } else if(kind==='edit'){await write('/goals/'+id,{name:get('name').trim(),target:positive(get('target')),targetDate:get('targetDate')},'PUT');notice='Goal updated.';}
-      else if(kind==='schedule'){await write('/goals/'+id+'/schedule',scheduleBody(values),'PUT');notice='Savings plan saved.';}
+        operationNotice(await operation({accountId:Number(chosen[0].g.account_id),type:'ALLOCATE',lines:chosen.map(v=>({goalId:v.g.goal_id,amount:v.n}))}));
+      } else if(kind==='edit'){await write('/goals/'+id,{name:get('name').trim(),target:positive(get('target')),targetDate:get('targetDate')},'PUT');setNotice('Goal updated.',true);}
+      else if(kind==='schedule'){await write('/goals/'+id+'/schedule',scheduleBody(values),'PUT');setNotice('Savings plan saved.',true);}
       else if(kind==='create'){
         const target=positive(get('target')),myTarget=positive(get('myTarget'));if(myTarget>target)throw new Error('Your target cannot exceed the shared target.');
-        try {const result=await write('/circles',{goal:{accountId:Number(get('accountId')),name:get('name').trim(),category:'OTHER',target,targetDate:get('targetDate')},myTarget,shareProgress:values.has('shareProgress')});selected=result.circleId;tab='circles';notice='Circle created. Invite another PayPink user to join.';}
-        catch(error){if(!active(stamp)||error.status<500)throw error;close();notice='Circle creation could not be confirmed. Check your refreshed circles before creating another. '+error.message;await load();return;}
-      } else if(kind==='accept'){await write('/circles/'+id+'/accept',{accountId:Number(get('accountId')),shareProgress:values.has('shareProgress')});notice='You joined the circle. Add your contribution when you are ready.';}
-      else if(kind==='invite'){await write('/circles/'+id+'/invitations',{username:get('username').trim(),target:positive(get('target'))});notice='Invitation sent.';}
-      else if(kind==='visibility'){await write('/circles/'+id+'/visibility',{shareProgress:values.has('shareProgress')},'PUT');notice='Progress privacy saved.';}
-      else if(kind==='target'){await write('/circles/'+selected+'/members/'+id+'/target',{target:positive(get('target'))});notice='Target proposed. Waiting for the member’s approval.';}
-      else if(kind==='approve'){await write('/circles/'+id+'/target/accept');notice='New target accepted.';}
+        try {const result=await write('/circles',{goal:{accountId:Number(get('accountId')),name:get('name').trim(),category:'OTHER',target,targetDate:get('targetDate')},myTarget,shareProgress:values.has('shareProgress')});selected=result.circleId;tab='circles';setNotice('Circle created. Invite another PayPink user to join.',true);}
+        catch(error){if(!active(stamp)||error.status<500)throw error;close();setNotice('Circle creation could not be confirmed. Check your refreshed circles before creating another. '+error.message);await load();return;}
+      } else if(kind==='accept'){await write('/circles/'+id+'/accept',{accountId:Number(get('accountId')),shareProgress:values.has('shareProgress')});setNotice('You joined the circle. Add your contribution when you are ready.',true);}
+      else if(kind==='invite'){await write('/circles/'+id+'/invitations',{username:get('username').trim(),target:positive(get('target'))});setNotice('Invitation sent.',true);}
+      else if(kind==='visibility'){await write('/circles/'+id+'/visibility',{shareProgress:values.has('shareProgress')},'PUT');setNotice('Progress privacy saved.',true);}
+      else if(kind==='target'){await write('/circles/'+selected+'/members/'+id+'/target',{target:positive(get('target'))});setNotice('Target proposed. Waiting for the member’s approval.',true);}
+      else if(kind==='approve'){await write('/circles/'+id+'/target/accept');setNotice('New target accepted.',true);}
       close();await load();
     } catch(error){if(active(stamp)){const node=f.querySelector('.sv-form-error');node.textContent=error.message;node.hidden=false;if(error.status===409)await load();}}
     finally{if(active(stamp)){busy=false;f.querySelectorAll('button,input,select').forEach(n=>n.disabled=false);redraw();}}

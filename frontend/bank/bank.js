@@ -210,6 +210,7 @@ function renderPage() {
     + `<footer class="page-footer"><span>© ${new Date().getFullYear()} PayPink. A little more everyday.</span><span>${icon('lock')} ${state.updated ? `Updated ${state.updated.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}` : 'Personal banking'} · Philippine peso accounts</span></footer>`;
   if(state.page==='accounts')loadSavingsBreakdown();
   if(state.page==='overview')loadOverviewBalance();
+  if(state.page==='transfer')loadTransferSourceBalances();
 }
 
 async function loadOverviewBalance() {
@@ -252,9 +253,51 @@ async function loadSavingsBreakdown() {
     content.innerHTML=`<dl class="sv-funding">${row('Total account balance',data.accountBalance)}${row('Set aside for personal goals',data.personalReserved)}${row('Your PinkCircle contributions',data.circleReserved)}${Number(data.unlistedReservations)>0?row('Other savings reservations',data.unlistedReservations):''}${row('Available balance',data.availableBalance)}</dl><p>Set-aside money stays in your account. Release it in Savings Hub before spending or reallocating it.</p><details class="account-allocations"><summary>View allocations (${data.allocations.length})</summary>${data.allocations.length?`<dl class="sv-funding">${data.allocations.map(a=>row(a.name+' · '+(a.kind==='PINK_CIRCLE'?'PinkCircle · your contribution':'Personal goal'),a.amount)).join('')}</dl>`:'<p>No money is set aside for goals or PinkCircles in this account yet.</p>'}</details><p class="sv-modal-note">Account numbers are masked. Use Refresh for the latest balances.</p>`;
   };
   paint();
-  await readBalanceDisplay(key,'/api/v1/accounts/savings/accounts/'+encodeURIComponent(accountId)+'/breakdown',
-    data=>validBalanceFields(data,['accountBalance','personalReserved','circleReserved','availableBalance'])&&Array.isArray(data.allocations));
+  await readSavingsBreakdown(accountId);
   paint();
+}
+
+function readSavingsBreakdown(accountId) {
+  return readBalanceDisplay('account:'+accountId,'/api/v1/accounts/savings/accounts/'+encodeURIComponent(accountId)+'/breakdown',
+    data=>validBalanceFields(data,['accountBalance','personalReserved','circleReserved','availableBalance'])&&Array.isArray(data.allocations));
+}
+
+const isSavingsTransferAccount = account => ['SAVINGS','SAVINGS_ACCOUNT'].includes(account.accountType);
+function transferSourceAmount(account) {
+  if(state.hideBalances)return '••••••';
+  if(!isSavingsTransferAccount(account))return money(account.currentBalance);
+  const entry=balanceDisplayEntry('account:'+account.accountId);
+  return entry.data?money(entry.data.availableBalance):entry.error?'Unavailable':'Checking available balance…';
+}
+function transferSourceLabel(account) {
+  const available=isSavingsTransferAccount(account)&&balanceDisplayEntry('account:'+account.accountId).data;
+  return `${accountName(account.accountType)} · ${account.accountNumber.slice(-4)} · ${transferSourceAmount(account)}${available&&!state.hideBalances?' available':''}`;
+}
+function transferSourceBalanceNote(account) {
+  if(!account)return 'No active PHP accounts are available.';
+  return isSavingsTransferAccount(account)
+    ? `Available balance: ${transferSourceAmount(account)}. Money set aside for goals, PinkCircles, and pending transactions is excluded.`
+    : `Total account balance: ${transferSourceAmount(account)}. Reserved funds are included in the total and cannot be transferred.${['EVERYDAY_ACCOUNT','STRESS_TEST_ACCOUNT'].includes(account.accountType)?' Your default Everyday account.':''}`;
+}
+async function loadTransferSourceBalances() {
+  const select=document.querySelector('#transfer-source');
+  if(!select)return;
+  const cache=balanceDisplayState(),form=state.transfer;
+  const accounts=state.profile.accounts.filter(a=>a.status==='ACTIVE'&&a.currency==='PHP');
+  const paint=()=>{
+    if(!select.isConnected||state.transfer!==form||balanceDisplayState()!==cache)return;
+    for(const option of select.options){
+      const account=accounts.find(a=>String(a.accountId)===option.value);
+      if(account)option.textContent=transferSourceLabel(account);
+    }
+    const note=document.querySelector('[data-transfer-source-balance]');
+    if(note)note.textContent=transferSourceBalanceNote(accounts.find(a=>String(a.accountId)===select.value));
+  };
+  paint();
+  await Promise.all(accounts.filter(isSavingsTransferAccount).map(async account=>{
+    const entry=await readSavingsBreakdown(account.accountId);
+    if(cache.entries.get('account:'+account.accountId)===entry)paint();
+  }));
 }
 
 function savingsAccountBreakdown() {
@@ -624,7 +667,7 @@ function transferPage() {
     + `<div class="transfer-layout"><section class="transfer-panel"><div class="section-heading"><h2>Fund transfer</h2><span class="pill pill-green">No transfer fee</span></div>
       ${pending ? `<div class="notice" role="status">${form.sending ? 'Your transfer is being processed. Please wait.' : 'Your last transfer is awaiting confirmation. Check its status safely before making another transfer.'}<dl class="pending-details"><dt>Amount</dt><dd>${escapeHtml(money(pending.amount))}</dd><dt>To account</dt><dd>${escapeHtml(pending.destinationAccountNumber)}</dd></dl>${!form.sending ? '<button class="btn btn-primary" data-action="retry-transfer">Check transfer status</button>' : ''}</div>` : ''}
       ${form.error ? `<div class="form-error" role="alert">${escapeHtml(form.error)}</div>` : ''}
-      <form id="transfer-form"><fieldset ${pending || form.sending ? 'disabled' : ''}><div class="form-field"><label for="transfer-source">Transfer from</label><select id="transfer-source" required>${accounts.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.source ? 'selected' : ''}>${escapeHtml(label(a))}</option>`).join('')}</select><small>${source ? `Total account balance: ${balance(source.currentBalance)}. Reserved funds are included in the total and cannot be transferred.${['EVERYDAY_ACCOUNT','STRESS_TEST_ACCOUNT'].includes(source.accountType) ? ' Your default Everyday account.' : ''}` : 'No active PHP accounts are available.'}</small></div>
+      <form id="transfer-form"><fieldset ${pending || form.sending ? 'disabled' : ''}><div class="form-field"><label for="transfer-source">Transfer from</label><select id="transfer-source" required>${accounts.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.source ? 'selected' : ''}>${escapeHtml(transferSourceLabel(a))}</option>`).join('')}</select><small data-transfer-source-balance>${escapeHtml(transferSourceBalanceNote(source))}</small></div>
       <div class="transfer-tabs" role="group" aria-label="Recipient type"><button type="button" data-action="transfer-mode" data-mode="own" class="${form.mode === 'own' ? 'selected' : ''}" aria-pressed="${form.mode === 'own'}">My own account</button><button type="button" data-action="transfer-mode" data-mode="other" class="${form.mode === 'other' ? 'selected' : ''}" aria-pressed="${form.mode === 'other'}">Another PayPink account</button><button type="button" data-action="transfer-mode" data-mode="external">Outside PayPink</button></div>
       ${form.mode === 'own' ? `<div class="form-field"><label for="transfer-destination">Transfer to</label><select id="transfer-destination" required ${!destinations.length ? 'disabled' : ''}>${destinations.length ? destinations.map(a => `<option value="${a.accountId}" ${String(a.accountId) === form.destination ? 'selected' : ''}>${escapeHtml(label(a))}</option>`).join('') : '<option value="">No other accounts available</option>'}</select></div>` : `${recipientPicker()}<div class="form-field"><label for="recipient-number">Recipient account number</label><input id="recipient-number" value="${escapeHtml(form.number)}" maxlength="30" pattern="[A-Za-z0-9\\-]{3,30}" autocomplete="off" spellcheck="false" required placeholder="Enter the full PayPink account number"><small>Enter the full number to look up the account holder.</small></div><div id="recipient-status" aria-live="polite">${recipientStatus()}</div>`}
       <div class="form-field"><label for="transfer-amount">Amount</label><div class="amount-input"><span>PHP</span><input id="transfer-amount" type="number" inputmode="decimal" min="0.01" step="0.01" max="99999999999999.99" value="${escapeHtml(form.amount)}" required placeholder="0.00"></div></div>

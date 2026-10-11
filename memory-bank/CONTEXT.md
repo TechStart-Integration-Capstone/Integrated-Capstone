@@ -49,6 +49,10 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### Savings banner and transfer available balances (2026-10-11)
+
+- Local frontend change: successful Savings Hub confirmations expire after 4.5 seconds; unresolved notices stay visible. PayPink and external transfer source selectors show savings available funds from the existing owner-checked breakdown API, with session-scoped display caching and in-place updates. Non-savings source totals retain their existing labeling; transfer authorization stays server-side. All 136 Node regressions, three JavaScript syntax checks and headless browser checks passed (actual bank shell with mocked HTTP, no runtime errors); live service acceptance remains pending. No database/Java changes or deployment; frontend image rebuild/container recreation required. The three review findings (loan retry persistence, external-history session race, expanded allocation persistence) remain deferred.
+
 ### Smooth balance refresh (2026-10-11)
 
 - Overview and My accounts savings breakdown retain in-memory display snapshots across navigation and periodic redraws, share pending reads and reuse results for 30 seconds. Refresh and Savings Hub writes invalidate the entries while keeping prior values visible. Per user preference, failed background updates silently retain values without error messages, toasts or additional timestamps; initial failures show a neutral unavailable state. Selected savings account persists through redraws. Login/logout and session/owner guards isolate cached data. Cached values are never used to authorize transfers.

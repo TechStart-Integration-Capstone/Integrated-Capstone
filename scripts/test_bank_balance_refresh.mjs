@@ -11,6 +11,38 @@ const profile={username:'aly',firstName:'Aly',fullName:'Aly Rosales',accounts:[1
   accountId:id,accountNumber:'00110000123'+id,accountType:'SAVINGS_ACCOUNT',status:'ACTIVE',currency:'PHP',currentBalance:500
 }))};
 
+test('transfer savings label uses available funds, handles zero, and never falls back to total',async()=>{
+  const b=banking();
+  const label=()=>vm.runInContext('transferSourceLabel(state.profile.accounts[0])',b.context);
+  assert.match(label(),/Checking available balance/);assert.doesNotMatch(label(),/500\.00/);
+  b.render('accounts');b.respond(0,{...breakdown,availableBalance:0});await flush();
+  assert.match(label(),/₱0\.00 available/);assert.doesNotMatch(label(),/500\.00/);
+  b.state.hideBalances=true;assert.doesNotMatch(label(),/0\.00/);
+});
+
+test('unavailable savings display never relabels total funds as available',async()=>{
+  const b=banking();b.render('accounts');b.respond(0,{},503);await flush();
+  const label=vm.runInContext('transferSourceLabel(state.profile.accounts[0])',b.context);
+  assert.match(label,/Unavailable/);assert.doesNotMatch(label,/500\.00/);
+});
+
+test('transfer labels choose the matching account snapshot and retain it during refresh',async()=>{
+  const b=banking();b.render('accounts');b.respond(0,breakdown);await flush();
+  b.panel().select.value='2';const second=b.loadSavingsBreakdown();
+  b.respond(1,{...breakdown,availableBalance:200});await second;
+  const labels=()=>vm.runInContext('state.profile.accounts.map(transferSourceLabel)',b.context);
+  assert.match(labels()[0],/400\.00/);assert.match(labels()[1],/200\.00/);
+  b.invalidateBalanceDisplays();assert.match(labels()[0],/400\.00/);assert.match(labels()[1],/200\.00/);
+  b.state.generation++;b.state.session={token:'B'};
+  assert.doesNotMatch(labels()[0],/400\.00/);
+});
+
+test('non-savings transfer source retains its total balance label',()=>{
+  const b=banking();b.state.profile.accounts[0].accountType='EVERYDAY_ACCOUNT';
+  const note=vm.runInContext('transferSourceBalanceNote(state.profile.accounts[0])',b.context);
+  assert.match(note,/Total account balance: ₱500\.00/);
+});
+
 function banking(){
   const calls=[],intervals=[],listeners={};
   let now=Date.now(),card=null,panel=null,mount;
