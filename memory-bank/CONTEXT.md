@@ -49,6 +49,11 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### T24 response decoding fix (2026-10-11)
+
+- Local t24-adapter change: /ofs/process explicitly produces application/json; T24ClientService requests JSON and parses bytes independently of the response Content-Type. Only validated POSTED/REJECTED responses with a matching FT/OFS result are terminal. Empty/malformed/unknown responses and HTTP failures return PROCESSING/202 for existing saga recovery instead of immediate false rejection/reversal. Successful idempotent replay and confirmed business rejection remain intact.
+- All 71 t24-adapter tests passed on Java 17, including 29 new HTTP/MVC regressions, and Maven package built the local target/t24-adapter.jar. Live multi-service acceptance remains pending. No migration or deployment performed. Rebuild the Docker image and recreate t24-adapter to deploy; also rebuild the JAR if deploying source on another machine. Existing bounded retry policy is unchanged. Historical failed/reversed transfers require separate reconciliation against POSTING_JOURNAL; this fix does not change their records.
+
 ### Customer bug fixes in progress (2026-10-09)
 
 - Fix 1: transaction-service no longer releases a hold a second time when committing a core-posted remittance. Remaining savings/transfer reservations are owned by T24. All 29 targeted saga/recovery/hold tests passed. Local only, transaction-service rebuild required; no database changes or deployment.
