@@ -1,0 +1,326 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import {webcrypto} from 'node:crypto';
+
+const bank=readFileSync(new URL('../frontend/bank/bank.js',import.meta.url),'utf8');
+const loans=readFileSync(new URL('../frontend/bank/loans.js',import.meta.url),'utf8');
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+const loan={loanId:1,referenceNo:'A-PRIVATE-LOAN',status:'OVERDUE',accountNo:'A-ACCOUNT',
+  penaltyDue:10,outstandingPrincipal:100,nextDue:{amount:110,dueDate:'2026-10-01'},
+  lastAutoDebit:{status:'INSUFFICIENT_FUNDS',date:'2026-10-01',amount:110}};
+const schedule={referenceNo:'A-PRIVATE-LOAN',installments:[
+  {installmentNo:1,status:'PENDING',dueDate:'2026-10-01',principalDue:100,interestDue:10,totalDue:110,amountPaid:0}
+]};
+
+function banking() {
+  const calls=[],dialogs=[],notices=[],listeners={};
+  let refreshes=0,closes=0;
+  const node={innerHTML:'',open:false,addEventListener(){},focus(){},close(){closes++;this.open=false;}};
+  const context=vm.createContext({
+    console,Intl,Date,URL,AbortSignal,crypto:webcrypto,
+    setTimeout(){},clearTimeout(){},setInterval(){},queueMicrotask(){},
+    FormData:class {
+      constructor(form){this.values=new Map(Object.entries(form.values));}
+      get(key){return this.values.get(key);}
+      [Symbol.iterator](){return this.values[Symbol.iterator]();}
+    },
+    document:{querySelector:()=>node,addEventListener(type,fn){(listeners[type] ||= []).push(fn);},title:''},
+    window:{PayPinkSavingsLive:{reset(){}}},
+    sessionStorage:{getItem:()=>null,setItem(){},removeItem(){}},
+    dismissTransferPopups(){},
+    fetch:(url,options)=>new Promise((resolve,reject)=>calls.push({url,options,resolve,reject})),
+    show:(...args)=>dialogs.push(args),notify:message=>notices.push(message),refreshCounter:()=>refreshes++
+  });
+  vm.runInContext(bank,context);
+  vm.runInContext(loans,context);
+  vm.runInContext(`
+    renderPage=()=>{}; renderShell=()=>{}; renderAuth=()=>{};
+    refresh=async()=>refreshCounter();
+    toast=message=>notify(message);
+    showDialog=(...args)=>show(...args);
+    globalThis.subject={state,loanState,api,startSession,logout,loadLoans,loansPage,loanAlertsBanner,
+      showSchedule,showPayForm,payLoan,applyForLoan,acceptOffer,ensureLoanOwner};
+  `,context);
+  const s=context.subject;
+  function login(username='A') {
+    s.startSession({token:username+'-'+s.state.generation,fullName:username,expiresInMs:60000});
+    s.state.profile={username,fullName:username,accounts:[]};
+    s.ensureLoanOwner();
+  }
+  function respond(i,body,status=200) {
+    calls[i].resolve({status,ok:status>=200&&status<300,json:async()=>body});
+  }
+  function seed() {
+    Object.assign(s.loanState,{loans:[structuredClone(loan)],progress:{1:{owed:120,total:1,remaining:1}},
+      eligibility:{eligible:true,available:5000},loaded:true,offer:{referenceNo:'A-OFFER'},
+      applyKey:'A-APPLY',applyFingerprint:'A-FINGERPRINT',payKeys:{1:{amount:20,key:'A-PAY'}},
+      form:{accountNo:'A-ACCOUNT'},formError:'A-ERROR',error:'A-LOAD-ERROR'});
+  }
+  login();
+  return {...s,context,calls,dialogs,notices,listeners,login,respond,seed,
+    refreshes:()=>refreshes,closes:()=>closes};
+}
+
+for (const status of [200,401]) {
+  for (const username of ['A','B']) {
+    test(`shared API ignores delayed ${status} after login as ${username}`,async()=>{
+      const b=banking();
+      const pending=b.api('/me');
+      assert.equal(b.calls[0].options.headers.Authorization,'Bearer '+b.state.session.token);
+      const oldToken=b.state.session.token;
+      b.logout();b.login(username);
+      // A login can receive the same token; session lifetime must still distinguish it.
+      if(username==='A')b.state.session.token=oldToken;
+      const session=b.state.session,profile=b.state.profile;
+      const notices=b.notices.length,closes=b.closes();
+      b.respond(0,{fullName:'Old private profile'},status);
+      await assert.rejects(pending,/earlier session/);
+      assert.equal(b.state.session,session);
+      assert.equal(b.state.profile,profile);
+      assert.equal(b.notices.length,notices);
+      assert.equal(b.closes(),closes);
+    });
+  }
+}
+
+test('shared API checks session again after reading the response body',async()=>{
+  const b=banking();const pending=b.api('/me');
+  let finishBody;
+  b.calls[0].resolve({ok:false,status:401,json:()=>new Promise(resolve=>{finishBody=resolve;})});
+  await flush();
+  b.logout();b.login('B');
+  const session=b.state.session,notices=b.notices.length;
+  finishBody({});await assert.rejects(pending,/earlier session/);
+  assert.equal(b.state.session,session);assert.equal(b.notices.length,notices);
+});
+
+test('shared API current-session 401 logs out once despite concurrent expired requests',async()=>{
+  const b=banking();
+  const first=b.api('/me'),second=b.api('/transactions');
+  b.respond(0,{},401);await assert.rejects(first,/session has ended/);
+  assert.equal(b.state.session,null);assert.equal(b.state.profile,null);
+  assert.equal(b.notices.length,1);
+  b.respond(1,{},401);await assert.rejects(second,/earlier session/);
+  assert.equal(b.notices.length,1);
+});
+
+test('shared API unauthenticated login failure does not log out an active session',async()=>{
+  const b=banking();
+  const pending=b.api('/login',{authenticated:false,method:'POST',body:{username:'A',password:'test'}});
+  assert.equal(b.calls[0].options.headers.Authorization,undefined);
+  b.login('B');
+  const session=b.state.session;
+  b.respond(0,{detail:'Invalid credentials'},401);
+  await assert.rejects(pending,error=>error.status===401&&error.message==='Invalid credentials');
+  assert.equal(b.state.session,session);assert.equal(b.notices.length,0);
+});
+
+test('shared API still returns successful responses from the current session',async()=>{
+  const b=banking();const pending=b.api('/me');
+  const result={fullName:'Current customer'};
+  b.respond(0,result);
+  assert.equal(await pending,result);assert.equal(b.notices.length,0);
+});
+
+test('unsubmitted loan inputs survive redraws and an asynchronous loan reload',async()=>{
+  const b=banking();
+  b.state.profile.accounts=[
+    {accountNumber:'SOURCE',accountType:'EVERYDAY_ACCOUNT',status:'ACTIVE',currency:'PHP',currentBalance:500},
+    {accountNumber:'OTHER',accountType:'SAVINGS_ACCOUNT',status:'ACTIVE',currency:'PHP',currentBalance:100}
+  ];
+  for(const [name,value,type,id] of [
+    ['amount','12345.67','input','loan-amount'],
+    ['accountNo','OTHER','change','loan-account'],
+    ['termMonths','24','change','loan-term']
+  ]){
+    const event={target:{name,value,id,closest:selector=>selector==='#loan-apply-form'?{}:null}};
+    b.listeners[type].forEach(fn=>fn(event));
+  }
+  const check=()=>{
+    const html=b.loansPage();
+    assert.match(html,/value="12345.67"/);
+    assert.match(html,/value="OTHER" selected/);
+    assert.match(html,/value="24" selected/);
+  };
+  check();
+  b.state.hideBalances=true;
+  check();
+  const pending=b.loadLoans();
+  b.respond(0,[]);b.respond(1,{eligible:true});
+  await pending;
+  check();
+  b.login('B');
+  assert.equal(Object.keys(b.loanState.form).length,0);
+});
+
+test('editing a draft does not change the account shown for an existing loan offer',async()=>{
+  const b=banking();
+  const applying=b.applyForLoan({values:{accountNo:'001100001234',amount:'5000',termMonths:'12'}});
+  b.respond(0,{referenceNo:'OFFER',offer:{amount:5000,termMonths:12,monthlyInstallment:450,annualRate:10}});
+  await applying;
+  const event={target:{id:'loan-account',name:'accountNo',value:'001100009876',
+    closest:selector=>selector==='#loan-apply-form'?{}:null}};
+  b.listeners.change.forEach(fn=>fn(event));
+  assert.equal(b.loanState.form.accountNo,'001100009876');
+  vm.runInContext('showLoanTerms()',b.context);
+  assert.match(b.dialogs[0][1],/1234/);
+  assert.doesNotMatch(b.dialogs[0][1],/9876/);
+});
+
+test('loan draft listeners ignore other forms and fields',()=>{
+  const b=banking();
+  for(const event of [
+    {target:{id:'unrelated',name:'amount',value:'99',closest:()=>null}},
+    {target:{id:'unrelated',name:'unexpected',value:'99',closest:()=>({})}}
+  ]) b.listeners.input.forEach(fn=>fn(event));
+  assert.equal(Object.keys(b.loanState.form).length,0);
+});
+
+test('logout clears all loan data, drafts, errors and payment keys immediately',()=>{
+  const b=banking(); b.seed(); b.loanState.loading=true; b.loanState.busy=true;
+  b.logout();
+  assert.equal(b.loanState.owner,null);
+  for(const key of ['loans']) assert.equal(b.loanState[key].length,0);
+  for(const key of ['progress','payKeys','form']) assert.equal(Object.keys(b.loanState[key]).length,0);
+  for(const key of ['offer','eligibility','applyKey']) assert.equal(b.loanState[key],null);
+  for(const key of ['error','formError','applyFingerprint']) assert.equal(b.loanState[key],'');
+  assert.equal(b.loanState.loaded,false); assert.equal(b.loanState.loading,false); assert.equal(b.loanState.busy,false);
+  assert.equal(b.loanAlertsBanner(),'');
+});
+
+test('overview resets an old owner before rendering a missed-payment alert',()=>{
+  const b=banking(); b.seed();
+  assert.match(b.loanAlertsBanner(),/Loan payment not collected/);
+  b.state.profile={username:'B',accounts:[]};
+  assert.equal(b.loanAlertsBanner(),'');
+  assert.equal(b.loanState.owner,'B');
+  assert.equal(b.loanState.loans.length,0);
+});
+
+test('a fresh session for the same username also discards its old loan cache',()=>{
+  const b=banking(); b.seed(); b.login('A');
+  assert.equal(b.loanState.loaded,false);
+  assert.equal(b.loanState.loans.length,0);
+  assert.equal(b.loanState.offer,null);
+});
+
+test('old loan-list response cannot populate B or clear B loading flag',async()=>{
+  const b=banking();
+  const old=b.loadLoans();
+  b.logout(); b.login('B');
+  const current=b.loadLoans();
+  assert.equal(b.calls.length,4);
+  b.respond(0,[loan]); b.respond(1,{eligible:true,available:99999});
+  await old;
+  assert.equal(b.loanState.loading,true);
+  assert.equal(b.loanState.loans.length,0);
+  b.respond(2,[]); b.respond(3,{eligible:true,available:5000});
+  await current;
+  assert.equal(b.loanState.owner,'B');
+  assert.equal(b.loanState.eligibility.available,5000);
+  assert.equal(b.loanState.loading,false);
+});
+
+test('late progress response cannot overwrite B schedule cache or loading flag',async()=>{
+  const b=banking();
+  const old=b.loadLoans();
+  b.respond(0,[loan]); b.respond(1,{eligible:true});
+  await flush();
+  assert.equal(b.calls[2].url,'/api/v1/loans/1/schedule');
+  b.logout(); b.login('B');
+  const current=b.loadLoans();
+  b.loanState.progress={2:{owed:200}};
+  b.respond(2,schedule);
+  await old;
+  assert.equal(b.loanState.loading,true);
+  assert.equal(b.loanState.progress[1],undefined);
+  assert.equal(b.loanState.progress[2].owed,200);
+  b.respond(3,[]); b.respond(4,{eligible:true});
+  await current;
+});
+
+for(const action of ['showSchedule','showPayForm']) {
+  for(const outcome of ['success','network failure','401']) {
+    test(`late ${action} ${outcome} cannot show A data or log B out`,async()=>{
+      const b=banking(); b.seed();
+      const pending=b[action](1);
+      b.logout(); b.login('B');
+      b.notices.length=0;
+      const token=b.state.session.token;
+      if(outcome==='network failure') b.calls[0].reject(new Error('network'));
+      else b.respond(0,schedule,outcome==='401'?401:200);
+      await pending;
+      assert.equal(b.dialogs.length,0);
+      assert.equal(b.notices.length,0);
+      assert.equal(b.state.session.token,token);
+      assert.equal(b.loanState.progress[1],undefined);
+    });
+  }
+}
+
+function payForm() {
+  const error={hidden:true,textContent:''},button={disabled:false,textContent:'Pay now'};
+  return {dataset:{id:'1'},values:{amount:'20'},isConnected:true,error,button,
+    querySelector:selector=>selector==='#loan-pay-error'?error:button};
+}
+
+for(const status of [200,422,401]) {
+  test(`late payment response ${status} cannot touch B keys, dialog or messages`,async()=>{
+    const b=banking(); b.seed();
+    const form=payForm();
+    const pending=b.payLoan(form);
+    b.logout(); b.login('B'); b.notices.length=0;
+    b.loanState.payKeys={1:{amount:30,key:'B-PAY'}};
+    form.error.textContent='B-visible-error';
+    const closes=b.closes(),refreshes=b.refreshes();
+    b.respond(0,{loanStatus:'CLOSED',amount:20,detail:'A-private-error'},status);
+    await pending;
+    assert.equal(b.loanState.payKeys[1].key,'B-PAY');
+    assert.equal(form.error.textContent,'B-visible-error');
+    assert.equal(b.closes(),closes);
+    assert.equal(b.refreshes(),refreshes);
+    assert.equal(b.notices.length,0);
+    assert.ok(b.state.session);
+  });
+}
+
+test('late application and acceptance cannot replace B offer or busy state',async()=>{
+  const b=banking();
+  const apply=b.applyForLoan({values:{amount:'5000',accountNo:'A-ACCOUNT',termMonths:'12'}});
+  const accept=b.acceptOffer('A-OFFER');
+  b.logout(); b.login('B');
+  b.notices.length=0;
+  b.loanState.offer={referenceNo:'B-OFFER'}; b.loanState.busy=true;
+  b.respond(0,{referenceNo:'A-OFFER'}); b.respond(1,{});
+  await Promise.all([apply,accept]);
+  assert.equal(b.loanState.offer.referenceNo,'B-OFFER');
+  assert.equal(b.loanState.busy,true);
+  assert.equal(b.notices.length,0);
+});
+
+test('current-session loads and dialogs still work',async()=>{
+  const b=banking();
+  const pending=b.loadLoans();
+  b.respond(0,[loan]);b.respond(1,{eligible:true});
+  await flush();
+  b.respond(2,schedule);
+  await pending;
+  assert.equal(b.loanState.loaded,true);
+  assert.equal(b.loanState.progress[1].owed,120);
+  const show=b.showSchedule(1);
+  b.respond(3,schedule);await show;
+  assert.match(b.dialogs[0][0],/A-PRIVATE-LOAN/);
+  const pay=b.showPayForm(1);
+  b.respond(4,schedule);await pay;
+  assert.match(b.dialogs[1][0],/Pay loan A-PRIVATE-LOAN/);
+});
+
+test('a current-session 401 still logs the customer out and clears loan state',async()=>{
+  const b=banking();b.seed();
+  const pending=b.showSchedule(1);
+  b.respond(0,{},401);await pending;
+  assert.equal(b.state.session,null);
+  assert.equal(b.loanState.loans.length,0);
+});

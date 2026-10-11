@@ -23,6 +23,7 @@ services:
       - ./../scripts/migrate_interest_azuresql.sql:/mssql-server-setup-scripts.d/06_interest.sql:ro
       - ./../scripts/migrate_phase10_rbac_roles.sql:/mssql-server-setup-scripts.d/07_rbac_roles.sql:ro
       - ./../scripts/migrate_mpin.sql:/mssql-server-setup-scripts.d/08_mpin.sql:ro
+      - ./../scripts/migrate_external_clearing.sql:/mssql-server-setup-scripts.d/09_external_clearing.sql:ro
     healthcheck:
       test:
         [
@@ -52,7 +53,7 @@ services:
       - ./../scripts/migrate_interest_recovery_postgres.sql:/docker-entrypoint-initdb.d/04_interest_recovery.sql
       - ./../scripts/migrate_interest_approval_postgres.sql:/docker-entrypoint-initdb.d/05_interest_approval.sql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db" ]
+      test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -66,7 +67,7 @@ services:
     command: redis-server --save "" --appendonly no --maxmemory 512mb --maxmemory-policy allkeys-lru
     # No host port â€” internal only
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -97,7 +98,7 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     volumes:
       - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_log:/var/lib/zookeeper/log   
+      - zookeeper_log:/var/lib/zookeeper/log
     networks:
       - ledger-net
 
@@ -210,7 +211,7 @@ services:
         condition: service_healthy
     # No host port â€” internal only, accessed via api-gateway:8080
     environment:
-      - APP_SAVINGS_ENABLED=${SAVINGS_ENABLED:-false}
+      - APP_SAVINGS_ENABLED=true
       - SPRING_DATASOURCE_URL=${AZURE_SQL_URL:-${AZURE_SQL_JDBC_URL:-jdbc:sqlserver://azure-sql:1433;databaseName=master;encrypt=true;trustServerCertificate=true}}
       - SPRING_DATASOURCE_USERNAME=${AZURE_SQL_USERNAME:-sa}
       - SPRING_DATASOURCE_PASSWORD=${AZURE_SQL_PASSWORD:-PayPink2.0_StrongPass!}
@@ -515,7 +516,7 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.87.0
     container_name: otel-collector
-    command: [ "--config=/etc/otel/otel-config.yaml" ]
+    command: ["--config=/etc/otel/otel-config.yaml"]
     volumes:
       - ./otel-config.yaml:/etc/otel/otel-config.yaml:ro
     ports:
@@ -531,7 +532,7 @@ services:
   loki:
     image: grafana/loki:2.9.0
     container_name: loki-logs
-    command: [ "-config.file=/etc/loki/loki-config.yaml" ]
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
     volumes:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - loki_data:/loki
@@ -543,7 +544,7 @@ services:
   tempo:
     image: grafana/tempo:2.2.0
     container_name: tempo-traces
-    command: [ "-config.file=/etc/tempo.yaml" ]
+    command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/var/tempo
@@ -602,7 +603,7 @@ services:
       context: ./jmeter
       dockerfile: Dockerfile
     container_name: jmeter-runner
-    profiles: [ "loadtest" ]
+    profiles: ["loadtest"]
     volumes:
       - ./jmeter:/jmeter
     networks:
@@ -620,4 +621,3 @@ volumes:
   zookeeper_log:
   loki_data:
   tempo_data:
-

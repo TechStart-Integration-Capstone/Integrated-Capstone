@@ -5,7 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -31,10 +32,13 @@ public class ExternalTransferService {
         String recipientName, String bank, String rail, boolean mock) {}
     private final BankingService banking;
     private final JdbcTemplate jdbc;
-    private final BankingLedger ledger;
+    private final ExternalSettlementClient settlement;
+    private final TransactionTemplate transaction;
     private final boolean isSqlServer;
-    public ExternalTransferService(BankingService banking, JdbcTemplate jdbc, BankingLedger ledger) {
-        this.banking=banking; this.jdbc=jdbc; this.ledger=ledger;
+    public ExternalTransferService(BankingService banking, JdbcTemplate jdbc, ExternalSettlementClient settlement,
+                                   PlatformTransactionManager transactionManager) {
+        this.banking=banking; this.jdbc=jdbc; this.settlement=settlement;
+        this.transaction=new TransactionTemplate(transactionManager);
         boolean sqlServer = true;
         try (java.sql.Connection conn = jdbc.getDataSource() != null ? jdbc.getDataSource().getConnection() : null) {
             if (conn != null) {
@@ -48,9 +52,14 @@ public class ExternalTransferService {
         if (type == null || !type.startsWith("EXT_")) return null;
         return RECIPIENTS.stream().filter(r -> type.endsWith("_"+r.id())).findFirst().orElse(null);
     }
-    @Transactional
     public Receipt transfer(String authorization, Request request) {
         long customer = banking.authenticatedCustomer(authorization).getCustomerId();
+        String reference=transaction.execute(status -> enqueue(customer,request));
+        if ("INSTAPAY".equals(request.rail())) settle(reference,customer);
+        return receipts(customer,reference).get(0);
+    }
+
+    private String enqueue(long customer, Request request) {
         Recipient recipient = RECIPIENTS.stream().filter(r -> r.number().equals(request.destinationAccountNumber())).findFirst()
             .orElseThrow(() -> error(HttpStatus.BAD_REQUEST,"The recipient account could not be found. Check the account number."));
         if (!List.of("INSTAPAY","PESONET").contains(request.rail())) throw error(HttpStatus.BAD_REQUEST,"Choose a supported transfer method.");
@@ -73,21 +82,15 @@ public class ExternalTransferService {
             if (receipt.sourceAccountId()!=request.sourceAccountId() || !receipt.destinationAccountNumber().equals(recipient.number())
                 || !receipt.rail().equals(request.rail()) || receipt.amount().compareTo(request.amount())!=0)
                 throw error(HttpStatus.CONFLICT,"This request was already used for different transfer details.");
-            return receipt;
+            return reference;
         }
         if (!source.status().equals("ACTIVE") || !source.currency().equals("PHP")) throw error(HttpStatus.BAD_REQUEST,"Choose an active PHP account.");
         if (source.availableBalance().compareTo(request.amount())<0) throw error(HttpStatus.UNPROCESSABLE_ENTITY,"Not enough available balance.");
         String type="EXT_"+request.rail()+"_"+recipient.id();
-        if (request.rail().equals("PESONET")) {
-            // Queue the instruction only. No balance mutation or successful debit event yet.
-            jdbc.update("INSERT INTO LEDGER_TRANSACTION (from_account_id,amount,source_currency,target_currency,transaction_type,reference_no,status) VALUES (?,?,'PHP','PHP',?,?,'PENDING')",
-                source.id(),request.amount(),type,reference);
-        } else {
-            var after=source.balance().subtract(request.amount());
-            jdbc.update("UPDATE ACCOUNT SET current_balance=? WHERE account_id=?",after,source.id());
-            ledger.record(source,null,request.amount(),after,"DEBIT",type,reference);
-        }
-        return receipts(customer,reference).get(0);
+        // Persist intent before contacting the orchestrator. It alone screens/holds/posts funds.
+        jdbc.update("INSERT INTO LEDGER_TRANSACTION (from_account_id,amount,source_currency,target_currency,transaction_type,reference_no,status) VALUES (?,?,'PHP','PHP',?,?,'PENDING')",
+            source.id(),request.amount(),type,reference);
+        return reference;
     }
     public List<Receipt> history(String authorization) {
         long customerId = banking.authenticatedCustomer(authorization).getCustomerId();
@@ -113,39 +116,23 @@ public class ExternalTransferService {
         }, params.toArray());
     }
     @Scheduled(fixedDelay=2000)
-    @Transactional
     public void settleBatch() {
         var cutoff=Timestamp.valueOf(LocalDateTime.now().minusSeconds(90));
-        // Lock accounts in ascending order, matching the internal-transfer lock order.
-        var ids=jdbc.queryForList("SELECT DISTINCT from_account_id FROM LEDGER_TRANSACTION WHERE status='PENDING' AND transaction_type LIKE 'EXT_PESONET_%' AND transaction_date <= ? ORDER BY from_account_id",Long.class,cutoff);
-        for (long id:ids) {
-            String batchLockSql = isSqlServer
-                ? "SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WITH (UPDLOCK, ROWLOCK) WHERE account_id=?"
-                : "SELECT account_id,customer_id,account_number,currency,current_balance,COALESCE(held_balance,0),status FROM ACCOUNT WHERE account_id=? FOR UPDATE";
-            var source=jdbc.queryForObject(batchLockSql,
-                (rs,n)->new BankingLedger.Account(rs.getLong(1),rs.getLong(2),rs.getString(3),rs.getString(4),rs.getBigDecimal(5),rs.getBigDecimal(6),rs.getString(7)),id);
-            var pending=jdbc.queryForList("SELECT reference_no FROM LEDGER_TRANSACTION WHERE from_account_id=? AND status='PENDING' AND transaction_type LIKE 'EXT_PESONET_%' AND transaction_date <= ? ORDER BY transaction_date,transaction_id",String.class,id,cutoff);
-            for (String reference:pending) {
-                var tx=jdbc.queryForMap("SELECT transaction_id,amount,transaction_type FROM LEDGER_TRANSACTION WHERE reference_no=?",reference);
-                BigDecimal amount=(BigDecimal)tx.get("AMOUNT");
-                String type=(String)tx.get("TRANSACTION_TYPE");
-                // Compatibility with previously submitted transfers whose debit was already posted.
-                Integer posted=jdbc.queryForObject("SELECT COUNT(*) FROM OUTBOX_EVENT WHERE transaction_id=?",Integer.class,tx.get("TRANSACTION_ID"));
-                if (posted != null && posted>0) {
-                    jdbc.update("UPDATE LEDGER_TRANSACTION SET status='SUCCESS' WHERE reference_no=?",reference);
-                    continue;
-                }
-                if (!"ACTIVE".equals(source.status()) || !"PHP".equals(source.currency()) || source.balance().compareTo(amount)<0) {
-                    jdbc.update("UPDATE LEDGER_TRANSACTION SET status='FAILED' WHERE reference_no=?",reference);
-                    jdbc.update("INSERT INTO AUDIT_LOG (customer_id,action,entity,details) VALUES (?,'PESONET_FAILED','ACCOUNT',?)",source.customerId(),"Account unavailable or insufficient funds at processing time; reference "+reference);
-                    continue;
-                }
-                var after=source.balance().subtract(amount);
-                jdbc.update("UPDATE ACCOUNT SET current_balance=? WHERE account_id=?",after,id);
-                ledger.post(source,amount,after,"DEBIT",type,reference);
-                jdbc.update("UPDATE LEDGER_TRANSACTION SET status='SUCCESS' WHERE reference_no=?",reference);
-                source=new BankingLedger.Account(source.id(),source.customerId(),source.number(),source.currency(),after,source.status());
-            }
+        // No auth-service transaction surrounds HTTP. Core obtains the balance/hold locks.
+        var pending=jdbc.query("""
+                SELECT t.reference_no,a.customer_id FROM LEDGER_TRANSACTION t
+                JOIN ACCOUNT a ON a.account_id=t.from_account_id
+                WHERE t.status='PENDING' AND (t.transaction_type LIKE 'EXT_INSTAPAY_%'
+                  OR (t.transaction_type LIKE 'EXT_PESONET_%' AND t.transaction_date<=?))
+                ORDER BY t.transaction_date,t.transaction_id OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY
+                """, (rs,n)->Map.entry(rs.getString(1),rs.getLong(2)),cutoff);
+        for (var entry:pending) settle(entry.getKey(),entry.getValue());
+    }
+    private void settle(String reference,long customer) {
+        try { settlement.settle(reference,customer); }
+        catch (org.springframework.web.client.RestClientException error) {
+            // Unknown outcomes remain durable and are retried with exactly the same reference.
+            org.slf4j.LoggerFactory.getLogger(getClass()).warn("External settlement pending ref={}: {}",reference,error.getClass().getSimpleName());
         }
     }
     private static ResponseStatusException error(HttpStatus status,String message) { return new ResponseStatusException(status,message); }

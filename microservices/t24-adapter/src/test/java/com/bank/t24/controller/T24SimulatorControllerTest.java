@@ -4,12 +4,37 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class T24SimulatorControllerTest {
+
+    @Test
+    void httpResponsesExplicitlyUseJsonForSuccessRejectionAndReplay() throws Exception {
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new T24SimulatorController()).build();
+        String valid = """
+                {"referenceNo":"TX-HTTP","ofsMessage":"FUNDS.TRANSFER,TX-HTTP/I/PROCESS,,DEBIT.ACCT.NO::1000100001,CREDIT.ACCT.NO::1000100002,AMOUNT::222.00,CURRENCY::PHP"}
+                """;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(post("/ofs/process").contentType(MediaType.APPLICATION_JSON)
+                            .accept(MediaType.ALL).content(valid))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.status").value("POSTED"));
+        }
+        mvc.perform(post("/ofs/process").contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.ALL).content("{\"referenceNo\":\"TX-BAD\",\"ofsMessage\":\"invalid\"}"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+    }
 
     private T24SimulatorController controller;
 

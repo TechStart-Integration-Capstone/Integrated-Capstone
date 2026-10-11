@@ -88,7 +88,7 @@ class BankingServiceTest {
         service.profile(token);
         service.activity(token);
         verify(jdbc).query(contains("WHERE customer_id = ?"), any(RowMapper.class), eq(42L));
-        verify(jdbc).query(contains("WHERE a.customer_id = ?"), any(RowMapper.class), eq(42L), eq(42L));
+        verify(jdbc).query(contains("WHERE a.customer_id = ?"), any(RowMapper.class), eq(42L), eq(42L), eq(42L), eq(42L));
         verify(customers, times(2)).findById(42L);
     }
 

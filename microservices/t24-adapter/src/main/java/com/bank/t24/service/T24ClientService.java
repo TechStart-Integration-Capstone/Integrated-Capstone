@@ -2,6 +2,8 @@ package com.bank.t24.service;
 
 import com.bank.t24.dto.T24TransferRequest;
 import com.bank.t24.dto.T24TransferResponse;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +28,7 @@ public class T24ClientService {
     private final OfsFormatterService ofsFormatter;
     private final T24IdempotencyStore idempotencyStore;
     private final RestClient restClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public T24ClientService(
             OfsFormatterService ofsFormatter,
@@ -66,28 +69,37 @@ public class T24ClientService {
                     "ofsMessage", ofsMessage
             );
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> responseMap = restClient.post()
+            // Read bytes so JSON with a missing/generic Content-Type is still decoded.
+            // A transport or decoding failure does not prove the core rejected the posting.
+            byte[] responseBody = restClient.post()
                     .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
-                    .body(Map.class);
+                    .body(byte[].class);
 
-            if (responseMap == null) {
-                return T24TransferResponse.rejected(null, ofsMessage, "Empty response from T24 Simulator");
+            if (responseBody == null || responseBody.length == 0) {
+                return T24TransferResponse.timeout("Empty T24 response; posting outcome is unconfirmed");
             }
 
-            String status = (String) responseMap.get("status");
-            String ftReference = (String) responseMap.get("ftReference");
-            String rawOfs = (String) responseMap.get("ofsResponse");
-            String reason = (String) responseMap.get("reason");
+            JsonNode responseMap = objectMapper.reader()
+                    .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                    .readTree(responseBody);
+            String status = textField(responseMap, "status");
+            String ftReference = textField(responseMap, "ftReference");
+            String rawOfs = textField(responseMap, "ofsResponse");
+            String reason = textField(responseMap, "reason");
 
             T24TransferResponse response;
-            if ("POSTED".equalsIgnoreCase(status)) {
+            if ("POSTED".equalsIgnoreCase(status) && ftReference != null
+                    && (ftReference + "/1").equals(rawOfs)) {
                 response = T24TransferResponse.success(ftReference, rawOfs, false);
                 idempotencyStore.put(request.getReferenceNo(), response);
-            } else {
+            } else if ("REJECTED".equalsIgnoreCase(status) && ftReference != null
+                    && (ftReference + "/-1").equals(rawOfs)) {
                 response = T24TransferResponse.rejected(ftReference, rawOfs, reason != null ? reason : "T24 rejection /-1");
+            } else {
+                response = T24TransferResponse.timeout("T24 posting outcome is unconfirmed; awaiting recovery");
             }
             return response;
 
@@ -96,7 +108,13 @@ public class T24ClientService {
             return T24TransferResponse.timeout("T24 Core Banking SLA timeout (2s exceeded)");
         } catch (Exception e) {
             log.error("[t24-adapter] Unexpected error calling T24 Simulator: {}", e.getMessage(), e);
-            return T24TransferResponse.rejected(null, ofsMessage, "T24 system error: " + e.getMessage());
+            return T24TransferResponse.timeout("T24 response could not be confirmed; awaiting recovery");
         }
+    }
+
+    private static String textField(JsonNode response, String field) {
+        JsonNode value = response == null ? null : response.get(field);
+        return value != null && value.isTextual() && !value.textValue().isBlank()
+                ? value.textValue() : null;
     }
 }
