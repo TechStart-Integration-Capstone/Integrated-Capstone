@@ -77,6 +77,9 @@ public class OrchestratorClient {
                     result.status(), result.transactionId(), result.ftReference(), result.reason());
             return result;
         } catch (WebClientResponseException e) {
+            if (e.getStatusCode().value() == 409) {
+                return TransferResult.pendingCore("Transfer is already being processed");
+            }
             if (e.getStatusCode().is4xxClientError()) {
                 log.error("[loan-service] Orchestrator refused {} key={}: {} {}", transactionType, idempotencyKey,
                         e.getStatusCode().value(), e.getResponseBodyAsString());

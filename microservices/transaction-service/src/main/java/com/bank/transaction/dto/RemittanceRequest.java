@@ -10,6 +10,10 @@ public class RemittanceRequest {
     public static final String TYPE_LOAN_DISBURSEMENT = "LOAN_DISBURSEMENT";
     public static final String TYPE_LOAN_REPAYMENT = "LOAN_REPAYMENT";
 
+    public static boolean isExternalType(String type) {
+        return type != null && type.matches("EXT_(INSTAPAY|PESONET)_(BDO|BPI|MB)");
+    }
+
     @NotBlank(message = "Source account ID/Number is mandatory")
     private String sourceAccountId;
 

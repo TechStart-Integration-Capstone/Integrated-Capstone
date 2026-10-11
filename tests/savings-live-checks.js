@@ -91,6 +91,8 @@
   check(original.key===retried.key&&JSON.stringify(original.body)===JSON.stringify(retried.body),'Timeout recovery retains exact key and body across remount');
   mode='pending';await openAdd();fill('amount',20);await submit();
   check(text().includes('awaiting confirmation'),'202 remains pending rather than reporting success');
+  await new Promise(resolve=>setTimeout(resolve,4700));
+  check(!!document.querySelector('[data-sv="check"]')&&text().includes('awaiting confirmation'),'Pending savings notice survives confirmation expiry');
   serverHistory[0].status='CONFIRMED';serverGoals[0].savedAmount+=20;click('refresh');await wait(()=>!document.querySelector('[data-sv="check"]'));
   mode='reject';await openAdd();fill('amount',100);await submit();check(document.querySelector('.sv-form-error').textContent.includes('Insufficient'),'Definitive rejection is shown without pretending funds changed');await close();
   click('new');fill('name','<img src=x onerror=alert(1)>');fill('targetDate','2099-12-15');await submit();fill('initial',10);document.querySelector('[name="enabled"]').checked=true;fill('nextDue','2099-12-15');await submit();mode='schedule-fail';await submit();
@@ -99,6 +101,11 @@
   click('new');fill('name','After timeout');fill('targetDate','2099-12-15');await submit();await submit();mode='create-timeout';await submit();
   check(text().includes('After timeout')&&calls.filter(c=>c.route==='/goals'&&c.method==='POST').length===creates+1,'Unknown create response refreshes committed goal without automatic duplicate');
   click('edit',gid);fill('name','Updated goal');await submit();check(text().includes('Updated goal'),'Goal edits use API');
+  check(document.querySelector('[data-sv-notice]')?.textContent==='Goal updated.','Goal update shows a temporary confirmation');
+  await new Promise(resolve=>setTimeout(resolve,4700));
+  check(!document.querySelector('[data-sv-notice]'),'Goal confirmation disappears automatically');
+  click('refresh');await wait(()=>document.querySelector('#savings-live')?.getAttribute('aria-busy')==='false');
+  check(!document.querySelector('[data-sv-notice]'),'Expired confirmation stays cleared after redraw');
   click('schedule',gid);document.querySelector('[name="enabled"]').checked=true;fill('frequency','PAYDAY');fill('nextDue','2099-12-14');await submit();check(document.querySelector('.sv-form-error').textContent.includes('15th'),'Invalid payday schedule is rejected locally');fill('nextDue','2099-12-15');await submit();check(text().includes('payday'),'Valid savings plan persists');
   click('split');fill('budget',1);fill(gid,5);await submit();check(document.querySelector('.sv-form-error').textContent.includes('budget'),'Smart Split enforces the entered budget');fill('budget',5);await submit();
   click('activity',gid);check(document.querySelector('#savings-live-dialog').textContent.includes('CONFIRMED'),'Activity comes from persisted operations');await close();
@@ -130,6 +137,16 @@
   check(breakdown.querySelector('details').open&&breakdown.textContent.includes('Our trip · PinkCircle · your contribution'),'View allocations expands own personal and circle savings');
   state.hideBalances=true;renderPage();await wait(()=>document.querySelector('.account-allocations'));
   check(!document.querySelector('#account-savings-breakdown').textContent.includes('9,000.00'),'Hide balances masks allocation breakdown');
+  state.hideBalances=false;state.page='transfer';state.transfer=null;renderPage();
+  await wait(()=>document.querySelector('[data-transfer-source-balance]')?.textContent.includes('9,000.00'));
+  check(document.querySelector('#transfer-source').selectedOptions[0].textContent.includes('9,000.00 available')&&!document.querySelector('#transfer-source').textContent.includes('20,000.00'),'Transfer source shows savings available funds instead of total');
+  check(document.querySelector('[data-transfer-source-balance]').textContent.includes('Available balance:')&&!document.querySelector('[data-transfer-source-balance]').textContent.includes('Total account balance'),'Transfer note labels available funds');
+  state.transfer.mode='other';renderPage();
+  check(document.querySelector('#transfer-source').selectedOptions[0].textContent.includes('9,000.00 available'),'PayPink recipient transfer retains available savings balance');
+  state.transfer.mode='external';renderPage();
+  check(document.querySelector('#transfer-source').selectedOptions[0].textContent.includes('9,000.00 available'),'External transfer uses the same savings available balance');
+  state.hideBalances=true;renderPage();
+  check(!document.querySelector('#transfer-source').textContent.includes('9,000.00')&&!document.querySelector('[data-transfer-source-balance]').textContent.includes('9,000.00'),'Transfer available funds respect balance privacy');
   state.hideBalances=false;state.page='savings';renderPage();await wait(()=>document.querySelector('.sv-total-amount'));
   return passed;
 })()

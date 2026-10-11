@@ -1,6 +1,6 @@
 'use strict';
 
-// Mirrors NotificationKafkaConsumer's debit/credit alerts using customer-scoped ledger history.
+// Uses customer-scoped history, including unposted sender requests.
 // No browser-supplied customer ID: /transactions authenticates ownership on the server.
 const transferNotifications = {owner:null, generation:-1, items:[], known:new Set(), read:new Set(), loaded:false, busy:false, error:''};
 const notificationKey = () => `paypink.notifications.read.${state.profile?.username}`;
@@ -20,16 +20,17 @@ function notificationFromLoan(tx) {
 function notificationFromTransfer(tx) {
   if (tx.type?.startsWith('LOAN_')) return notificationFromLoan(tx);
   const incoming = tx.type === 'TRANSFER_IN';
-  const pending = ['PENDING','RESERVED','Reserved','PROCESSING','Processing'].includes(tx.status);
-  const cancelled = ['CANCELLED','Cancelled'].includes(tx.status);
-  const failed = ['FAILED','Failed'].includes(tx.status);
-  const title = pending ? 'Transfer pending' : cancelled ? 'Transfer cancelled' : failed ? 'Transfer reversed' : incoming ? 'Money received' : 'Money sent';
+  const status = String(tx.status).toUpperCase();
+  const pending = ['PENDING','RESERVED','PROCESSING'].includes(status);
+  const cancelled = status === 'CANCELLED';
+  const failed = status === 'FAILED';
+  const title = pending ? 'Transfer pending' : cancelled ? 'Transfer cancelled' : failed ? 'Transfer failed' : incoming ? 'Money received' : 'Money sent';
   const amount = money(tx.amount,tx.currency);
   const person = tx.counterpartyName?.trim() || 'another account';
   const account = maskedNumber(tx.accountNumber);
-  const message = pending ? `${amount} to ${person} is waiting to be processed. Funds are on hold.`
-    : cancelled ? `Your ${amount} transfer to ${person} was cancelled. Held funds were restored to your balance.`
-    : failed ? `Your ${amount} transfer to ${person} could not be completed and was reversed. No funds were lost.`
+  const message = pending ? `Your ${amount} transfer ${incoming ? 'from' : 'to'} ${person} is awaiting confirmation. Check its status before sending again.`
+    : cancelled ? `Your ${amount} transfer ${incoming ? 'from' : 'to'} ${person} was cancelled.`
+    : failed ? `Your ${amount} transfer ${incoming ? 'from' : 'to'} ${person} could not be completed.`
     : incoming ? `${amount} from ${person} was credited to your account ${account}.`
     : `${amount} was sent to ${person} from your account ${account}.`;
   return {id:`${tx.transactionId || tx.reference}:${tx.status}`,title,message,tx};
@@ -37,8 +38,8 @@ function notificationFromTransfer(tx) {
 function updateTransferNotifications(activity, announce = true) {
   if (!state.session || !state.profile) return;
   resetNotificationOwner();
-  const items = activity.filter(tx => (['TRANSFER_IN','TRANSFER_OUT','LOAN_DISBURSEMENT','LOAN_REPAYMENT'].includes(tx.type) || tx.type?.startsWith('EXT_'))
-    && ['PENDING','FAILED','Failed','SUCCESS','COMPLETED','Posted','CANCELLED','Cancelled','Reserved','Processing'].includes(tx.status)).map(notificationFromTransfer);
+  const items = activity.filter(tx => (['P2P_REMITTANCE','TRANSFER_IN','TRANSFER_OUT','LOAN_DISBURSEMENT','LOAN_REPAYMENT'].includes(tx.type) || tx.type?.startsWith('EXT_'))
+    && ['PENDING','FAILED','SUCCESS','COMPLETED','POSTED','CANCELLED','RESERVED','PROCESSING'].includes(String(tx.status).toUpperCase())).map(notificationFromTransfer);
   const fresh = items.filter(item => !transferNotifications.known.has(item.id));
   if (announce && transferNotifications.loaded && fresh.length) {
     fresh.slice(0,3).reverse().forEach(showTransferPopup);

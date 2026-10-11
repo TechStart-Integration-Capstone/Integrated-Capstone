@@ -19,6 +19,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -60,6 +61,32 @@ class RemittanceSagaRecoveryTest {
         request.setAmount(new BigDecimal("250000.00"));
         request.setCurrency("PHP");
         return request;
+    }
+
+    @Test
+    @DisplayName("Committing a core-posted transfer preserves unrelated savings and transfer holds")
+    void corePostedCommit_doesNotReleaseOtherReservations() {
+        Remittance rem = remittance("T24_POSTED", Remittance.STEP_POSTED, LocalDateTime.now());
+        when(jdbcTemplate.queryForObject(contains("FROM dbo.REMITTANCE WITH (UPDLOCK"), eq(String.class), eq(7L)))
+                .thenReturn("T24_POSTED");
+        when(jdbcTemplate.queryForList(anyString(), eq("10"), eq("10")))
+                .thenReturn(List.of(Map.of("account_id", 10L, "customer_id", 1L,
+                        "account_number", "ACC-SOURCE", "current_balance", new BigDecimal("129014.59"),
+                        "held_balance", new BigDecimal("21100.00"))));
+        when(jdbcTemplate.queryForList(anyString(), eq("20"), eq("20")))
+                .thenReturn(List.of(Map.of("account_id", 20L, "customer_id", 2L,
+                        "account_number", "ACC-TARGET", "current_balance", new BigDecimal("250000.00"),
+                        "held_balance", BigDecimal.ZERO)));
+        when(transactionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RemittanceResponse response = ledgerService.commitLedgerMutation(rem, request(), 10L, 20L,
+                new BigDecimal("250000.00"), null, "FT202610041001");
+
+        assertThat(response.getStatus()).isEqualTo("POSTED");
+        assertThat(ledgerService.resolveAccount("10").availableBalance()).isEqualByComparingTo("107914.59");
+        verify(jdbcTemplate, never()).update(contains("UPDATE dbo.ACCOUNT"), any(Object[].class));
+        verify(transactionRepository).save(any());
+        verify(remittanceRepository).save(rem);
     }
 
     @Test

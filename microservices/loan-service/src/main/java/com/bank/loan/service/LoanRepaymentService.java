@@ -14,6 +14,7 @@ import com.bank.loan.repository.LoanScheduleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
@@ -26,9 +27,8 @@ import static com.bank.loan.service.AmortizationCalculator.money;
 /**
  * POST /loans/{loanId}/repayments.
  *
- * One DB transaction: lock LOAN (UPDLOCK) → internal transfer customer → PH1000000LOAN (LOAN_REPAYMENT,
- * key LOAN-REPAY-{Idempotency-Key}) → on POSTED save LOAN_REPAYMENT and apply the money: penalty first,
- * then the oldest unpaid installments, interest before principal. Insufficient balance → 422, nothing saved.
+ * Commit a pending repayment before dispatching the internal transfer. Recovery reuses its immutable
+ * key and amount. A second short transaction applies a confirmed posting to the loan and outbox once.
  */
 @Service
 public class LoanRepaymentService {
@@ -66,19 +66,22 @@ public class LoanRepaymentService {
         LoanApplicationService.validateKey(idempotencyKey);
         BigDecimal payment = money(amount);
 
-        var previous = repaymentRepository.findByIdempotencyKey(idempotencyKey);
-        if (previous.isPresent()) return new RepayOutcome(replay(previous.get(), customerId, loanId, payment), true);
+        if (payment.signum() <= 0) throw LoanException.validation("amount must be positive.");
 
-        return tx.execute(status -> {
+        boolean replayed = Boolean.TRUE.equals(tx.execute(status -> {
             Loan loan = loanRepository.lockById(loanId)
                     .filter(l -> l.getCustomerId().equals(customerId))
                     .orElseThrow(LoanException::loanNotFound);
 
             // A concurrent request with the same key may have finished while we waited for the lock.
             var raced = repaymentRepository.findByIdempotencyKey(idempotencyKey);
-            if (raced.isPresent()) return new RepayOutcome(replay(raced.get(), customerId, loanId, payment), true);
+            if (raced.isPresent()) {
+                replay(raced.get(), customerId, loanId, payment); // Validate ownership and immutable details.
+                return true;
+            }
 
             if (Loan.STATUS_CLOSED.equals(loan.getStatus())) throw LoanException.validation("This loan is already fully paid.");
+            if (repaymentRepository.existsByLoanIdAndStatus(loanId, LoanRepayment.PENDING)) throw pending();
 
             List<LoanSchedule> rows = scheduleRepository.findByLoanIdOrderByInstallmentNo(loanId);
             BigDecimal owed = loan.getPenaltyDue().add(rows.stream()
@@ -89,30 +92,54 @@ public class LoanRepaymentService {
                 throw LoanException.validation("amount is more than the total still owed (" + money(owed).toPlainString() + ").");
             }
 
-            var account = reader.findAccountById(loan.getAccountId()).orElseThrow(LoanException::loanNotFound);
-            OrchestratorClient.TransferResult transfer = orchestrator.transfer(
-                    account.accountNumber(), props.getBankAccountNo(), payment, "LOAN_REPAYMENT",
-                    "LOAN-REPAY-" + idempotencyKey, "Repayment for loan " + loan.getReferenceNo(), correlationId);
-            if (transfer.isInsufficientFunds()) throw LoanException.insufficientFunds();
-            if (!transfer.isPosted()) {
-                log.warn("[loan-service] Repayment for loan {} not posted: {} {}", loanId, transfer.status(), transfer.reason());
-                throw LoanException.coreUnavailable("The payment could not be completed right now. Please try again in a moment.");
-            }
-
             LoanRepayment repayment = new LoanRepayment();
             repayment.setLoanId(loanId);
             repayment.setReferenceNo(LoanEvents.placeholderReference());
             repayment.setIdempotencyKey(idempotencyKey);
             repayment.setAmount(payment);
-            repayment.setTransactionId(transfer.transactionId());
+            repayment.setStatus(LoanRepayment.PENDING);
             repayment.setCreatedDate(events.nowUtc());
             repayment = repaymentRepository.save(repayment);
             repayment.setReferenceNo(events.reference("LRP", repayment.getRepaymentId()));
             repayment = repaymentRepository.save(repayment);
+            return false;
+        }));
+        return settle(idempotencyKey, correlationId, replayed);
+    }
 
+    private RepayOutcome settle(String key, String correlationId, boolean replayed) {
+        LoanRepayment intent = repaymentRepository.findByIdempotencyKey(key).orElseThrow();
+        Loan snapshot = loanRepository.findById(intent.getLoanId()).orElseThrow(LoanException::loanNotFound);
+        if (LoanRepayment.POSTED.equals(intent.getStatus())) return new RepayOutcome(response(intent, snapshot), true);
+        if (!LoanRepayment.PENDING.equals(intent.getStatus())) throw terminalFailure(intent);
+
+        var account = reader.findAccountById(snapshot.getAccountId()).orElseThrow(LoanException::loanNotFound);
+        // No database transaction/lock is held while the remote service processes the transfer.
+        var transfer = orchestrator.transfer(account.accountNumber(), props.getBankAccountNo(), intent.getAmount(),
+                "LOAN_REPAYMENT", "LOAN-REPAY-" + key, "Repayment for loan " + snapshot.getReferenceNo(), correlationId);
+
+        RepayOutcome result = tx.execute(status -> {
+            Loan loan = loanRepository.lockById(intent.getLoanId()).orElseThrow(LoanException::loanNotFound);
+            LoanRepayment repayment = repaymentRepository.findByIdempotencyKey(key).orElseThrow();
+            if (LoanRepayment.POSTED.equals(repayment.getStatus())) return new RepayOutcome(response(repayment, loan), true);
+            if (!LoanRepayment.PENDING.equals(repayment.getStatus())) throw terminalFailure(repayment);
+            if (transfer == null || !transfer.isPosted() || transfer.transactionId() == null) {
+                if (transfer != null && "REJECTED".equals(transfer.status())) {
+                    repayment.setStatus(transfer.isInsufficientFunds() ? LoanRepayment.INSUFFICIENT_FUNDS : LoanRepayment.REJECTED);
+                    repaymentRepository.save(repayment);
+                }
+                return null; // Commit any terminal result before reporting an error to the caller.
+            }
+
+            BigDecimal payment = repayment.getAmount();
+            List<LoanSchedule> rows = scheduleRepository.findByLoanIdOrderByInstallmentNo(loan.getLoanId());
             applyPayment(loan, rows, payment);
+            updateAutoDebit(loan, repayment);
             scheduleRepository.saveAll(rows);
             loanRepository.save(loan);
+            repayment.setTransactionId(transfer.transactionId());
+            repayment.setStatus(LoanRepayment.POSTED);
+            repaymentRepository.save(repayment);
 
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("customerId", loan.getCustomerId());
@@ -133,8 +160,56 @@ public class LoanRepaymentService {
 
             log.info("[loan-service] Repayment {} of {} applied to loan {} → status={} outstanding={}",
                     repayment.getReferenceNo(), payment, loan.getReferenceNo(), loan.getStatus(), loan.getOutstandingPrincipal());
-            return new RepayOutcome(response(repayment, loan), false);
+            return new RepayOutcome(response(repayment, loan), replayed);
         });
+        if (result != null) return result;
+        LoanRepayment current = repaymentRepository.findByIdempotencyKey(key).orElseThrow();
+        if (LoanRepayment.POSTED.equals(current.getStatus())) {
+            return new RepayOutcome(response(current, loanRepository.findById(current.getLoanId()).orElseThrow()), true);
+        }
+        if (!LoanRepayment.PENDING.equals(current.getStatus())) throw terminalFailure(current);
+        throw pending();
+    }
+
+    @Scheduled(fixedDelayString = "${loan.repayment-recovery-ms:30000}", initialDelayString = "${loan.repayment-recovery-ms:30000}")
+    public void recoverRepayments() {
+        for (LoanRepayment repayment : repaymentRepository.findByStatusOrderByCreatedDateAsc(LoanRepayment.PENDING)) {
+            try {
+                settle(repayment.getIdempotencyKey(), "loan-repayment-recovery-" + repayment.getRepaymentId(), true);
+            } catch (RuntimeException e) {
+                log.warn("[loan-service] Repayment recovery not finished for {}: {}", repayment.getReferenceNo(), e.getMessage());
+            }
+        }
+    }
+
+    boolean isPosted(String key) {
+        return repaymentRepository.findByIdempotencyKey(key)
+                .map(r -> LoanRepayment.POSTED.equals(r.getStatus())).orElse(false);
+    }
+
+    private static LoanException pending() {
+        return LoanException.coreUnavailable("Your repayment is still processing and will update automatically. Do not submit another payment.");
+    }
+
+    private static LoanException terminalFailure(LoanRepayment repayment) {
+        if (LoanRepayment.INSUFFICIENT_FUNDS.equals(repayment.getStatus())) return LoanException.insufficientFunds();
+        return new LoanException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "repayment-rejected",
+                "Repayment Rejected", "The repayment was rejected. No loan payment was applied.");
+    }
+
+    private static void updateAutoDebit(Loan loan, LoanRepayment repayment) {
+        String prefix = "AUTODEBIT-" + loan.getLoanId() + "-";
+        if (!repayment.getIdempotencyKey().startsWith(prefix)) return;
+        try {
+            var date = java.time.LocalDate.parse(repayment.getIdempotencyKey().substring(prefix.length()));
+            if (loan.getLastAutoDebitDate() == null || !loan.getLastAutoDebitDate().isAfter(date)) {
+                loan.setLastAutoDebitDate(date);
+                loan.setLastAutoDebitStatus(Loan.AUTODEBIT_PAID);
+                loan.setLastAutoDebitAmount(repayment.getAmount());
+            }
+        } catch (java.time.format.DateTimeParseException ignored) {
+            // A customer-supplied key with this prefix is still a normal manual repayment.
+        }
     }
 
     /** Penalty first, then oldest unpaid rows, interest before principal. Updates loan status. */
