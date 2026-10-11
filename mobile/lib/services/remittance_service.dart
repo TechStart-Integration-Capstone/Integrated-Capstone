@@ -181,7 +181,7 @@ class RemittanceService {
           success: false,
           message: errorMsg.isNotEmpty
               ? errorMsg
-              : 'Transfer failed with status ${response.statusCode}',
+              : 'Transfer failed with status ${remResponse.statusCode}',
         );
       }
     } catch (e) {

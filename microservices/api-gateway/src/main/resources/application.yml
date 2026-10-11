@@ -87,11 +87,17 @@ spring:
           filters:
             - RewritePath=/api/v1/auth/banking/favorites(?<remaining>.*), /api/v1/accounts/favorites$1
 
-        # Auth Service — public, no rate limiting
+        # Auth Service — rate limited
         - id: auth-service
           uri: http://${AUTH_SERVICE_HOST:auth-service}:8081
           predicates:
             - Path=/api/v1/auth/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter: "#{@redisRateLimiter}"
+                key-resolver: "#{@userKeyResolver}"
+                deny-empty-key: false
 
         # Account Service — read-only, no rate limiting
         - id: account-service

@@ -1,4 +1,11 @@
 # Changelog
+
+- 2026-10-11 — Security & Reliability Hardening (`BankingService.java`, `main.dart`, `account_service.dart`, `remittance_service.dart`, `application.yml`):
+  - **Enforce MPIN Validation (`BankingService.java`):** Required `currentMpin` validation before updating MPIN when an existing hash exists.
+  - **Gate DevHttpOverrides (`main.dart`):** Restricted insecure certificate bypass strictly behind `kDebugMode` on mobile.
+  - **Mobile State & Error Handling (`main.dart`, `account_service.dart`, `remittance_service.dart`):** Removed premature unauthenticated BLoC startup events; eliminated fake offline receipts on network failure, returning explicit error feedback; corrected shadowed response status codes in fallback branches.
+  - **Gateway Rate Limiting (`application.yml`):** Added `RequestRateLimiter` to `/api/v1/auth/**` routes to protect auth endpoints. — [dom]
+
 - 2026-10-11 — Savings confirmation expiry and available funds in transfer forms — [aly]
   - frontend/bank/savings-live.js expires successful confirmations after 4.5 seconds; pending/uncertain notices remain. bank.js and external.js display live savings available balances in source account options and the source balance note, sharing the existing session-scoped breakdown snapshots. Savings totals are never substituted for unavailable funds; transfer approval remains server-side.
   - Added regression checks to scripts/test_bank_balance_refresh.mjs and tests/savings-live-checks.js for available/zero/unavailable balances, account/session isolation, privacy, PayPink/external selectors, banner expiry across redraws and persistent pending notices. All 136 Node regressions, three JavaScript syntax checks and the headless browser suite passed, including the actual bank shell with mocked HTTP and no runtime errors. Live service acceptance remains pending.

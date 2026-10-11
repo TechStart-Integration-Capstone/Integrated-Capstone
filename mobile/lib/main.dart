@@ -41,7 +41,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = true;
   await di.initServiceLocator();
-  if (!kIsWeb) {
+  if (!kIsWeb && kDebugMode) {
     HttpOverrides.global = DevHttpOverrides();
   }
   SystemChrome.setSystemUIOverlayStyle(
@@ -54,9 +54,9 @@ void main() async {
     MultiBlocProvider(
       providers: [
         BlocProvider<AuthBloc>(create: (_) => di.sl<AuthBloc>()),
-        BlocProvider<AccountsBloc>(create: (_) => di.sl<AccountsBloc>()..add(FetchAccountsEvent())),
+        BlocProvider<AccountsBloc>(create: (_) => di.sl<AccountsBloc>()),
         BlocProvider<RemittanceBloc>(create: (_) => di.sl<RemittanceBloc>()),
-        BlocProvider<TransactionsBloc>(create: (_) => di.sl<TransactionsBloc>()..add(FetchTransactionsEvent())),
+        BlocProvider<TransactionsBloc>(create: (_) => di.sl<TransactionsBloc>()),
       ],
       child: const PayPinkMobileApp(),
     ),
