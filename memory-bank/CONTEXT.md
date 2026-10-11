@@ -49,6 +49,12 @@ _Last Updated: 2026-10-09 (Auto-shutdown disabled on Azure VM vm-paypink, 26/26 
 
 ## What it is
 
+### Manual reconciliation audit recovery (2026-10-11)
+
+- Run reconciliation now attempts evidence-based recovery before comparing the latest 50 transactions. A new reconciliation-service OutboxAuditRecovery validates retained original outbox payloads against successful Azure SQL ledger records and appends missing PostgreSQL audit rows using the existing transaction/account unique key. It never rewrites mismatches, touches balances, changes outbox status or republishes notifications; missing/conflicting evidence remains drifted. Scheduled/Kafka reconciliation stays detection-only.
+- Manual results expose checked/recovered/matched/drifted counts. The admin frontend uses these results rather than its old unconditional matched alert, does not automatically repeat a failed recovery request, and removes mock-row fallback from reconciliation results. All 36 backend tests, three frontend tests and syntax/diff checks passed; the reconciliation-service JAR was built locally. Tests use mocked JDBC/repositories/HTTP; native database/concurrency and live acceptance remain pending.
+- Deployment and live data recovery are not performed. Rebuild/recreate reconciliation-service and frontend on the computer hosting the admin page (build its JAR first); no migration required. See docs/reconciliation-recovery.md. Separate PostgreSQL/Kafka stacks can recover complete audit payloads from their shared Azure SQL outbox, but incomplete historical records and existing discrepancies require further investigation. Credited to [aly].
+
 ### Interest single-admin approval and requested October backfill (2026-10-11)
 
 - Windows PowerShell follow-up: the first run on the other computer incorrectly reported no savings accounts because Invoke-RestMethod's top-level JSON array was nested by `@(Invoke-RestMethod ...)`. The helper now assigns then enumerates the response; the test mock now reproduces the real array behavior. The exact error was reproduced before fixing it, and all nine offline cases pass afterward. That failed run stopped before migration/backfill writes; rerun the same command with the updated script. No rebuild or live database modification performed for this correction.
