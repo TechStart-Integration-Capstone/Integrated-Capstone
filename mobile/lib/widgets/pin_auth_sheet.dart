@@ -167,122 +167,124 @@ class _PinAuthSheetState extends State<PinAuthSheet> with SingleTickerProviderSt
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle
-          Container(
-            width: 38,
-            height: 4,
-            decoration: BoxDecoration(
-              color: isDark ? PayPinkTheme.darkLine : Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Security Lock Icon
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: isDark ? PayPinkTheme.wineLight.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.lock_outline_rounded,
-              color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-              size: 24,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Text(
-            widget.title,
-            style: PayPinkTheme.display(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: textInk,
-            ),
-          ),
-          const SizedBox(height: 4),
-
-          if (widget.amount != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(
-                '₱${widget.amount!.toStringAsFixed(2)}',
-                style: PayPinkTheme.display(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
-                ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isDark ? PayPinkTheme.darkLine : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
+            const SizedBox(height: 16),
 
-          Text(
-            widget.description,
-            textAlign: TextAlign.center,
-            style: PayPinkTheme.body(
-              fontSize: 12,
-              color: textMuted,
+            // Security Lock Icon
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: isDark ? PayPinkTheme.wineLight.withValues(alpha: 0.25) : PayPinkTheme.pinkSubtle,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.lock_outline_rounded,
+                color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                size: 24,
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 12),
 
-          // Animated PIN Indicator
-          AnimatedBuilder(
-            animation: _shakeAnimation,
-            builder: (context, child) {
-              return Transform.translate(
-                offset: Offset(_isError ? _shakeAnimation.value * (1 - _shakeController.value) : 0, 0),
-                child: child,
-              );
-            },
-            child: PinIndicatorDots(
-              length: _enteredPin.length,
-              totalDigits: 6,
-              isError: _isError,
-              isDark: isDark,
+            Text(
+              widget.title,
+              style: PayPinkTheme.display(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: textInk,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
+            const SizedBox(height: 4),
 
-          SizedBox(
-            height: 18,
-            child: _errorMessage.isNotEmpty
-                ? Text(
-                    _errorMessage,
-                    style: PayPinkTheme.body(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: PayPinkTheme.red,
-                    ),
-                  )
-                : null,
-          ),
-          const SizedBox(height: 12),
+            if (widget.amount != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '₱${widget.amount!.toStringAsFixed(2)}',
+                  style: PayPinkTheme.display(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? PayPinkTheme.pink : PayPinkTheme.wine,
+                  ),
+                ),
+              ),
 
-          // Numeric Keypad
-          PayPinkKeypad(
-            onKeyPressed: _onKeyPress,
-            onBackspace: _onBackspace,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
+            Text(
+              widget.description,
+              textAlign: TextAlign.center,
               style: PayPinkTheme.body(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+                fontSize: 12,
                 color: textMuted,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+
+            // Animated PIN Indicator
+            AnimatedBuilder(
+              animation: _shakeAnimation,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(_isError ? _shakeAnimation.value * (1 - _shakeController.value) : 0, 0),
+                  child: child,
+                );
+              },
+              child: PinIndicatorDots(
+                length: _enteredPin.length,
+                totalDigits: 6,
+                isError: _isError,
+                isDark: isDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            SizedBox(
+              height: 18,
+              child: _errorMessage.isNotEmpty
+                  ? Text(
+                      _errorMessage,
+                      style: PayPinkTheme.body(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: PayPinkTheme.red,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(height: 12),
+
+            // Numeric Keypad
+            PayPinkKeypad(
+              onKeyPressed: _onKeyPress,
+              onBackspace: _onBackspace,
+              isDark: isDark,
+            ),
+            const SizedBox(height: 10),
+
+            TextButton(
+              onPressed: () => Navigator.pop(context, widget.returnPinString ? null : false),
+              child: Text(
+                'Cancel',
+                style: PayPinkTheme.body(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: textMuted,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

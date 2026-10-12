@@ -162,35 +162,51 @@ class _ProfileSheetState extends State<ProfileSheet> {
       if (verifiedCurrentPin == null || !mounted) return;
     }
 
-    // Step 2: Push PIN Setup screen to create and confirm new MPIN
-    Navigator.pop(context); // Close profile sheet
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PinAuthScreen(
+    // Capture ancestor Navigator and ScaffoldMessenger before closing this sheet
+    // so they remain valid after ProfileSheet unmounts.
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+
+    // Step 2: Close profile sheet and push PIN Setup screen to create and confirm new MPIN
+    navigator.pop();
+    final updated = await navigator.push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (routeContext) => PinAuthScreen(
           mode: PinScreenMode.setup,
           username: widget.currentUser,
           fullName: _nameController.text,
           currentPin: verifiedCurrentPin,
           isDarkMode: _isDark,
-          onAuthSuccess: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                backgroundColor: PayPinkTheme.wine,
-                content: Row(
-                  children: [
-                    Icon(Icons.check_circle_rounded, color: PayPinkTheme.pink, size: 18),
-                    SizedBox(width: 8),
-                    Text('6-Digit MPIN updated successfully.'),
-                  ],
-                ),
-              ),
-            );
-          },
+          onCancel: () => Navigator.of(routeContext).pop(false),
+          onAuthSuccess: () => Navigator.of(routeContext).pop(true),
         ),
       ),
     );
+
+    if (updated == true && messenger != null) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: PayPinkTheme.wine,
+            duration: const Duration(seconds: 4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: PayPinkTheme.pink, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '6-Digit MPIN updated successfully.',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+    }
   }
 
   void _confirmLogout() {

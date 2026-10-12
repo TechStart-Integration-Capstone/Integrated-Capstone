@@ -4,8 +4,10 @@ import '../theme/paypink_theme.dart';
 import '../screens/pin_auth_screen.dart';
 import '../services/account_service.dart';
 import '../services/savings_service.dart';
+import '../services/secure_token_storage.dart';
 import '../services/web_storage_stub.dart'
     if (dart.library.html) '../services/web_storage_web.dart';
+import 'pin_auth_sheet.dart';
 
 class PayPinkBottomSheets {
   static void _copyText(String text) {
@@ -1028,14 +1030,55 @@ Thank you for banking with PayPink!
               width: double.infinity,
               height: 46,
               child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const PinAuthScreen(mode: PinScreenMode.setup),
+                onPressed: () async {
+                  final hasPin = await SecureTokenStorage.hasPin();
+                  if (!ctx.mounted) return;
+                  String? verifiedCurrentPin;
+                  if (hasPin) {
+                    verifiedCurrentPin = await PinAuthSheet.promptForPin(
+                      ctx,
+                      title: 'Verify Current MPIN',
+                      description: 'Enter your existing 6-digit MPIN to authorize changing your security credentials.',
+                    );
+                    if (verifiedCurrentPin == null || !ctx.mounted) return;
+                  }
+                  final navigator = Navigator.of(ctx);
+                  final messenger = ScaffoldMessenger.maybeOf(ctx);
+                  navigator.pop();
+                  final updated = await navigator.push<bool>(
+                    MaterialPageRoute<bool>(
+                      builder: (routeContext) => PinAuthScreen(
+                        mode: PinScreenMode.setup,
+                        currentPin: verifiedCurrentPin,
+                        onCancel: () => Navigator.of(routeContext).pop(false),
+                        onAuthSuccess: () => Navigator.of(routeContext).pop(true),
+                      ),
                     ),
                   );
+                  if (updated == true && messenger != null) {
+                    messenger
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: PayPinkTheme.wine,
+                          duration: const Duration(seconds: 4),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          content: const Row(
+                            children: [
+                              Icon(Icons.check_circle_rounded, color: PayPinkTheme.pink, size: 20),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '6-Digit MPIN updated successfully.',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                  }
                 },
                 icon: const Icon(Icons.dialpad_rounded, size: 18, color: PayPinkTheme.wine),
                 label: Text(

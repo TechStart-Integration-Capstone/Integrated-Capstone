@@ -118,13 +118,13 @@ public class BankingService {
                         + "current_balance, status FROM ACCOUNT WHERE customer_id = ? ORDER BY account_id",
                 (rs, row) -> new Account(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4),
                         rs.getBigDecimal(5), rs.getString(6)), customer.getCustomerId());
-        boolean hasMpin = customer.getMpinHash() != null && !customer.getMpinHash().isBlank();
-        if (!hasMpin) {
-            try {
-                String dbHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
-                hasMpin = dbHash != null && !dbHash.isBlank();
-            } catch (Exception ignored) {}
+        String dbHash = null;
+        try {
+            dbHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+        } catch (Exception ignored) {
+            dbHash = customer.getMpinHash();
         }
+        boolean hasMpin = dbHash != null && !dbHash.isBlank();
         return new Profile(customer.getFirstName(), customer.getFirstName() + " " + customer.getLastName(),
                 customer.getUsername(), customer.getEmail(), accounts, hasMpin);
     }
@@ -188,11 +188,11 @@ public class BankingService {
     @Transactional(readOnly = true)
     public boolean verifyMpin(String authorization, String mpin) {
         Customer customer = authenticatedCustomer(authorization);
-        String existingHash = customer.getMpinHash();
-        if (existingHash == null || existingHash.isBlank()) {
-            try {
-                existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
-            } catch (Exception ignored) {}
+        String existingHash = null;
+        try {
+            existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+        } catch (Exception ignored) {
+            existingHash = customer.getMpinHash();
         }
         if (existingHash == null || existingHash.isBlank()) {
             return false;
@@ -204,11 +204,11 @@ public class BankingService {
     @Transactional(readOnly = true)
     public boolean hasMpin(String authorization) {
         Customer customer = authenticatedCustomer(authorization);
-        String existingHash = customer.getMpinHash();
-        if (existingHash == null || existingHash.isBlank()) {
-            try {
-                existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
-            } catch (Exception ignored) {}
+        String existingHash = null;
+        try {
+            existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+        } catch (Exception ignored) {
+            existingHash = customer.getMpinHash();
         }
         return existingHash != null && !existingHash.isBlank();
     }

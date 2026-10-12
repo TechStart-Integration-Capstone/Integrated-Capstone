@@ -82,6 +82,7 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   bool _isLoadingAuth = true;
   bool _showPinLogin = false;
   bool _requirePinSetup = false;
+  final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
   @override
   void initState() {
@@ -165,6 +166,30 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
       _requirePinSetup = false;
       _isAuthenticated = true;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _messengerKey.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: PayPinkTheme.wine,
+            duration: const Duration(seconds: 4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: PayPinkTheme.pink, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '6-Digit MPIN saved to your account.',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+    });
   }
 
   void _handleLogout() async {
@@ -183,6 +208,7 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PayPink Bank',
+      scaffoldMessengerKey: _messengerKey,
       debugShowCheckedModeBanner: false,
       theme: PayPinkTheme.lightTheme,
       darkTheme: PayPinkTheme.darkTheme,

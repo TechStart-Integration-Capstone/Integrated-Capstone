@@ -40,6 +40,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
   String _currentPin = '';
   String _firstEnteredPin = '';
   bool _isConfirming = false;
+  bool _isSubmitting = false;
   bool _isError = false;
   String _errorMessage = '';
 
@@ -104,7 +105,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
   }
 
   void _onKeyPress(String digit) {
-    if (_currentPin.length >= 6) return;
+    if (_isSubmitting || _currentPin.length >= 6) return;
 
     setState(() {
       _currentPin += digit;
@@ -118,6 +119,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
   }
 
   void _onBackspace() {
+    if (_isSubmitting) return;
     if (_currentPin.isNotEmpty) {
       setState(() {
         _currentPin = _currentPin.substring(0, _currentPin.length - 1);
@@ -128,6 +130,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
   }
 
   void _onClear() {
+    if (_isSubmitting) return;
     setState(() {
       _currentPin = '';
       _isError = false;
@@ -136,8 +139,11 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
   }
 
   Future<void> _handleCompletePin(String pin) async {
+    if (_isSubmitting) return;
     if (widget.mode == PinScreenMode.login) {
+      setState(() => _isSubmitting = true);
       final isValid = await SecureTokenStorage.verifyPin(pin);
+      if (mounted) setState(() => _isSubmitting = false);
       if (isValid) {
         HapticFeedback.mediumImpact();
         if (widget.onAuthSuccess != null) {
@@ -146,7 +152,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
           Navigator.of(context).pop(true);
         }
       } else {
-        _triggerError('Incorrect MPIN. Please try again.');
+        if (mounted) _triggerError('Incorrect MPIN. Please try again.');
       }
     } else {
       // Setup Mode
@@ -160,17 +166,24 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
       } else {
         // Step 2 confirmation
         if (pin == _firstEnteredPin) {
+          setState(() => _isSubmitting = true);
           final saved = await SecureTokenStorage.savePin(
             pin,
             owner: _resolvedUsername,
             currentPin: widget.currentPin,
           );
+          if (mounted) setState(() => _isSubmitting = false);
           if (!saved) {
-            _triggerError('Failed to save MPIN on server. Please try again.');
-            setState(() {
-              _isConfirming = false;
-              _firstEnteredPin = '';
-            });
+            if (mounted) {
+              _triggerError(
+                SecureTokenStorage.lastPinError ??
+                    'Failed to save MPIN on server. Please try again.',
+              );
+              setState(() {
+                _isConfirming = false;
+                _firstEnteredPin = '';
+              });
+            }
             return;
           }
           HapticFeedback.mediumImpact();
@@ -282,7 +295,9 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
                   Text(
                     widget.mode == PinScreenMode.login
                         ? 'Welcome back, $displayName'
-                        : (_isConfirming ? 'Confirm your MPIN' : 'Create your 6-digit MPIN'),
+                        : (_isConfirming
+                            ? (widget.currentPin != null ? 'Confirm your new MPIN' : 'Confirm your MPIN')
+                            : (widget.currentPin != null ? 'Create your new 6-digit MPIN' : 'Create your 6-digit MPIN')),
                     textAlign: TextAlign.center,
                     style: PayPinkTheme.display(
                       fontSize: 20,
@@ -295,8 +310,12 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
                     widget.mode == PinScreenMode.login
                         ? 'Enter your 6-digit MPIN for quick access'
                         : (_isConfirming
-                            ? 'Re-enter your 6-digit MPIN to confirm'
-                            : 'Set a secure PIN for login and payment authorization'),
+                            ? (widget.currentPin != null
+                                ? 'Re-enter your new 6-digit MPIN to confirm'
+                                : 'Re-enter your 6-digit MPIN to confirm')
+                            : (widget.currentPin != null
+                                ? 'Enter a new 6-digit MPIN for login and payment authorization'
+                                : 'Set a secure PIN for login and payment authorization')),
                     textAlign: TextAlign.center,
                     style: PayPinkTheme.body(
                       fontSize: 13,
