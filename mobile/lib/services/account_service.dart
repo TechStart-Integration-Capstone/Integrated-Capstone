@@ -824,11 +824,11 @@ class AccountService {
           );
         }
 
-        final err = _extractErrorMessage(response.body);
+        final err = _extractErrorMessage(remResp.body);
         return TransferReceipt(
           success: false,
           referenceId: '',
-          message: err.isNotEmpty ? err : 'Transfer failed (HTTP ${response.statusCode}).',
+          message: err.isNotEmpty ? err : 'Transfer failed (HTTP ${remResp.statusCode}).',
           amount: amount,
           sourceAccount: sourceAccount.accountNumber,
           destinationAccount: destinationAccountNumber,
@@ -836,12 +836,10 @@ class AccountService {
         );
       }
     } catch (e) {
-      // Local fallback simulation for presentation robustness if server offline
-      final ref = 'TRF-OFFLINE-${DateTime.now().millisecondsSinceEpoch}';
       return TransferReceipt(
-        success: true,
-        referenceId: ref,
-        message: 'Transfer executed and queued for ledger synchronization.',
+        success: false,
+        referenceId: '',
+        message: 'Unable to process transfer. Please check your network connection and try again.',
         amount: amount,
         sourceAccount: sourceAccount.accountNumber,
         destinationAccount: destinationAccountNumber,

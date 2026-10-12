@@ -181,6 +181,16 @@ BEGIN
 END
 GO
 
+-- Persist pending repayments before dispatch; existing records were already posted.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id IN (OBJECT_ID('dbo.LOAN_REPAYMENT', 'U'), OBJECT_ID('t24.LOAN_REPAYMENT', 'U')) AND name = 'status')
+BEGIN
+    IF OBJECT_ID('t24.LOAN_REPAYMENT', 'U') IS NOT NULL
+        ALTER TABLE t24.LOAN_REPAYMENT ADD status NVARCHAR(24) NOT NULL CONSTRAINT DF_LOAN_REPAYMENT_STATUS DEFAULT N'POSTED' WITH VALUES;
+    ELSE
+        ALTER TABLE dbo.LOAN_REPAYMENT ADD status NVARCHAR(24) NOT NULL CONSTRAINT DF_LOAN_REPAYMENT_STATUS DEFAULT N'POSTED' WITH VALUES;
+END
+GO
+
 -- 5. The bank's own loan account (holds the money PayPink lends out).
 --    paypink_bank cannot log in: its password hash is not a valid BCrypt hash.
 IF NOT EXISTS (SELECT 1 FROM dbo.CUSTOMER WHERE username = N'paypink_bank')

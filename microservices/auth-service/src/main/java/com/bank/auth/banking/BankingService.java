@@ -28,7 +28,8 @@ public class BankingService {
             @NotBlank @Size(min = 8, max = 64) String password) {}
     public record Account(long accountId, String accountNumber, String accountType,
                           String currency, BigDecimal currentBalance, String status) {}
-    public record Activity(long transactionId, long accountId, String accountNumber,
+    // A request without a ledger row has no transactionId; its reference identifies it.
+    public record Activity(Long transactionId, long accountId, String accountNumber,
                            BigDecimal amount, String currency, String type, String operation,
                            String reference, String status, LocalDateTime date, String counterpartyName, String counterpartyAccountNumber) {}
     public record Profile(String firstName, String fullName, String username, String email,
@@ -142,24 +143,36 @@ public class BankingService {
     @Transactional
     public void setMpin(String authorization, String mpin, String currentMpin) {
         Customer customer = authenticatedCustomer(authorization);
-        String existingHash = customer.getMpinHash();
-        if (existingHash == null || existingHash.isBlank()) {
-            try {
-                existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
-            } catch (Exception ignored) {}
+        if (mpin == null || !mpin.matches("[0-9]{6}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MPIN must be exactly 6 digits.");
         }
-        if (existingHash != null && !existingHash.isBlank() && currentMpin != null && !currentMpin.isBlank()) {
-            String checkHash = hashMpin(currentMpin);
-            if (!existingHash.equalsIgnoreCase(checkHash)) {
+        // Read the authoritative value: an absent/stale entity field must never permit a PIN reset.
+        final String existingHash;
+        try {
+            existingHash = jdbc.queryForObject("SELECT mpin_hash FROM CUSTOMER WHERE customer_id = ?", String.class, customer.getCustomerId());
+        } catch (org.springframework.dao.DataAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Unable to check your MPIN. Please try again.");
+        }
+        if (existingHash != null && !existingHash.isBlank()) {
+            if (currentMpin == null || currentMpin.isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter your current MPIN to change it.");
+            }
+            if (!currentMpin.trim().matches("[0-9]{6}") || !existingHash.equalsIgnoreCase(hashMpin(currentMpin))) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current MPIN is incorrect.");
             }
         }
-        String newHash = hashMpin(mpin);
-        customer.setMpinHash(newHash);
-        customers.save(customer);
+        // Compare-and-set also protects simultaneous first-time setup and concurrent changes.
+        final int updated;
         try {
-            jdbc.update("UPDATE CUSTOMER SET mpin_hash = ? WHERE customer_id = ?", newHash, customer.getCustomerId());
-        } catch (Exception ignored) {}
+            updated = jdbc.update("UPDATE CUSTOMER SET mpin_hash = ? WHERE customer_id = ? "
+                    + "AND (mpin_hash = ? OR (mpin_hash IS NULL AND ? IS NULL))",
+                    hashMpin(mpin), customer.getCustomerId(), existingHash, existingHash);
+        } catch (org.springframework.dao.DataAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Unable to save your MPIN. Please try again.");
+        }
+        if (updated != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Your MPIN changed during this request. Please try again with your current MPIN.");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -200,6 +213,8 @@ public class BankingService {
         // A P2P_REMITTANCE (transaction-service transfer) is also a single row for both sides, so the second SELECT
         // adds the receiver's leg as a TRANSFER_IN credit with the sender as counterparty. That leg uses the negated
         // transaction_id as its key, so a transfer between the customer's own accounts lists two distinct entries.
+        // Unposted transfer requests are appended for the sender only, without inventing a ledger ID.
+        // Once a matching ledger row exists, it replaces the request in this read model.
         return jdbc.query("SELECT * FROM (SELECT t.transaction_id AS activity_id, t.transaction_id AS ledger_id, a.account_id, a.account_number, "
                         + "t.amount, t.source_currency, t.transaction_type, COALESCE(CASE t.transaction_type WHEN 'LOAN_DISBURSEMENT' THEN 'CREDIT' "
                         + "WHEN 'LOAN_REPAYMENT' THEN 'DEBIT' END, "
@@ -207,27 +222,36 @@ public class BankingService {
                         + "WHERE o.transaction_id = t.transaction_id ORDER BY o.event_id), "
                         + "CASE WHEN t.transaction_type IN ('DEBIT','CREDIT') THEN t.transaction_type END) AS operation, "
                         + "t.status, t.transaction_date, c.first_name + ' ' + c.last_name AS counterparty_name, "
-                        + "target.account_number AS counterparty_account FROM LEDGER_TRANSACTION t "
+                        + "target.account_number AS counterparty_account, CASE WHEN t.transaction_type = 'P2P_REMITTANCE' "
+                        + "THEN t.reference_no END AS request_reference FROM LEDGER_TRANSACTION t "
                         + "JOIN ACCOUNT a ON a.account_id = CASE WHEN t.transaction_type = 'LOAN_DISBURSEMENT' "
                         + "THEN t.to_account_id ELSE t.from_account_id END "
                         + "LEFT JOIN ACCOUNT target ON target.account_id = t.to_account_id AND t.transaction_type IN ('TRANSFER_OUT','TRANSFER_IN','P2P_REMITTANCE') "
                         + "LEFT JOIN CUSTOMER c ON c.customer_id = target.customer_id WHERE a.customer_id = ? "
                         + "UNION ALL SELECT -t.transaction_id, t.transaction_id, a.account_id, a.account_number, t.amount, t.target_currency, "
-                        + "'TRANSFER_IN', 'CREDIT', t.status, t.transaction_date, c.first_name + ' ' + c.last_name, source.account_number "
+                        + "'TRANSFER_IN', 'CREDIT', t.status, t.transaction_date, c.first_name + ' ' + c.last_name, source.account_number, t.reference_no "
                         + "FROM LEDGER_TRANSACTION t JOIN ACCOUNT a ON a.account_id = t.to_account_id "
                         + "JOIN ACCOUNT source ON source.account_id = t.from_account_id "
                         + "LEFT JOIN CUSTOMER c ON c.customer_id = source.customer_id "
-                        + "WHERE t.transaction_type = 'P2P_REMITTANCE' AND a.customer_id = ?) activity "
+                        + "WHERE t.transaction_type = 'P2P_REMITTANCE' AND a.customer_id = ? "
+                        + "UNION ALL SELECT CAST(NULL AS BIGINT), r.remittance_id, a.account_id, a.account_number, "
+                        + "r.amount, r.currency, 'P2P_REMITTANCE', 'DEBIT', " + UnpostedTransferQuery.STATUS
+                        + ", r.created_at, c.first_name + ' ' + c.last_name, target.account_number, r.reference_no "
+                        + "FROM app.REMITTANCE r JOIN ACCOUNT a ON a.account_id = r.source_account_id "
+                        + "LEFT JOIN ACCOUNT target ON target.account_id = r.target_account_id "
+                        + "LEFT JOIN CUSTOMER c ON c.customer_id = target.customer_id "
+                        + "WHERE a.customer_id = ? AND r.caller_customer_id = ? AND " + UnpostedTransferQuery.ELIGIBLE + ") activity "
                         + "ORDER BY transaction_date DESC, ledger_id DESC, activity_id DESC OFFSET 0 ROWS FETCH NEXT 200 ROWS ONLY",
                 (rs, row) -> {
                     String type = rs.getString("transaction_type");
                     var rail = ExternalTransferService.recipientForType(type);
                     LocalDateTime date = rs.getTimestamp("transaction_date").toLocalDateTime();
-                    return new Activity(rs.getLong("activity_id"), rs.getLong("account_id"), rs.getString("account_number"),
+                    return new Activity(rs.getObject("activity_id", Long.class), rs.getLong("account_id"), rs.getString("account_number"),
                             rs.getBigDecimal("amount"), rs.getString("source_currency"), type, rs.getString("operation"),
-                            BankingIdentifiers.reference(rs.getLong("ledger_id"), date), rs.getString("status"), date,
+                            rs.getString("request_reference") != null && !rs.getString("request_reference").isBlank() ? rs.getString("request_reference")
+                                    : BankingIdentifiers.reference(rs.getLong("ledger_id"), date), rs.getString("status"), date,
                             rail == null ? rs.getString("counterparty_name") : rail.name(),
                             rail == null ? rs.getString("counterparty_account") : rail.number());
-                }, customer.getCustomerId(), customer.getCustomerId());
+                }, customer.getCustomerId(), customer.getCustomerId(), customer.getCustomerId(), customer.getCustomerId());
     }
 }

@@ -7,6 +7,13 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "LOAN_REPAYMENT", schema = "t24")
 public class LoanRepayment {
+    public static final String PENDING = "PENDING";
+    public static final String POSTED = "POSTED";
+    public static final String REJECTED = "REJECTED";
+    public static final String INSUFFICIENT_FUNDS = "INSUFFICIENT_FUNDS";
+
+    @Column(name = "status", nullable = false, length = 24)
+    private String status = POSTED; // Existing rows were saved only after successful settlement.
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,6 +39,8 @@ public class LoanRepayment {
     private LocalDateTime createdDate; // UTC
 
     public LoanRepayment() {}
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public Long getRepaymentId() { return repaymentId; }
     public void setRepaymentId(Long repaymentId) { this.repaymentId = repaymentId; }

@@ -119,6 +119,10 @@ class LoanFlowsTest {
         });
         when(repaymentRepo.findByIdempotencyKey(anyString())).thenAnswer(inv -> repayments.values().stream()
                 .filter(r -> r.getIdempotencyKey().equals(inv.getArgument(0))).findFirst());
+        when(repaymentRepo.existsByLoanIdAndStatus(anyLong(),anyString())).thenAnswer(inv -> repayments.values().stream()
+                .anyMatch(r -> r.getLoanId().equals(inv.getArgument(0)) && r.getStatus().equals(inv.getArgument(1))));
+        when(repaymentRepo.findByStatusOrderByCreatedDateAsc(anyString())).thenAnswer(inv -> repayments.values().stream()
+                .filter(r -> r.getStatus().equals(inv.getArgument(0))).toList());
 
         OutboxEventRepository outboxRepo = mock(OutboxEventRepository.class);
         when(outboxRepo.save(any())).thenAnswer(inv -> { outbox.add(inv.getArgument(0)); return inv.getArgument(0); });
@@ -446,6 +450,58 @@ class LoanFlowsTest {
         assertThat(loans).hasSize(1);
     }
 
+    @Test void pendingRepaymentRecoversWithoutCustomerRetryAndOnlyAppliesOnce() {
+        LoanSummary loan = disbursedNormalLoan();
+        stubRepayment(new TransferResult("PENDING_CORE", null, null, "Timeout"));
+        assertThatThrownBy(() -> repaymentService.repay(CUSTOMER,loan.loanId(),"delayed",bd("7719.27"),null))
+                .isInstanceOf(LoanException.class);
+        repaymentService.recoverRepayments();
+        assertThat(repayments.values()).singleElement().satisfies(r -> assertThat(r.getStatus()).isEqualTo("PENDING"));
+        assertThat(loans.get(loan.loanId()).getOutstandingPrincipal()).isEqualByComparingTo("250000");
+        assertThatThrownBy(() -> repaymentService.repay(CUSTOMER,loan.loanId(),"different",bd("7719.27"),null))
+                .isInstanceOf(LoanException.class).hasMessageContaining("still processing");
+        assertThatThrownBy(() -> repaymentService.repay(CUSTOMER,loan.loanId(),"delayed",bd("1"),null))
+                .isInstanceOfSatisfying(LoanException.class,e -> assertThat(e.getType()).isEqualTo("idempotency-conflict"));
+        assertThatThrownBy(() -> repaymentService.repay(OTHER_CUSTOMER,loan.loanId(),"delayed",bd("7719.27"),null))
+                .isInstanceOf(LoanException.class);
+        stubRepayment(new TransferResult("POSTED",601L,"FT-DELAYED",null));
+        repaymentService.recoverRepayments();
+        repaymentService.recoverRepayments();
+        assertThat(loans.get(loan.loanId()).getOutstandingPrincipal()).isEqualByComparingTo("243739.06");
+        assertThat(repayments.values()).singleElement().satisfies(r -> {
+            assertThat(r.getStatus()).isEqualTo("POSTED");
+            assertThat(r.getTransactionId()).isEqualTo(601L);
+        });
+        assertThat(outboxTypes().stream().filter(LoanEvents.REPAYMENT_POSTED::equals)).hasSize(1);
+        verify(orchestrator,times(3)).transfer(eq(ACCOUNT_NO),any(),eq(bd("7719.27")),eq("LOAN_REPAYMENT"),
+                eq("LOAN-REPAY-delayed"),any(),any());
+    }
+
+    @Test void rejectedRepaymentDoesNotReduceLoanOrRetryInBackground() {
+        LoanSummary loan=disbursedNormalLoan();
+        stubRepayment(new TransferResult("REJECTED",null,null,"Risk rejected"));
+        assertThatThrownBy(() -> repaymentService.repay(CUSTOMER,loan.loanId(),"rejected",bd("100"),null))
+                .isInstanceOfSatisfying(LoanException.class,e -> assertThat(e.getType()).isEqualTo("repayment-rejected"));
+        repaymentService.recoverRepayments();
+        assertThatThrownBy(() -> repaymentService.repay(CUSTOMER,loan.loanId(),"rejected",bd("100"),null))
+                .isInstanceOf(LoanException.class);
+        verify(orchestrator,times(1)).transfer(eq(ACCOUNT_NO),any(),any(),eq("LOAN_REPAYMENT"),any(),any(),any());
+        assertThat(loans.get(loan.loanId()).getOutstandingPrincipal()).isEqualByComparingTo("250000");
+        assertThat(outboxTypes()).doesNotContain(LoanEvents.REPAYMENT_POSTED);
+    }
+
+    @Test void delayedAutoDebitUpdatesTheLoanAndItsRecordedOutcome() {
+        LoanSummary loan=disbursedNormalLoan();
+        stubRepayment(new TransferResult("PENDING_CORE",null,null,"Timeout"));
+        eodService.run(LocalDate.of(2026,11,5));
+        assertThat(loans.get(loan.loanId()).getLastAutoDebitStatus()).isEqualTo(Loan.AUTODEBIT_FAILED);
+        stubRepayment(new TransferResult("POSTED",612L,"FT-AUTO",null));
+        repaymentService.recoverRepayments();
+        assertThat(loans.get(loan.loanId()).getLastAutoDebitStatus()).isEqualTo(Loan.AUTODEBIT_PAID);
+        assertThat(schedule.get(0).getStatus()).isEqualTo(LoanSchedule.STATUS_PAID);
+        assertThat(loans.get(loan.loanId()).getOutstandingPrincipal()).isEqualByComparingTo("243739.06");
+    }
+
     // ── Repay ───────────────────────────────────────────────────────────────
 
     private void stubRepayment(TransferResult result) {
@@ -491,7 +547,7 @@ class LoanFlowsTest {
                     assertThat(e.getType()).isEqualTo("insufficient-funds");
                     assertThat(e.getStatus().value()).isEqualTo(422);
                 });
-        assertThat(repayments).isEmpty();
+        assertThat(repayments.values()).hasSize(1).allSatisfy(r -> assertThat(r.getStatus()).isEqualTo(LoanRepayment.INSUFFICIENT_FUNDS));
         assertThat(schedule).allSatisfy(s -> assertThat(s.getAmountPaid()).isEqualByComparingTo("0"));
         assertThat(loans.get(loan.loanId()).getOutstandingPrincipal()).isEqualByComparingTo("250000.00");
         assertThat(outbox).hasSize(eventsBefore);
@@ -594,7 +650,7 @@ class LoanFlowsTest {
         eodService.run(LocalDate.of(2026, 11, 5)); // admin re-run the same day: no duplicate alert
 
         assertThat(dueDay.autoDebitsInsufficientFunds()).isEqualTo(1);
-        assertThat(repayments).isEmpty();
+        assertThat(repayments.values()).hasSize(1).allSatisfy(r -> assertThat(r.getStatus()).isEqualTo(LoanRepayment.INSUFFICIENT_FUNDS));
         assertThat(schedule.get(0).getStatus()).isEqualTo("PENDING"); // not overdue until the day after
         assertThat(outboxTypes().stream().filter("loan.autodebit.failed"::equals)).hasSize(1);
         assertThat(queryService.myLoans(CUSTOMER).get(0).lastAutoDebit().status()).isEqualTo("INSUFFICIENT_FUNDS");

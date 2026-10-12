@@ -110,13 +110,14 @@ public class LoanEodService {
             log.error("[loan-service] EOD {}: auto-debit for loan {} failed: {}", businessDate, loan.getReferenceNo(), e.getMessage());
         }
         String result = outcome;
-        tx.executeWithoutResult(status -> recordAutoDebit(loanId, businessDate, amount, result));
-        return outcome;
+        return tx.execute(status -> recordAutoDebit(loanId, businessDate, amount, result));
     }
 
-    private void recordAutoDebit(Long loanId, LocalDate businessDate, BigDecimal amount, String outcome) {
+    private String recordAutoDebit(Long loanId, LocalDate businessDate, BigDecimal amount, String outcome) {
         Loan loan = loanRepository.lockById(loanId).orElse(null);
-        if (loan == null) return;
+        if (loan == null) return outcome;
+        // Recovery may have completed between the timeout and this status update.
+        if (repayments.isPosted("AUTODEBIT-" + loanId + "-" + businessDate)) outcome = Loan.AUTODEBIT_PAID;
         boolean alreadyAlerted = businessDate.equals(loan.getLastAutoDebitDate()) && outcome.equals(loan.getLastAutoDebitStatus());
         loan.setLastAutoDebitDate(businessDate);
         loan.setLastAutoDebitStatus(outcome);
@@ -131,6 +132,7 @@ public class LoanEodService {
             payload.put("amount", amount);
             events.publish(LoanEvents.AUTODEBIT_FAILED, loan.getReferenceNo(), payload);
         }
+        return outcome;
     }
 
     private int[] markOverdue(Long loanId, LocalDate businessDate) {

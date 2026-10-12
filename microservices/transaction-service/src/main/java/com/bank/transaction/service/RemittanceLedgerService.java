@@ -296,6 +296,10 @@ public class RemittanceLedgerService {
         remittanceRepository.save(remittance);
 
         // Record outbox event for automatic/bank-side reversal
+        if (RemittanceRequest.isExternalType(remittance.getTransactionType())) {
+            jdbcTemplate.update("UPDATE dbo.LEDGER_TRANSACTION SET status='FAILED' WHERE reference_no=? AND status='PENDING'",
+                    remittance.getReferenceNo());
+        }
         OutboxEvent event = new OutboxEvent();
         event.setTransactionId(null);
         event.setEventType("REMITTANCE_REVERSED");
@@ -359,8 +363,10 @@ public class RemittanceLedgerService {
         String currentStatus = jdbcTemplate.queryForObject(
                 "SELECT status FROM dbo.REMITTANCE WITH (UPDLOCK, ROWLOCK) WHERE remittance_id = ?",
                 String.class, remittance.getRemittanceId());
+        boolean external = RemittanceRequest.isExternalType(remittance.getTransactionType());
         List<Long> existingTx = jdbcTemplate.queryForList(
-                "SELECT transaction_id FROM dbo.LEDGER_TRANSACTION WHERE reference_no = ? ORDER BY transaction_id",
+                "SELECT transaction_id FROM dbo.LEDGER_TRANSACTION WHERE reference_no = ?"
+                        + (external ? " AND status='SUCCESS'" : "") + " ORDER BY transaction_id",
                 Long.class, remittance.getReferenceNo());
         if (Remittance.STATUS_POSTED.equalsIgnoreCase(currentStatus) || !existingTx.isEmpty()) {
             Long transactionId = existingTx.isEmpty() ? null : existingTx.get(0);
@@ -385,6 +391,8 @@ public class RemittanceLedgerService {
 
         AccountInfo currentSource = resolveAccount(String.valueOf(sourceAccId));
         AccountInfo currentTarget = resolveAccount(String.valueOf(targetAccId));
+        if (external && ftReference == null)
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "External settlement requires confirmed core posting");
 
         BigDecimal sourceBefore;
         BigDecimal sourceAfter;
@@ -399,9 +407,8 @@ public class RemittanceLedgerService {
             targetBefore = targetAfter.subtract(amount);
             log.info("[ledger-service] T24 Core posting authoritative (ftRef={}): source={} -> {}, target={} -> {}",
                     ftReference, sourceBefore, sourceAfter, targetBefore, targetAfter);
-            // Release held_balance on dbo.ACCOUNT to ensure local hold reservation is cleared and available balance is accurate
-            String releaseHeldSql = "UPDATE dbo.ACCOUNT SET held_balance = CASE WHEN held_balance >= ? THEN held_balance - ? ELSE 0 END WHERE account_id = ?";
-            jdbcTemplate.update(releaseHeldSql, amount, amount, currentSource.id());
+            // Core posting already settled this transfer's hold. Remaining holds belong to
+            // savings or other transfers and must not be released by the read-model commit.
         } else {
             // Fallback: local database balance update
             sourceBefore = currentSource.balance();
@@ -433,7 +440,17 @@ public class RemittanceLedgerService {
                 "SUCCESS",
                 null
         );
-        TransactionRecord savedTx = transactionRepository.save(tx);
+        Long transactionId;
+        if (external) {
+            // Keep the queued row's identity/date so receipts and history do not gain a duplicate debit.
+            int updated = jdbcTemplate.update("UPDATE dbo.LEDGER_TRANSACTION SET status='SUCCESS' "
+                            + "WHERE reference_no=? AND status='PENDING' AND from_account_id=? AND amount=? AND transaction_type=?",
+                    remittance.getReferenceNo(), currentSource.id(), amount, ledgerType);
+            if (updated != 1) throw new IllegalStateException("External instruction changed before ledger commit");
+            transactionId = findTransactionId(remittance.getReferenceNo());
+        } else {
+            transactionId = transactionRepository.save(tx).getTransactionId();
+        }
 
         // 3. Save OUTBOX_EVENT row. transactionId/accountId/operation/before/afterBalance describe the
         //    debit leg so audit-service writes LEDGER_MUTATION_AUDIT and reconciliation can match it.
@@ -444,13 +461,13 @@ public class RemittanceLedgerService {
                         + "\"beforeBalance\":%s,\"afterBalance\":%s}",
                 remittance.getRemittanceId(), remittance.getReferenceNo(), ftReference,
                 currentSource.id(), currentTarget.id(), amount.toPlainString(),
-                savedTx.getTransactionId(), ledgerType,
+                transactionId, ledgerType,
                 currentSource.id(), currentSource.customerId(), request.getCurrency(),
                 sourceBefore.toPlainString(), sourceAfter.toPlainString()
         );
 
         OutboxEvent event = new OutboxEvent();
-        event.setTransactionId(savedTx.getTransactionId());
+        event.setTransactionId(transactionId);
         event.setEventType("REMITTANCE_COMPLETED");
         event.setPayload(payloadJson);
         event.setStatus("PENDING");
@@ -484,7 +501,7 @@ public class RemittanceLedgerService {
                 null,
                 false
         );
-        response.setTransactionId(savedTx.getTransactionId());
+        response.setTransactionId(transactionId);
         return response;
     }
 }
