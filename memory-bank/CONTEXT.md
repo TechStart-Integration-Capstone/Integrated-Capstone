@@ -2,7 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
-_Last Updated: 2026-10-12 (Fixed CI/CD Azure SQL readiness probe race condition in .github/workflows/pipeline.yml and docker/docker-compose.yml by adding sqlcmd -b flag, verifying app.CUSTOMER / t24.ACCOUNT / PH1000000EXT setup completion, and prepending idempotent schema-split migrations in Stage 3 prod-deploy)_
+_Last Updated: 2026-10-12 (Fixed CI/CD Azure SQL readiness probe race condition and 13 Newman T24/Remittance/Loan contract test failures by adding sqlcmd -b flag, mounting scripts/migrate_savings.sql as 10_savings.sql in docker/docker-compose.yml, and wiring t24.SAVINGS_RESERVATION into .github/workflows/pipeline.yml Stages 2 and 3)_
 _Last Updated: 2026-10-11 (Gated mobile DevHttpOverrides behind kDebugMode; eliminated offline fake receipts and fixed shadowed response statuses in AccountService and RemittanceService; pruned premature startup BLoC events; added Redis rate limiting to auth routes in API Gateway by [dom])_
 _Last Updated: 2026-10-10 (Mobile MPIN Database Persistence Audit & CI/CD Pipeline Wiring: resolved silent HTTP 400 rejection via dual-key 'mpin'/'pin' support in BankingController and SecureTokenStorage; wired scripts/migrate_mpin.sql into GitHub Actions pipeline.yml Stages 2 and 3, docker-compose.yml, and schema-azuresql.sql; live Azure SQL persistence verified for lviernes and arosales; 54/54 auth-service tests and 38/38 mobile tests pass clean by [dom & Antigravity])_
 _Last Updated: 2026-10-09 (Reverted web app UI changes to original team baseline, focusing strictly on mobile app dark mode refinements and Azure SQL MPIN database persistence; 38/38 mobile tests pass clean by [dom & Antigravity])_

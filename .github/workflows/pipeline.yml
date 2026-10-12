@@ -147,7 +147,7 @@ jobs:
             if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
               SQLCMD="/opt/mssql-tools/bin/sqlcmd"
             fi
-            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -Q "IF OBJECT_ID('app.CUSTOMER', 'U') IS NULL OR OBJECT_ID('t24.ACCOUNT', 'U') IS NULL OR NOT EXISTS (SELECT 1 FROM t24.ACCOUNT WHERE account_number = 'PH1000000EXT') THROW 50000, 'Not ready', 1;" >/dev/null 2>&1; then
+            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -Q "IF OBJECT_ID('app.CUSTOMER', 'U') IS NULL OR OBJECT_ID('t24.ACCOUNT', 'U') IS NULL OR OBJECT_ID('t24.SAVINGS_RESERVATION', 'U') IS NULL OR NOT EXISTS (SELECT 1 FROM t24.ACCOUNT WHERE account_number = 'PH1000000EXT') THROW 50000, 'Not ready', 1;" >/dev/null 2>&1; then
               echo "Azure SQL is initialized and ready."
               break
             fi
@@ -182,6 +182,10 @@ jobs:
           if [ -f "scripts/migrate_mpin.sql" ]; then
             echo "Verifying MPIN persistence migration in azure-sql-master..."
             cat "scripts/migrate_mpin.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
+          fi
+          if [ -f "scripts/migrate_savings.sql" ]; then
+            echo "Verifying Savings schema migration in azure-sql-master..."
+            cat "scripts/migrate_savings.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b
           fi
 
       - name: Prepare external clearing account
@@ -361,14 +365,15 @@ jobs:
             fi
             sleep 2
           done
-          for f in scripts/migrate_phase1_schema_split.sql scripts/migrate_phase2_t24_core.sql scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql; do
+          for f in scripts/migrate_phase1_schema_split.sql scripts/migrate_phase2_t24_core.sql scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_savings.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to azure-sql-master..."
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
             fi
           done
-          # Required by external settlement; fail deployment verification if provisioning fails.
+          # Required by external settlement and core reservation protection; fail deployment verification if provisioning fails.
           docker exec -i azure-sql-master "$SQLCMD" -S localhost -U sa -P "$PASS" -C -b < scripts/migrate_external_clearing.sql
+          docker exec -i azure-sql-master "$SQLCMD" -S localhost -U sa -P "$PASS" -C -b < scripts/migrate_savings.sql
           PG_USER="audit_user"
           if ! docker exec postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db -c "SELECT 1" &>/dev/null; then
             PG_USER="postgres"
