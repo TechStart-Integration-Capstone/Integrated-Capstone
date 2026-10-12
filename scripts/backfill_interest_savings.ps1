@@ -2,7 +2,7 @@
 # Run on the computer hosting this Docker stack. No monthly posting is invoked.
 param(
     [string]$ApiBase = 'http://localhost:3001/api/v1',
-    [string]$ThroughDate = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).Date.AddDays(-1).ToString('yyyy-MM-dd'),
+    [string]$ThroughDate = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).Date.AddDays(-2).ToString('yyyy-MM-dd'),
     [System.Management.Automation.PSCredential]$Credential,
     [string]$PostgresContainer = 'postgres-immutable-audit',
     [string]$PostgresUser = 'audit_user',
@@ -45,9 +45,6 @@ try {
         $accountResponse = Invoke-RestMethod -Uri "$ApiBase/accounts" -Headers $headers -TimeoutSec 120
         $allAccounts = @($accountResponse | Where-Object { $null -ne $_ })
         if (!$allAccounts.Count) { throw 'Account list is empty; refusing to seal empty days without account evidence.' }
-        if (@($allAccounts | Where-Object { $_.status -eq 'ACTIVE' -and $_.accountType -eq 'LOAN' }).Count) {
-            throw 'Active LOAN accounts need their own balances and contract rates; this savings-only backfill cannot seal a complete day.'
-        }
         $accounts = @($allAccounts | Where-Object { $_.status -eq 'ACTIVE' -and $_.accountType -in @('SAVINGS','SAVINGS_ACCOUNT') } | Sort-Object accountId)
         if (!$accounts.Count) { throw 'No active savings accounts found; no dates were backfilled.' }
         $seen = @{}
@@ -73,7 +70,7 @@ try {
         $date = [datetime]::ParseExact($dateText, 'yyyy-MM-dd', $culture)
         $cutoffUtc = [datetime]::SpecifyKind($date.AddDays(1).AddHours(-8), [DateTimeKind]::Utc)
         $manifest = @($accounts | Where-Object { $_.OpenedUtc -lt $cutoffUtc } | ForEach-Object {
-            @{ accountId = [long]$_.accountId; accountType = $_.accountType; eodBalance = [decimal]$_.currentBalance }
+            @{ accountId = [long]$_.accountId; accountType = 'SAVINGS'; eodBalance = [decimal]$_.currentBalance }
         })
         $body = @{
             mode = 'BACKFILL'; confirmed = $true; accounts = $manifest

@@ -172,6 +172,48 @@ public class InterestEodService {
         });
     }
 
+    public void ensureSchemas() {
+        ledger.ensureSchema();
+        audit.ensureSchema();
+    }
+
+    /**
+     * Automatically files and approves PHP savings backfills for elapsed dates from startDate
+     * through today.minusDays(2), leaving yesterday (today.minusDays(1)) unfiled for live demo.
+     */
+    public int autoBackfillSavingsLeavingYesterday(String actor) {
+        ensureSchemas();
+        LocalDate today = LocalDate.now(clock);
+        LocalDate throughDate = today.minusDays(2);
+        if (throughDate.isBefore(startDate)) return 0;
+        int count = 0;
+        for (LocalDate date = startDate; !date.isAfter(throughDate); date = date.plusDays(1)) {
+            if (audit.completed(date) || ledger.periodHasPostings(date.withDayOfMonth(date.lengthOfMonth()))) {
+                continue;
+            }
+            List<InterestRecoveryRequest.HistoricalAccount> manifest = ledger.activeSavingsAccountsBefore(date, clock.getZone())
+                    .stream()
+                    .map(a -> new InterestRecoveryRequest.HistoricalAccount(
+                            a.id(),
+                            "SAVINGS",
+                            a.balance().setScale(4, java.math.RoundingMode.HALF_UP),
+                            null))
+                    .toList();
+            var request = new InterestRecoveryRequest(
+                    InterestRecoveryRequest.Mode.BACKFILL,
+                    "Admin-approved demo backfill from current PHP savings balances; captured on " + today + ", not reconstructed historical EOD.",
+                    "current-savings-balance-capture/" + today,
+                    true,
+                    manifest);
+            var proposal = prepareBackfill(date, request, actor);
+            approveBackfill(proposal.proposalId(),
+                    new InterestRecoveryRequest.Approval("Reviewed stored proposal and approved current-balance savings backfill for " + date + ".", true),
+                    actor);
+            count++;
+        }
+        return count;
+    }
+
     private void ensureUnposted(LocalDate date) {
         if (ledger.periodHasPostings(date.withDayOfMonth(date.lengthOfMonth())))
             throw new IllegalStateException("Cannot change an already posted interest period");

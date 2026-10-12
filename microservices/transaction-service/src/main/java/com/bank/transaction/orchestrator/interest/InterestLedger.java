@@ -41,6 +41,43 @@ public class InterestLedger {
         });
     }
 
+    public void ensureSchema() {
+        jdbc.execute("""
+                IF SCHEMA_ID('t24') IS NULL EXEC('CREATE SCHEMA t24');
+                IF COL_LENGTH('t24.ACCOUNT', 'interest_rate') IS NULL AND OBJECT_ID('t24.ACCOUNT', 'U') IS NOT NULL
+                    ALTER TABLE t24.ACCOUNT ADD interest_rate DECIMAL(7,4) NOT NULL
+                        CONSTRAINT DF_T24_ACCOUNT_INTEREST_RATE DEFAULT 0.0000
+                        CONSTRAINT CK_T24_ACCOUNT_INTEREST_RATE CHECK (interest_rate >= 0);
+                ELSE IF COL_LENGTH('dbo.ACCOUNT', 'interest_rate') IS NULL AND OBJECT_ID('dbo.ACCOUNT', 'U') IS NOT NULL
+                    ALTER TABLE dbo.ACCOUNT ADD interest_rate DECIMAL(7,4) NOT NULL
+                        CONSTRAINT DF_ACCOUNT_INTEREST_RATE DEFAULT 0.0000
+                        CONSTRAINT CK_ACCOUNT_INTEREST_RATE CHECK (interest_rate >= 0);
+                IF OBJECT_ID('t24.ACCOUNT', 'U') IS NULL AND OBJECT_ID('t24.ACCOUNT', 'SN') IS NULL AND OBJECT_ID('dbo.ACCOUNT', 'U') IS NOT NULL
+                    EXEC('CREATE SYNONYM t24.ACCOUNT FOR dbo.ACCOUNT');
+                IF OBJECT_ID('t24.LEDGER_TRANSACTION', 'U') IS NULL AND OBJECT_ID('t24.LEDGER_TRANSACTION', 'SN') IS NULL AND OBJECT_ID('dbo.LEDGER_TRANSACTION', 'U') IS NOT NULL
+                    EXEC('CREATE SYNONYM t24.LEDGER_TRANSACTION FOR dbo.LEDGER_TRANSACTION');
+                IF SCHEMA_ID('app') IS NULL EXEC('CREATE SCHEMA app');
+                IF OBJECT_ID('app.OUTBOX_EVENT', 'U') IS NULL AND OBJECT_ID('app.OUTBOX_EVENT', 'SN') IS NULL AND OBJECT_ID('dbo.OUTBOX_EVENT', 'U') IS NOT NULL
+                    EXEC('CREATE SYNONYM app.OUTBOX_EVENT FOR dbo.OUTBOX_EVENT');
+                IF OBJECT_ID('t24.EOD_JOB_RUN', 'U') IS NULL AND OBJECT_ID('dbo.EOD_JOB_RUN', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE t24.EOD_JOB_RUN (
+                        job_run_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+                        business_date DATE NOT NULL,
+                        job_name NVARCHAR(50) NOT NULL,
+                        status NVARCHAR(20) NOT NULL CHECK (status IN ('RUNNING', 'SUCCESS')),
+                        started_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+                        ended_at DATETIME2 NULL,
+                        CONSTRAINT uq_eod_job_date UNIQUE (job_name, business_date)
+                    );
+                END;
+                IF OBJECT_ID('t24.EOD_JOB_RUN', 'U') IS NOT NULL AND OBJECT_ID('dbo.EOD_JOB_RUN', 'SN') IS NULL AND OBJECT_ID('dbo.EOD_JOB_RUN', 'U') IS NULL
+                    EXEC('CREATE SYNONYM dbo.EOD_JOB_RUN FOR t24.EOD_JOB_RUN');
+                IF OBJECT_ID('dbo.EOD_JOB_RUN', 'U') IS NOT NULL AND OBJECT_ID('t24.EOD_JOB_RUN', 'SN') IS NULL AND OBJECT_ID('t24.EOD_JOB_RUN', 'U') IS NULL
+                    EXEC('CREATE SYNONYM t24.EOD_JOB_RUN FOR dbo.EOD_JOB_RUN');
+                """);
+    }
+
     public List<Account> activeAccounts() {
         // Hold the source balances stable until the complete PostgreSQL snapshot has committed.
         return jdbc.query("""
@@ -49,6 +86,20 @@ public class InterestLedger {
                 WHERE status = 'ACTIVE' AND account_type IN ('SAVINGS', 'SAVINGS_ACCOUNT', 'LOAN') ORDER BY account_id
                 """, (rs, n) -> new Account(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
                 rs.getBigDecimal(5), rs.getBigDecimal(6)));
+    }
+
+    public List<Account> activeSavingsAccountsBefore(LocalDate date, java.time.ZoneId zone) {
+        var cutoff = java.sql.Timestamp.valueOf(date.plusDays(1).atStartOfDay(zone)
+                .withZoneSameInstant(java.time.ZoneOffset.UTC).toLocalDateTime());
+        return jdbc.query("""
+                SELECT account_id, customer_id, account_type, currency, current_balance, interest_rate
+                FROM t24.ACCOUNT
+                WHERE status = 'ACTIVE' AND currency = 'PHP' AND current_balance >= 0
+                    AND account_type IN ('SAVINGS', 'SAVINGS_ACCOUNT')
+                    AND created_date < ?
+                ORDER BY account_id
+                """, (rs, n) -> new Account(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4),
+                rs.getBigDecimal(5), rs.getBigDecimal(6)), cutoff);
     }
 
     public long startJob(LocalDate date, String name) {

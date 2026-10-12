@@ -116,4 +116,30 @@ class InterestEodServiceTest {
         when(audit.completedDates(first, end.minusDays(1))).thenReturn(java.util.Set.of(first));
         assertThat(recent.missingDays(end)).containsExactly(end.minusDays(1));
     }
+
+    @Test void autoBackfillSavingsLeavingYesterdayBackfillsThroughTwoDaysAgoAndNormalizesSavingsType() {
+        LocalDate today = LocalDate.of(2026, 10, 12);
+        LocalDate start = today.minusDays(10); // 2026-10-02
+        var demoService = new InterestEodService(ledger, audit, start,
+                Clock.fixed(Instant.parse("2026-10-12T04:00:00Z"), ZoneId.of("Asia/Manila")));
+        when(ledger.activeSavingsAccountsBefore(any(), any())).thenReturn(List.of(
+                new InterestLedger.Account(10L, 1L, "SAVINGS_ACCOUNT", "PHP", new BigDecimal("5000.0000"), BigDecimal.ZERO)));
+        when(audit.prepare(any(), any(), eq("admin"), any())).thenAnswer(inv -> {
+            LocalDate d = inv.getArgument(0);
+            InterestRecoveryRequest req = inv.getArgument(1);
+            String hash = inv.getArgument(3);
+            var id = java.util.UUID.randomUUID();
+            var prop = new InterestAccrualStore.Proposal(id, d, "admin", req, hash, null, null, null, null);
+            when(audit.proposal(id)).thenReturn(prop);
+            return prop;
+        });
+
+        int backfilled = demoService.autoBackfillSavingsLeavingYesterday("admin");
+        // 2026-10-02 through 2026-10-10 = 9 days backfilled; 2026-10-11 (yesterday) left unfiled
+        assertThat(backfilled).isEqualTo(9);
+        verify(audit, never()).prepare(eq(today.minusDays(1)), any(), any(), any());
+        verify(audit, times(9)).prepare(any(), argThat(req ->
+                req.accounts().size() == 1 && "SAVINGS".equals(req.accounts().get(0).accountType())), eq("admin"), any());
+        verify(audit, times(9)).approve(any(), any(), eq("admin"), any());
+    }
 }

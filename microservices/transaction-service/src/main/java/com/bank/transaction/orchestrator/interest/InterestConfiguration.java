@@ -56,6 +56,10 @@ public class InterestConfiguration {
                                          @Value("${app.interest.start-date}") String start,
                                          @Value("${app.interest.zone}") String zone) {
         if (start.isBlank()) throw new IllegalArgumentException("INTEREST_START_DATE is required when interest EOD is enabled");
-        return new InterestEodService(ledger, audit, LocalDate.parse(start), Clock.system(ZoneId.of(zone)));
+        Clock clock = Clock.system(ZoneId.of(zone));
+        LocalDate startDate = "AUTO".equalsIgnoreCase(start.strip())
+                ? LocalDate.now(clock).minusDays(10)
+                : LocalDate.parse(start.strip());
+        return new InterestEodService(ledger, audit, startDate, clock);
     }
 }

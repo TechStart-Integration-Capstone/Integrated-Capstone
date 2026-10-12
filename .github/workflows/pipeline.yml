@@ -131,6 +131,8 @@ jobs:
           AZURE_SQL_USERNAME=sa
           AZURE_SQL_PASSWORD=PayPink2.0_StrongPass!
           SAVINGS_ENABLED=false
+          INTEREST_START_DATE=2026-10-01
+          INTEREST_AUTO_BACKFILL_ENABLED=false
           PAYPINK_GMAIL_APP_PASSWORD=dummy_ci_secret
           ENVEOF
 
@@ -379,7 +381,7 @@ jobs:
               else
                 REMOTE_DB="paypink"
               fi
-              for f in scripts/migrate_phase5_hardening.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_external_clearing.sql scripts/migrate_savings.sql; do
+              for f in scripts/migrate_phase1_schema_split.sql scripts/migrate_phase2_t24_core.sql scripts/migrate_phase5_hardening.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_external_clearing.sql scripts/migrate_savings.sql; do
                 if [ -f "$f" ]; then
                   echo "Applying $f to $REMOTE_HOST ($REMOTE_DB)..."
                   cat "$f" | docker exec -i azure-sql-master $SQLCMD -S "$REMOTE_HOST" -d "$REMOTE_DB" -U "$REMOTE_USER" -P "$REMOTE_PASS" -C -b 2>/dev/null || true

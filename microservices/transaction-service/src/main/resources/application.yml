@@ -32,6 +32,7 @@ app:
   interest:
     enabled: ${INTEREST_EOD_ENABLED:false}
     start-date: ${INTEREST_START_DATE:}
+    auto-backfill-enabled: ${INTEREST_AUTO_BACKFILL_ENABLED:false}
     zone: ${INTEREST_ZONE:Asia/Manila}
     cron: ${INTEREST_EOD_CRON:59 59 23 * * *}
     recovery-cron: ${INTEREST_RECOVERY_CRON:0 15 * * * *}

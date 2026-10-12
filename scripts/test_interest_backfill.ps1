@@ -26,10 +26,11 @@ function Invoke-RestMethod {
             [pscustomobject]@{accountId=1;accountType='SAVINGS';currency='PHP';status='ACTIVE';currentBalance=15000.1250;createdDate='2020-09-30T16:00:00';mayBeStale=($global:interestBackfillTestState.scenario -eq 'stale')},
             [pscustomobject]@{accountId=2;accountType='SAVINGS_ACCOUNT';currency='PHP';status='ACTIVE';currentBalance=123.45;createdDate='2020-10-01T16:00:00'},
             [pscustomobject]@{accountId=3;accountType='INTERNAL';currency='PHP';status='ACTIVE';currentBalance=50000;createdDate='2020-09-01T00:00:00'},
-            [pscustomobject]@{accountId=4;accountType='SAVINGS';currency='PHP';status='CLOSED';currentBalance=0;createdDate='2020-09-01T00:00:00'}
+            [pscustomobject]@{accountId=4;accountType='SAVINGS';currency='PHP';status='CLOSED';currentBalance=0;createdDate='2020-09-01T00:00:00'},
+            [pscustomobject]@{accountId=5;accountType='LOAN';currency='PHP';status='ACTIVE';currentBalance=25000;createdDate='2020-09-01T00:00:00'}
         )
         if ($global:interestBackfillTestState.scenario -eq 'empty') { $response = @() }
-        if ($global:interestBackfillTestState.scenario -eq 'no-savings') { $response = @($response | Where-Object { $_.accountType -eq 'INTERNAL' }) }
+        if ($global:interestBackfillTestState.scenario -eq 'no-savings') { $response = @($response | Where-Object { $_.accountType -in @('INTERNAL','LOAN') }) }
         if ($global:interestBackfillTestState.scenario -eq 'single') { $response = @($response[0]) }
         return ,$response
     }
@@ -75,6 +76,7 @@ foreach ($case in @('success','single','empty','no-savings','already-complete','
             Assert-Backfill ($first.request.accounts.Count -eq 1) 'Exclude accounts opened after the Manila date cutoff.'
             $expectedCount = if ($case -eq 'single') { 1 } else { 2 }
             Assert-Backfill ($second.request.accounts.Count -eq $expectedCount) 'Handle singleton and multi-account JSON arrays.'
+            Assert-Backfill (@($second.request.accounts | Where-Object { $_.accountType -ne 'SAVINGS' }).Count -eq 0) 'Normalize SAVINGS_ACCOUNT to SAVINGS.'
             Assert-Backfill ([decimal]$first.request.accounts[0].eodBalance -eq [decimal]15000.1250) 'Keep decimal balances.'
         } else { Assert-Backfill ($global:interestBackfillTestState.proposals.Count -eq 0) 'A rerun must not re-file completed dates.' }
     } else {

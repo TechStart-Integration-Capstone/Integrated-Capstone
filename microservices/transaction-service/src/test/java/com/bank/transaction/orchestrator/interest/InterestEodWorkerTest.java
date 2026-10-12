@@ -36,4 +36,15 @@ class InterestEodWorkerTest {
         task.getRunnable().run();
         verify(service).runBusinessDate(LocalDate.of(2026, 10, 1));
     }
+
+    @Test void startupAutoBackfillRunsOnlyWhenEnabled() {
+        var service = mock(InterestEodService.class);
+        new InterestEodWorker(service, "-", "Asia/Manila", false).onStartup();
+        verify(service).ensureSchemas();
+        verify(service, never()).autoBackfillSavingsLeavingYesterday(any());
+
+        new InterestEodWorker(service, "-", "Asia/Manila", true).onStartup();
+        verify(service, times(2)).ensureSchemas();
+        verify(service).autoBackfillSavingsLeavingYesterday("admin");
+    }
 }

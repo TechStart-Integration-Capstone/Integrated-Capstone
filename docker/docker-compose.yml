@@ -233,6 +233,8 @@ services:
     depends_on:
       azure-sql:
         condition: service_healthy
+      postgresql:
+        condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
@@ -247,7 +249,8 @@ services:
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - IDEMPOTENCY_TTL_HOURS=24
       - INTEREST_EOD_ENABLED=${INTEREST_EOD_ENABLED:-true}
-      - INTEREST_START_DATE=${INTEREST_START_DATE:-2026-10-01}
+      - INTEREST_START_DATE=${INTEREST_START_DATE:-AUTO}
+      - INTEREST_AUTO_BACKFILL_ENABLED=${INTEREST_AUTO_BACKFILL_ENABLED:-true}
       - INTEREST_ZONE=${INTEREST_ZONE:-Asia/Manila}
       - INTEREST_EOD_CRON=${INTEREST_EOD_CRON:-59 59 23 * * *}
       - INTEREST_RECOVERY_CRON=${INTEREST_RECOVERY_CRON:-0 15 * * * *}

@@ -33,7 +33,7 @@
                 <label>Missing business date<input id="interest-date" type="date" required readonly></label>
                 <label>Source reference<input id="interest-source" maxlength="255" required placeholder="Historical EOD export or incident reference"></label>
             </div><label>Reason for backfill<textarea id="interest-reason" maxlength="1000" required></textarea></label>
-            <div class="interest-scroll"><table><thead><tr><th>Account ID</th><th>Account type</th><th>Historical EOD balance (PHP)</th><th>Loan annual rate (fraction)</th><th></th></tr></thead><tbody id="interest-accounts"></tbody></table></div>
+            <div class="interest-scroll"><table><thead><tr><th>Account ID</th><th>Account type</th><th>Historical EOD balance (PHP)</th><th></th></tr></thead><tbody id="interest-accounts"></tbody></table></div>
             <div class="interest-actions"><button type="button" class="btn btn-secondary" id="interest-add">Add account</button></div>
             <label class="interest-check"><input type="checkbox" id="interest-empty">The source confirms there were no eligible accounts on this date.</label>
             <label class="interest-check"><input type="checkbox" id="interest-file-confirm" required>I checked the source and included the complete historical account list.</label>
@@ -113,9 +113,8 @@
     function addAccount() {
         const row = document.createElement('tr');
         row.innerHTML = `<td><input aria-label="Account ID" data-field="accountId" inputmode="numeric" pattern="[1-9][0-9]*" required></td>
-            <td><select aria-label="Account type" data-field="accountType"><option>SAVINGS</option><option>SAVINGS_ACCOUNT</option><option>LOAN</option></select></td>
+            <td><select aria-label="Account type" data-field="accountType"><option>SAVINGS</option></select></td>
             <td><input aria-label="Historical EOD balance in PHP" data-field="eodBalance" inputmode="decimal" pattern="[0-9]+(\\.[0-9]{1,4})?" required></td>
-            <td><input aria-label="Loan annual rate as fraction" data-field="annualRate" inputmode="decimal" placeholder="Loan only, e.g. 0.1800" pattern="[0-9]+(\\.[0-9]{1,4})?"></td>
             <td><button class="btn btn-secondary" type="button" data-remove-row>Remove</button></td>`;
         el('accounts').append(row);
     }
@@ -153,8 +152,8 @@
                 <dt>Source reference</dt><dd>${esc(p.request.sourceReference)}</dd><dt>Reason</dt><dd>${esc(p.request.reason)}</dd>
                 <dt>Status</dt><dd>${p.approvedBy ? 'Approved' : canApprove ? 'Pending review' : 'Date already sealed; this proposal cannot be approved'}</dd>
                 ${p.approvedBy ? `<dt>Approved by</dt><dd>${esc(p.approvedBy)} · ${esc(timestamp(p.approvedAt))}</dd><dt>Approval reason</dt><dd>${esc(p.approvalReason)}</dd>` : ''}</dl>
-                <div class="interest-scroll"><table><thead><tr><th>Account ID</th><th>Type</th><th>Historical balance (PHP)</th><th>Annual rate (fraction)</th></tr></thead><tbody>
-                ${p.request.accounts.map(a => `<tr><td>${esc(a.accountId)}</td><td>${esc(a.accountType)}</td><td>${esc(peso(a.eodBalance))}</td><td>${a.accountType === 'LOAN' ? esc(a.annualRate) : 'Calculated from savings tier'}</td></tr>`).join('') || '<tr><td colspan="4">Source attests there were no eligible accounts.</td></tr>'}
+                <div class="interest-scroll"><table><thead><tr><th>Account ID</th><th>Type</th><th>Historical balance (PHP)</th><th>Annual rate</th></tr></thead><tbody>
+                ${p.request.accounts.map(a => `<tr><td>${esc(a.accountId)}</td><td>SAVINGS</td><td>${esc(peso(a.eodBalance))}</td><td>Calculated from savings tier</td></tr>`).join('') || '<tr><td colspan="4">Source attests there were no eligible accounts.</td></tr>'}
                 </tbody></table></div>`;
             el('review').hidden = false;
             el('review').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -186,7 +185,6 @@
             return account;
         });
         if (!accounts.length && !el('empty').checked) return message('Add all eligible accounts, or explicitly confirm the source has no eligible accounts.', true);
-        if (accounts.some(a => a.accountType === 'LOAN' && !a.annualRate)) return message('Every loan account needs its historical annual contract rate as a fraction.', true);
         mutate(async version => {
             const proposal = await api(`/resolve?businessDate=${el('date').value}`, { mode:'BACKFILL', reason:el('reason').value.trim(),
                 sourceReference:el('source').value.trim(), confirmed:el('file-confirm').checked, accounts });
