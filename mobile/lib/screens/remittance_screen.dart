@@ -1602,6 +1602,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       if (!mounted) return;
 
       if (result.success && result.status == 'PENDING') {
+        HapticFeedback.mediumImpact();
         // PESONet settles in the next clearing batch; the money is already debited.
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(backgroundColor: PayPinkTheme.wineDark, content: Text(result.message)),
@@ -1617,6 +1618,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
         });
         _startStatusPolling(ref, amt, fromAcc, toAcc);
       } else if (result.success) {
+        HapticFeedback.mediumImpact();
         final cleanRef = result.referenceId != null && result.referenceId!.isNotEmpty
             ? result.referenceId!
             : 'TXN-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
@@ -1649,6 +1651,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
           _isSagaPending = false;
           _pendingReferenceNo = null;
         });
+        HapticFeedback.mediumImpact();
         _showScreenshotReceiptDialog(amt, ref, fromAcc, toAcc);
       } else if (status == 'FAILED' || status == 'CANCELLED' || status == 'REVERSED' || status == 'REJECTED') {
         timer.cancel();

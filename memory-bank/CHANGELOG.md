@@ -1,5 +1,29 @@
 # Changelog
 
+- 2026-10-12 — PayPink Heart-P Brand Launcher Icon Overhaul (`pubspec.yaml`, `assets/images/`, `res/`):
+  - **Custom Heart-P Vector Rasterization**: Vectorized and smoothed user-provided signature Heart-P brandmark (hot pink `#E55879` loop with terminal heart on soft pastel blush `#F9D9E0`) at ultra-crisp 1024×1024 master resolution.
+  - **Android Adaptive Icon Sync**: Synchronized `adaptive_icon_background: "#F9D9E0"` and generated all Android density mipmaps and `mipmap-anydpi-v26/ic_launcher.xml` via `flutter_launcher_icons`.
+  - **Validation**: `flutter analyze` 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-12 — Mobile App Launcher Icon & Branding Integration (`pubspec.yaml`, `mobile/android/app/src/main/res/`):
+  - **SVG-to-PNG Vector Asset Rasterization**: Recreated the canonical PayPink web personal banking logo from `frontend/bank/index.html` as high-definition 1024×1024 PNGs (`paypink_app_icon.png` and `paypink_app_icon_fg.png`) with verified 32-bit PNG magic bytes.
+  - **Adaptive Icon Generation (`flutter_launcher_icons`)**: Configured and ran `flutter_launcher_icons` v0.13.1 to generate all density mipmaps (`mdpi` through `xxxhdpi`), modern Android 8+ adaptive XML (`mipmap-anydpi-v26/ic_launcher.xml`), and wine background token (`#651c3e`).
+  - **Manifest & Package Integrity**: Maintained `applicationId = "com.example.paypink_mobile"` and standard manifest references, preventing ADB attach hangs or emulator icon cache collisions.
+  - **Validation**: `flutter analyze` 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-12 — Mobile Pull-to-Refresh Integration (`dashboard_screen.dart`, `transactions_screen.dart`, `accounts_screen.dart`, `loans_screen.dart`, `main.dart`):
+  - **Swipe-to-Refresh Feeds (`RefreshIndicator`)**: Wrapped `SingleChildScrollView` and `ListView` in `RefreshIndicator(color: PayPinkTheme.wine)` across Dashboard (Overview), Accounts, Transactions, and Loans screens.
+  - **Always-Scrollable Scroll Physics**: Attached `physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics())` so swipe-down gestures trigger reliably on short content or small screen displays.
+  - **Re-Entrancy & Concurrency Guard**: Guarded `_loadLiveDatabaseData` with `_isRefreshingData` in `main.dart` to prevent race conditions or stacked backend requests during rapid refresh gestures.
+  - **Haptic Tactile Feedback**: Attached `HapticFeedback.mediumImpact()` to the refresh trigger in each screen for responsive tactile confirmation.
+  - **Validation**: `flutter analyze` passed with 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-12 — Mobile Haptic Tactile Feedback Integration (`dashboard_screen.dart`, `transactions_screen.dart`, `remittance_screen.dart`):
+  - **Quick Action Touch Feedback**: Added `HapticFeedback.selectionClick()` to quick action buttons (`Send`, `Loans`, `Report`) in `dashboard_screen.dart`.
+  - **Category Filter Feedback**: Added `HapticFeedback.selectionClick()` to transaction category filter chips in `transactions_screen.dart`.
+  - **Transfer Success Feedback**: Added `HapticFeedback.mediumImpact()` upon successful remittance completion and receipt dialog display in `remittance_screen.dart`.
+  - **Validation**: `flutter analyze` 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
+
 - 2026-10-11 — Recover missing audit records during manual reconciliation — [aly]
   - reconciliation-service manual /run keeps the latest-50 limit and uses OutboxAuditRecovery to append missing PostgreSQL audit records from retained TRANSACTION_SUCCESS/REMITTANCE_COMPLETED outbox payloads. Recovery validates the successful ledger row, reference, account, currency, positive amount and original balance delta; missing/conflicting evidence stays unresolved. Existing audit rows, balances and outbox delivery statuses are never changed; unique-key conflict handling prevents duplicate inserts. Scheduled/Kafka checks remain detection-only.
   - The service rechecks PostgreSQL after recovery and returns checked/recovered/matched/drifted counts. frontend/src/js/app.js displays the actual result, removes the unconditional all-matched alert and automatic repeat of failed recovery requests, and stops substituting mock reconciliation rows for empty/unavailable results. Added docs/reconciliation-recovery.md with behavior and deployment commands.
