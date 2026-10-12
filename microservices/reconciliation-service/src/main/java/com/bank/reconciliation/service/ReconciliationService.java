@@ -37,15 +37,17 @@ public class ReconciliationService {
     private final LedgerMutationAuditRepository auditRepository;
     private final ReconciliationLogRepository   reconLogRepository;
     private final ObjectMapper                  objectMapper;
+    private final OutboxAuditRecovery             auditRecovery;
 
     public ReconciliationService(TransactionRepository transactionRepository,
                                  LedgerMutationAuditRepository auditRepository,
                                  ReconciliationLogRepository reconLogRepository,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper, OutboxAuditRecovery auditRecovery) {
         this.transactionRepository = transactionRepository;
         this.auditRepository       = auditRepository;
         this.reconLogRepository    = reconLogRepository;
         this.objectMapper          = objectMapper;
+        this.auditRecovery         = auditRecovery;
     }
 
     // ── Real-time reconciliation triggered by Kafka ───────────────────────────
@@ -146,8 +148,20 @@ public class ReconciliationService {
         return reconLogRepository.findTop50ByOrderByReconDateDesc();
     }
 
-    @Transactional("postgresTransactionManager")
-    public void runFullSweep() {
-        scheduledReconciliation();
+    public record SweepResult(int checked, int recovered, int matched, int drifted) {}
+
+    // Manual recovery commits individual append-only audit inserts before rechecking them.
+    // Do not wrap the entire cross-database sweep in a long PostgreSQL transaction.
+    public SweepResult runFullSweep() {
+        List<TransactionRecord> transactions = transactionRepository.findTop50ByOrderByTransactionDateDesc();
+        int recovered = 0, matched = 0;
+        for (TransactionRecord tx : transactions) {
+            if ("SUCCESS".equalsIgnoreCase(tx.getStatus())
+                    && auditRepository.findByTransactionId(tx.getTransactionId()).isEmpty()
+                    && auditRecovery.recover(tx)) recovered++;
+            ReconciliationLog result = saveReconLog(tx);
+            if ("MATCHED".equals(result.getReconStatus())) matched++;
+        }
+        return new SweepResult(transactions.size(), recovered, matched, transactions.size() - matched);
     }
 }

@@ -52,6 +52,7 @@ services:
       - ./../scripts/migrate_interest_postgres.sql:/docker-entrypoint-initdb.d/03_interest.sql
       - ./../scripts/migrate_interest_recovery_postgres.sql:/docker-entrypoint-initdb.d/04_interest_recovery.sql
       - ./../scripts/migrate_interest_approval_postgres.sql:/docker-entrypoint-initdb.d/05_interest_approval.sql
+      - ./../scripts/migrate_interest_single_admin_postgres.sql:/docker-entrypoint-initdb.d/06_interest_single_admin.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U audit_user -d ledger_audit_db"]
       interval: 10s

@@ -372,6 +372,8 @@ jobs:
               cat "$f" | docker exec -i postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db 2>/dev/null || true
             fi
           done
+          # Required simulation approval policy; existing volumes do not rerun init scripts.
+          docker exec -i postgres-immutable-audit psql -v ON_ERROR_STOP=1 -U "$PG_USER" -d ledger_audit_db < scripts/migrate_interest_single_admin_postgres.sql
           # Restart transaction-service so JPA models pick up newly migrated columns
           docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env restart transaction-service reconciliation-service || true
 
