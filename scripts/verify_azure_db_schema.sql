@@ -37,6 +37,11 @@ INSERT INTO @Tables VALUES
   ('app', 'OUTBOX_EVENT', 'Phase 1 - Outbox Pattern'),
   ('app', 'BANKING_FAVORITE', 'Phase 5 - Beneficiaries'),
   ('app', 'LOAN_APPLICATION', 'Phase 6 - Loans Origination'),
+  ('app', 'PINK_CIRCLE', 'Phase 11 - Savings Circles'),
+  ('app', 'SAVINGS_GOAL', 'Phase 11 - Savings Goals'),
+  ('app', 'PINK_CIRCLE_MEMBER', 'Phase 11 - Savings Circle Members'),
+  ('app', 'SAVINGS_SCHEDULE', 'Phase 11 - Savings Auto-Save Schedules'),
+  ('app', 'SAVINGS_ACTIVITY', 'Phase 11 - Savings Idempotency Activity'),
   ('t24', 'ACCOUNT', 'Phase 1 - T24 Core Accounts'),
   ('t24', 'LEDGER_TRANSACTION', 'Phase 1 - Double-Entry Ledger'),
   ('t24', 'LOCKED_AMOUNT', 'Phase 2 - T24 Core Holds'),
@@ -44,7 +49,8 @@ INSERT INTO @Tables VALUES
   ('t24', 'LOAN', 'Phase 6 - Loan Core Entity'),
   ('t24', 'LOAN_SCHEDULE', 'Phase 6 - Amortization Schedule'),
   ('t24', 'LOAN_REPAYMENT', 'Phase 6 - Repayment Records'),
-  ('t24', 'EOD_JOB_RUN', 'Phase 7 - Interest EOD Job');
+  ('t24', 'EOD_JOB_RUN', 'Phase 7 - Interest EOD Job'),
+  ('t24', 'SAVINGS_RESERVATION', 'Phase 11 - Savings Core Balances Reservation');
 
 DECLARE @s NVARCHAR(50), @t NVARCHAR(100), @p NVARCHAR(100);
 DECLARE table_cursor CURSOR FOR SELECT SchemaName, TableName, Phase FROM @Tables;
