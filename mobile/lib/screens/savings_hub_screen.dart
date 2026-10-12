@@ -35,7 +35,7 @@ class SavingsHubScreen extends StatefulWidget {
 }
 
 class _SavingsHubScreenState extends State<SavingsHubScreen> {
-  late List<BankAccount> _accounts = widget.initialAccounts;
+  late final List<BankAccount> _accounts = widget.initialAccounts;
   SavingsOverview? _overview;
   List<PinkCircleItem> _circles = [];
   bool _loading = true;
@@ -994,7 +994,7 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: selectedCategory,
+                      initialValue: selectedCategory,
                       decoration: InputDecoration(
                         labelText: 'Category',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1288,7 +1288,7 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
                     value: enabled,
                     onChanged: (v) => setModalState(() => enabled = v),
                     title: const Text('Enable automatic contributions', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                    activeColor: PayPinkTheme.wineLight,
+                    activeThumbColor: PayPinkTheme.wineLight,
                     contentPadding: EdgeInsets.zero,
                   ),
                   const SizedBox(height: 8),
@@ -1302,7 +1302,7 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: frequency,
+                    initialValue: frequency,
                     decoration: InputDecoration(
                       labelText: 'Frequency',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

@@ -1,4 +1,14 @@
 # Changelog
+- 2026-10-12 — Mobile App Display Name Rebranding to "PayPink Bank" (`AndroidManifest.xml`, `Info.plist`, `manifest.json`, `index.html`, `main.dart`):
+  - **Android & iOS App Label Alignment:** Updated `android:label` in `AndroidManifest.xml` from `paypink_mobile` to `PayPink Bank`, aligning the home screen icon label and app drawer title. Updated `CFBundleDisplayName` and `CFBundleName` in `Info.plist`.
+  - **Web & PWA Metadata Consistency:** Updated `name` and `short_name` in `web/manifest.json`, `<title>` and `<meta name="apple-mobile-web-app-title">` in `web/index.html`, and `MaterialApp(title: ...)` in `main.dart` to `PayPink Bank`.
+  - **Verification:** 0 analyzer issues, 57/57 mobile tests pass clean. — [Antigravity]
+
+- 2026-10-12 — Mobile App Launcher Icon Scale & Border Plate Alignment (`pubspec.yaml`, `AndroidManifest.xml`, `assets/images/paypink_app_icon*.png`, `res/mipmap-*`):
+  - **Refined Glyph Sizing & Margins:** Scaled the Heart-P brandmark down from 670px to 440px within the 1024x1024 canvas (occupying ~64% of the Android adaptive safe zone / ~43% of total canvas), giving the icon generous breathing room matching the visual proportions of standard system icons like YouTube.
+  - **Eliminated Android Legacy Plate & Border:** Resolved the launcher border/drop-shadow plate artifact by configuring full-bleed `paypink_app_icon_bg.png` (`#F9D9E0`) as `adaptive_icon_background`, creating `ic_launcher_round.xml` in `mipmap-anydpi-v26`, copying density-specific round mipmaps across `mipmap-*`, and declaring `android:roundIcon="@mipmap/ic_launcher_round"` in `AndroidManifest.xml` so modern Android launchers render the native adaptive icon directly rather than wrapping legacy fallbacks.
+  - **Lint & Test Quality Assurance:** Cleaned deprecated form and switch members in `savings_hub_screen.dart`; verified 0 `flutter analyze` issues and 57/57 mobile tests pass clean. — [Antigravity]
+
 - 2026-10-12 — CI/CD Pipeline Alignment & Hardening (`.github/workflows/pipeline.yml`):
   - **Stage 2 Datastore Readiness & Automated Init:** Separated TCP socket acceptance (`SELECT 1`) from schema readiness (`SELECT 1 FROM dbo.ACCOUNT`). In clean runner environments, automated sequential execution of mounted scripts (`01_schema.sql` through `09_external_clearing.sql`), ensuring all tables, schemas (`app`/`t24`), seeds, and system clearing accounts exist before microservice launch.
   - **Unified Migration Execution:** Consolidated `scripts/migrate_external_clearing.sql` directly into `Ensure idempotent migrations`, replacing the fragile runner-scoped bash step that lacked password propagation.

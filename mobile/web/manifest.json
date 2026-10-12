@@ -1,6 +1,6 @@
 {
-    "name": "paypink_mobile",
-    "short_name": "paypink_mobile",
+    "name": "PayPink Bank",
+    "short_name": "PayPink Bank",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -181,7 +181,7 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PayPink Mobile Banking',
+      title: 'PayPink Bank',
       debugShowCheckedModeBanner: false,
       theme: PayPinkTheme.lightTheme,
       darkTheme: PayPinkTheme.darkTheme,
