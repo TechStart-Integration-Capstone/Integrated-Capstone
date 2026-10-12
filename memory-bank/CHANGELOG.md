@@ -1,4 +1,11 @@
 # Changelog
+- 2026-10-12 — Remove Audit Logs Tab & Overview Card from Admin Portal (`frontend/index.html`, `frontend/admin/admin.js`, `frontend/src/js/app.js`) — [dom]:
+  - **Removed Audit Logs Tab:** Completely deleted the "View Audit Logs" button and the entire `#tab-audit` panel from the admin dashboard and sidebar navigation.
+  - **Removed Overview Audit Card:** Removed the "Recent audit activity" card from the Overview tab, leaving only the live Transaction History feed.
+  - **Clean DOM Safeguards:** Added null-safety guards in `app.js` to prevent any runtime exceptions now that the audit elements are gone.
+  - **Verification:** 11/11 transaction-monitor tests pass; deployed to `frontend-spa`.
+
+
 - 2026-10-12 — Admin Minimalist & Professional Redesign & PayPink App Wine Theme Alignment (`frontend/index.html`, `frontend/admin/admin.css`, `frontend/admin/admin.js`, `frontend/src/js/app.js`) — [dom]:
   - **Full-Screen Light Theme Sign-In Portal:** Redesigned `#admin-login-view` with a crisp, minimal PayPink light theme (`#FFFFFF` card, soft `#f7edf2` ambient gradient, `#e6cbd8` borders, deep ink typography `#29242a`, and signature wine `#651c3e` accents), eliminating the dark theme mismatch.
   - **Executive Operations & Treasury KPI Suite:** Removed the misplaced personal retail accounts carousel (`My Accounts` / `STRESS TEST_ACCOUNT`) from the Overview tab, replacing it with 4 top-level executive metrics (`Total Core Liquidity`, `Registered Bank Customers`, `Active Customer Accounts`, and `Core Microservices Mesh`).

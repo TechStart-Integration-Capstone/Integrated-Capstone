@@ -5,7 +5,6 @@
         dashboard: ['Overview', 'M3 10l9-7 9 7v11H3z M9 21v-8h6v8'],
         customers: ['Customers', 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75'],
         transactions: ['Transactions', 'M4 7h16m-4-4 4 4-4 4 M20 17H4m4-4-4 4 4 4'],
-        audit: ['Audit logs', 'M12 3l8 4v6c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6'],
         reports: ['Reports', 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z M9 9h1m-1 4h4'],
         reconciliation: ['Reconciliation', 'M4 5h16v16H4z M8 9h8 M8 13h8 M8 17h4'],
         telemetry: ['System performance', 'M4 20V10 M10 20V4 M16 20v-8 M22 20H2']

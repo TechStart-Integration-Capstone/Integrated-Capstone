@@ -2,6 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-12 (Removed Audit Logs View & Overview Card: eliminated obsolete and hardcoded audit logs tab and overview card from admin dashboard; safeguarded app.js, tests pass 11/11, deployed to frontend-spa container by [dom])_
 _Last Updated: 2026-10-12 (Admin Minimalist & Professional Redesign & PayPink App Wine Theme Alignment: full-screen Light PayPink sign-in portal, Executive Treasury & Operations KPI suite on Overview, Over-The-Counter Cashier Desk with direct Azure SQL cash debit/credit mutations, CASH_DEPOSIT credit normalization, and theme aligned with customer banking app tokens --wine: #651c3e; all 11 monitor tests, 3 reconciliation tests pass clean by [dom])_  
 _Last Updated: 2026-10-12 (Purged emojis from Mobile Savings Hub & PinkCircles, replacing with Flutter Material outline icons styled with PayPink theme tokens; 57/57 mobile tests pass clean by [dom])_  
 _Last Updated: 2026-10-12 (Mobile Savings allocation breakdown on dashboard hero card, goal activity history sheets, and merged savings transactions in Activity feed by [dom])_  

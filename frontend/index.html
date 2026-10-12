@@ -104,10 +104,7 @@
                     <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"></path></svg></span>
                     <span>Monitor Transactions</span>
                 </button>
-                <button id="tab-btn-audit" class="tab-item" onclick="switchTab('audit')">
-                    <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
-                    <span>View Audit Logs</span>
-                </button>
+
                 <button id="tab-btn-interest" class="tab-item" onclick="switchTab('interest')"><span>Interest</span></button>
                 <button id="tab-btn-reports" class="tab-item" onclick="switchTab('reports')">
                     <span class="tab-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>
@@ -234,16 +231,7 @@
 
                     <!-- Right Column: Live Stream Feed & Security Audit -->
                     <div class="dashboard-right">
-                        <!-- Synchronous Security Audit Logs (Oracle XE) -->
-                        <div class="section-card">
-                            <div class="card-header">
-                                <h3 class="card-title">Recent audit activity</h3>
-                                <span class="badge-chip pill-oracle">Audit</span>
-                            </div>
-                            <div class="log-stream-box" id="oracle-audit-logs">
-                                <!-- Dynamically populated by JS -->
-                            </div>
-                        </div>
+
 
                         <!-- Real-time Transactions Feed -->
                         <div class="section-card">
@@ -491,38 +479,7 @@
                 </div>
             </section>
 
-            <!-- TAB: VIEW AUDIT LOGS -->
-            <section id="tab-audit" class="tab-panel">
-                <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-                    <!-- Synchronous Azure SQL Audit -->
-                    <div class="section-card">
-                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <h3 class="card-title">Azure SQL Synchronous Security Audit</h3>
-                                <span class="badge-chip pill-oracle">Local ACID Non-Repudiation</span>
-                            </div>
-                            <button class="btn-secondary" onclick="loadInitialAuditLogs()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Refresh</button>
-                        </div>
-                        <div class="log-stream-box" id="audit-tab-oracle-logs" style="max-height: 480px; overflow-y: auto;">
-                            <!-- Dynamically populated by JS -->
-                        </div>
-                    </div>
 
-                    <!-- PostgreSQL Double-Entry Immutable Ledger Audit -->
-                    <div class="section-card">
-                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <h3 class="card-title">PostgreSQL Double-Entry Audit Trail</h3>
-                                <span class="badge-chip pill-postgres">Append-Only Kafka Stream</span>
-                            </div>
-                            <button class="btn-secondary" onclick="loadPostgresAuditLogs()" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Refresh</button>
-                        </div>
-                        <div class="log-stream-box" id="audit-tab-postgres-logs" style="max-height: 480px; overflow-y: auto;">
-                            <!-- Dynamically populated by JS -->
-                        </div>
-                    </div>
-                </div>
-            </section>
 
             <!-- TAB: GENERATE REPORTS -->
             <section id="tab-reports" class="tab-panel">
