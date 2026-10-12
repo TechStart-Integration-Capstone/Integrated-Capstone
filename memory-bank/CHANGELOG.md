@@ -1,4 +1,9 @@
 # Changelog
+- 2026-10-12 — Fix Stage 3 `azure-sql-master is unhealthy` Deployment Deadlock & Harden Stage 2 Readiness (`.github/workflows/pipeline.yml`, `docker/docker-compose.yml`):
+  - **Restore `azure-sql` Compose Healthcheck (`docker/docker-compose.yml`):** Restored `azure-sql` healthcheck to `SELECT 1 FROM dbo.ACCOUNT` (without `-b`) while keeping `10_savings.sql` mounted, preventing existing production VM volumes (`azuresql_data`) from failing `depends_on: azure-sql: condition: service_healthy` before Stage 3 additive migrations execute.
+  - **Stage 3 Force-Recreate & Schema-Split Ordering (`.github/workflows/pipeline.yml`):** Added `docker compose ... up -d --force-recreate azure-sql` before full stack startup in Stage 3 to clear any stale `unhealthy` container status on `vm-paypink`, and prepended idempotent `scripts/migrate_phase1_schema_split.sql` and `scripts/migrate_phase2_t24_core.sql` to Stage 3 additive migrations.
+  - **Stage 2 Readiness Probe (`.github/workflows/pipeline.yml`):** Maintained strict `-b` readiness verification (`app.CUSTOMER`, `t24.ACCOUNT`, `t24.SAVINGS_RESERVATION`, `PH1000000EXT`) in Stage 2 (`test-stage`) so Newman contract tests continue passing 100%.
+
 - 2026-10-12 — CI/CD Self-Hosted Runner Workspace Permission Hardening (`.github/workflows/pipeline.yml`):
   - **Pre-Checkout Runner Permission Normalization:** Resolved GitHub Actions runner failure (`EACCES: permission denied, rmdir .../microservices/api-gateway/target`) on Azure VM self-hosted runner by adding an automated `sudo chown -R $(id -u):$(id -g) /home/azureuser/actions-runner/_work` pre-checkout step in Stage 3 (`prod-deploy`).
   - **Non-Destructive Checkout Configuration:** Set `clean: false` on `actions/checkout@v5` in Stage 3, preventing Node workspace purge errors when host target directories or bind-mounted JARs are concurrently referenced by running Docker containers. — [Antigravity]

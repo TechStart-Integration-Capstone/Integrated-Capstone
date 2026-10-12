@@ -147,9 +147,16 @@ jobs:
             if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
               SQLCMD="/opt/mssql-tools/bin/sqlcmd"
             fi
-            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1" >/dev/null 2>&1; then
-              echo "Azure SQL is accepting connections."
+            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -Q "IF OBJECT_ID('app.CUSTOMER', 'U') IS NULL OR OBJECT_ID('t24.ACCOUNT', 'U') IS NULL OR OBJECT_ID('t24.SAVINGS_RESERVATION', 'U') IS NULL OR NOT EXISTS (SELECT 1 FROM t24.ACCOUNT WHERE account_number = 'PH1000000EXT') THROW 50000, 'Not ready', 1;" >/dev/null 2>&1; then
+              echo "Azure SQL is initialized and ready."
               break
+            fi
+            if [ "$i" -eq 45 ] && ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -Q "IF OBJECT_ID('t24.SAVINGS_RESERVATION', 'U') IS NULL THROW 50000, 'Not ready', 1;" >/dev/null 2>&1; then
+              echo "Applying mounted setup scripts from /mssql-server-setup-scripts.d/..."
+              for f in $(docker exec azure-sql-master sh -c 'ls -1 /mssql-server-setup-scripts.d/*.sql 2>/dev/null | sort'); do
+                echo "Executing $f in azure-sql-master..."
+                docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -i "$f" 2>/dev/null || true
+              done
             fi
             if [ "$i" -eq 60 ]; then
               echo "Azure SQL failed to finish initialization after 120s"
@@ -158,15 +165,6 @@ jobs:
             fi
             sleep 2
           done
-
-          # In clean CI runners, execute mounted setup scripts in order if dbo.ACCOUNT does not exist yet
-          if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1 FROM dbo.ACCOUNT" >/dev/null 2>&1; then
-            echo "Applying mounted setup scripts from /mssql-server-setup-scripts.d/..."
-            for f in $(docker exec azure-sql-master sh -c 'ls -1 /mssql-server-setup-scripts.d/*.sql 2>/dev/null | sort'); do
-              echo "Executing $f in azure-sql-master..."
-              docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -i "$f" 2>/dev/null || true
-            done
-          fi
 
           echo "Waiting for PostgreSQL..."
           for i in $(seq 1 30); do
@@ -346,6 +344,8 @@ jobs:
       - name: Build and start
         run: |
           docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env \
+            up -d --force-recreate azure-sql
+          docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env \
             up -d --build --remove-orphans
 
       - name: Apply additive database migrations
@@ -359,7 +359,7 @@ jobs:
           if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -Q "SELECT 1" &>/dev/null; then
             PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n')
           fi
-          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_external_clearing.sql scripts/migrate_savings.sql; do
+          for f in scripts/migrate_phase1_schema_split.sql scripts/migrate_phase2_t24_core.sql scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_external_clearing.sql scripts/migrate_savings.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to azure-sql-master..."
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
