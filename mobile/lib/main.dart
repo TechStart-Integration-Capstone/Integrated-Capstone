@@ -181,13 +181,13 @@ class _PayPinkMobileAppState extends State<PayPinkMobileApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PayPink Mobile Banking',
+      title: 'PayPink Bank',
       debugShowCheckedModeBanner: false,
       theme: PayPinkTheme.lightTheme,
       darkTheme: PayPinkTheme.darkTheme,
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
       builder: (context, child) {
-        if (di.sl.isRegistered<SessionManager>()) {
+        if (_isAuthenticated && di.sl.isRegistered<SessionManager>()) {
           return SessionLockWrapper(
             sessionManager: di.sl<SessionManager>(),
             currentUsername: _currentUser,
@@ -323,95 +323,103 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     NotificationService.saveIds(widget.currentUser, 'hidden', _hiddenNotificationIds, current);
   }
 
-  void _loadLiveDatabaseData({bool preserveLocalTransactions = false, bool bypassCache = false}) async {
-    UserProfile? profile;
-    String? profileError;
+  bool _isRefreshingData = false;
+
+  Future<void> _loadLiveDatabaseData({bool preserveLocalTransactions = false, bool bypassCache = false}) async {
+    if (_isRefreshingData) return;
+    _isRefreshingData = true;
     try {
-      profile = await AccountService.fetchProfile(
-        fallbackUsername: widget.currentUser,
-        bypassCache: bypassCache,
-      );
-    } on ProfileUnavailableException catch (e) {
-      profileError = e.message;
-    }
-    final txs = await AccountService.fetchTransactions();
-    if (!mounted) return;
-    if (profileError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: PayPinkTheme.red,
-          content: Text(profileError),
-          action: SnackBarAction(
-            label: 'Retry',
-            textColor: Colors.white,
-            onPressed: () => _loadLiveDatabaseData(bypassCache: true),
+      UserProfile? profile;
+      String? profileError;
+      try {
+        profile = await AccountService.fetchProfile(
+          fallbackUsername: widget.currentUser,
+          bypassCache: bypassCache,
+        );
+      } on ProfileUnavailableException catch (e) {
+        profileError = e.message;
+      }
+      final txs = await AccountService.fetchTransactions();
+      if (!mounted) return;
+      if (profileError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: PayPinkTheme.red,
+            content: Text(profileError),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _loadLiveDatabaseData(bypassCache: true),
+            ),
           ),
-        ),
-      );
+        );
+      }
+      setState(() {
+        _profileError = profileError;
+        if (profile != null) {
+          if (_userProfile == null || !preserveLocalTransactions) {
+            _userProfile = profile;
+          } else {
+            // Merge accounts preserving optimistic real-time debits and credits
+            final currentAcctsMap = {for (final a in _userProfile!.accounts) a.accountNumber: a};
+            final mergedAccounts = profile.accounts.map((fresh) {
+              final local = currentAcctsMap[fresh.accountNumber];
+              if (local != null) {
+                // Loan repayments are posted synchronously by loan-service, so its figures are current.
+                if (local.isLoan) return fresh;
+                // If local account was debited, keep the lower balance until backend reflects it
+                if (local.currentBalance < fresh.currentBalance) {
+                  return fresh.copyWith(currentBalance: local.currentBalance);
+                }
+                // If local account was credited, keep the higher balance
+                if (local.currentBalance > fresh.currentBalance) {
+                  return fresh.copyWith(currentBalance: local.currentBalance);
+                }
+              }
+              return fresh;
+            }).toList();
+            _userProfile = profile.copyWith(accounts: mergedAccounts);
+          }
+        }
+
+        _serverTransactions = txs;
+        _rebuildNotifications();
+
+        if (txs.isNotEmpty) {
+          if (!preserveLocalTransactions || _transactions.isEmpty) {
+            _transactions.clear();
+            _transactions.addAll(txs);
+          } else {
+            // Merge live transactions preserving newly posted local items at the top
+            final fetchedIds = txs.map((t) => t.id).toSet();
+            final localUnsynced = _transactions.where((t) {
+              if (fetchedIds.contains(t.id)) return false;
+              // Also check if any fetched transaction shares the same reference/id (e.g. substring or prefixed)
+              final hasIdMatch = txs.any((f) =>
+                  f.id == t.id ||
+                  (t.id.isNotEmpty && f.id.isNotEmpty && (f.id.contains(t.id) || t.id.contains(f.id))));
+              if (hasIdMatch) return false;
+              // Also deduplicate by fuzzy match: same amount, same debit/credit, recent timestamp (< 15 mins)
+              if (t.timestamp != null) {
+                final hasRecentMatch = txs.any((f) {
+                  final amountMatches = (f.amount - t.amount).abs() < 0.001;
+                  final creditMatches = f.isCredit == t.isCredit;
+                  final timeMatches = f.timestamp == null ||
+                      f.timestamp!.difference(t.timestamp!).inMinutes.abs() < 15;
+                  return amountMatches && creditMatches && timeMatches;
+                });
+                if (hasRecentMatch) return false;
+              }
+              return true;
+            }).toList();
+            _transactions.clear();
+            _transactions.addAll([...localUnsynced, ...txs]);
+          }
+        }
+      });
+    } finally {
+      _isRefreshingData = false;
     }
-    setState(() {
-      _profileError = profileError;
-      if (profile != null) {
-        if (_userProfile == null || !preserveLocalTransactions) {
-          _userProfile = profile;
-        } else {
-          // Merge accounts preserving optimistic real-time debits and credits
-          final currentAcctsMap = {for (final a in _userProfile!.accounts) a.accountNumber: a};
-          final mergedAccounts = profile.accounts.map((fresh) {
-            final local = currentAcctsMap[fresh.accountNumber];
-            if (local != null) {
-              // Loan repayments are posted synchronously by loan-service, so its figures are current.
-              if (local.isLoan) return fresh;
-              // If local account was debited, keep the lower balance until backend reflects it
-              if (local.currentBalance < fresh.currentBalance) {
-                return fresh.copyWith(currentBalance: local.currentBalance);
-              }
-              // If local account was credited, keep the higher balance
-              if (local.currentBalance > fresh.currentBalance) {
-                return fresh.copyWith(currentBalance: local.currentBalance);
-              }
-            }
-            return fresh;
-          }).toList();
-          _userProfile = profile.copyWith(accounts: mergedAccounts);
-        }
-      }
-
-      _serverTransactions = txs;
-      _rebuildNotifications();
-
-      if (txs.isNotEmpty) {
-        if (!preserveLocalTransactions || _transactions.isEmpty) {
-          _transactions.clear();
-          _transactions.addAll(txs);
-        } else {
-          // Merge live transactions preserving newly posted local items at the top
-          final fetchedIds = txs.map((t) => t.id).toSet();
-          final localUnsynced = _transactions.where((t) {
-            if (fetchedIds.contains(t.id)) return false;
-            // Also check if any fetched transaction shares the same reference/id (e.g. substring or prefixed)
-            final hasIdMatch = txs.any((f) =>
-                f.id == t.id ||
-                (t.id.isNotEmpty && f.id.isNotEmpty && (f.id.contains(t.id) || t.id.contains(f.id))));
-            if (hasIdMatch) return false;
-            // Also deduplicate by fuzzy match: same amount, same debit/credit, recent timestamp (< 15 mins)
-            if (t.timestamp != null) {
-              final hasRecentMatch = txs.any((f) {
-                final amountMatches = (f.amount - t.amount).abs() < 0.001;
-                final creditMatches = f.isCredit == t.isCredit;
-                final timeMatches = f.timestamp == null ||
-                    f.timestamp!.difference(t.timestamp!).inMinutes.abs() < 15;
-                return amountMatches && creditMatches && timeMatches;
-              });
-              if (hasRecentMatch) return false;
-            }
-            return true;
-          }).toList();
-          _transactions.clear();
-          _transactions.addAll([...localUnsynced, ...txs]);
-        }
-      }
-    });
   }
 
   void _triggerStatusToast(String message, String icon) {
@@ -687,6 +695,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         customerName: resolvedFullName,
         primaryAccountNumber: primaryAccountNum,
         accounts: _userProfile?.accounts ?? const [],
+        onRefresh: () => _loadLiveDatabaseData(bypassCache: true),
       ),
     ];
 

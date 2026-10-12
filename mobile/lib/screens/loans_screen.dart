@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/account_service.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/bottom_sheets.dart';
 import '../widgets/loan_application_sheet.dart';
 import '../widgets/loan_payment_sheet.dart';
+import '../widgets/paypink_shimmer.dart';
 
 /// One place for everything loans: your loans (payments left, next payment, missed auto-debit),
 /// Pay, Details & schedule, and Apply. Mirrors the web Loans page (frontend/bank/loans.js).
@@ -124,8 +126,12 @@ class _LoansScreenState extends State<LoansScreen> {
               top: false,
               child: RefreshIndicator(
                 color: PayPinkTheme.wine,
-                onRefresh: _reload,
+                onRefresh: () async {
+                  HapticFeedback.mediumImpact();
+                  await _reload();
+                },
                 child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                   padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
                 children: [
                   Text('Pay, track and apply for loans in one place.', style: PayPinkTheme.body(fontSize: 13, color: muted)),
@@ -137,9 +143,9 @@ class _LoansScreenState extends State<LoansScreen> {
                   _sectionTitle('Your loans', loans.isEmpty ? null : '${loans.length} active', ink, muted),
                   const SizedBox(height: 10),
                   if (_loading && loans.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 28),
-                      child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine, strokeWidth: 2.5)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: PayPinkShimmer.accountCardSkeleton(isDark: isDark),
                     )
                   else if (loans.isEmpty)
                     _emptyLoans(isDark, ink, muted)

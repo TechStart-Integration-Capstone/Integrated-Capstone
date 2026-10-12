@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
@@ -24,7 +25,7 @@ class DashboardScreen extends StatefulWidget {
   final double? totalBalance;
   final Function(double amount, String fromAccount, String loanAccount)? onLoanPaymentSuccess;
   final String? userFullName;
-  final VoidCallback? onRefreshData;
+  final Future<void> Function()? onRefreshData;
 
   const DashboardScreen({
     super.key,
@@ -212,7 +213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     LoansScreen.open(
       context,
       accounts: widget.accounts ?? const [],
-      onChanged: widget.onRefreshData,
+      onChanged: () => widget.onRefreshData?.call(),
       onLoanPaymentSuccess: widget.onLoanPaymentSuccess,
     );
   }
@@ -259,9 +260,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
     final textLine = isDark ? PayPinkTheme.darkLine : PayPinkTheme.line;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+    return RefreshIndicator(
+      color: PayPinkTheme.wine,
+      onRefresh: () async {
+        HapticFeedback.mediumImpact();
+        if (widget.onRefreshData != null) {
+          await widget.onRefreshData!();
+        } else {
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -972,7 +983,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 90),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildQuickAction(
@@ -985,7 +996,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final labelColor = isDark ? const Color(0xFFD1D5DB) : PayPinkTheme.ink;
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       child: Column(
         children: [
           Container(

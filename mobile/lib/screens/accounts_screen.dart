@@ -6,6 +6,7 @@ import '../widgets/bottom_sheets.dart';
 import '../widgets/dynamic_card_deck.dart';
 import '../widgets/loan_payment_sheet.dart';
 import '../services/account_service.dart';
+import '../widgets/paypink_shimmer.dart';
 
 class AccountsScreen extends StatefulWidget {
   final bool hideBalances;
@@ -16,7 +17,7 @@ class AccountsScreen extends StatefulWidget {
   final String? userName;
   /// Set when accounts could not be loaded; the screen shows it with a Retry button.
   final String? loadError;
-  final VoidCallback? onRetry;
+  final Future<void> Function()? onRetry;
   final Function(double amount, String fromAccount, String loanAccount)? onLoanPaymentSuccess;
 
   const AccountsScreen({
@@ -60,9 +61,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final hasLiveAccounts = accounts.isNotEmpty;
     final totalLinked = accounts.length;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+    return RefreshIndicator(
+      color: PayPinkTheme.wine,
+      onRefresh: () async {
+        HapticFeedback.mediumImpact();
+        if (widget.onRetry != null) {
+          await widget.onRetry!();
+        } else {
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -269,7 +280,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           const SizedBox(height: 90),
         ],
       ),
-    );
+    ));
   }
 
   /// Loading, load-failure, or no-accounts card shown instead of placeholder accounts.
@@ -280,9 +291,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
     final brandWine = isDark ? PayPinkTheme.pink : PayPinkTheme.wine;
 
     if (widget.accounts == null && widget.loadError == null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine)),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            PayPinkShimmer.accountCardSkeleton(isDark: isDark),
+            const SizedBox(height: 12),
+            PayPinkShimmer.transactionSkeletonList(isDark: isDark, count: 2),
+          ],
+        ),
       );
     }
 
@@ -305,7 +322,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           if (widget.onRetry != null) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: widget.onRetry,
+              onPressed: () => widget.onRetry?.call(),
               icon: Icon(Icons.refresh_rounded, size: 16, color: brandWine),
               label: Text('Try again', style: PayPinkTheme.body(fontSize: 12, fontWeight: FontWeight.w700, color: brandWine)),
             ),

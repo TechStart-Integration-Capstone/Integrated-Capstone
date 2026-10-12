@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/bottom_sheets.dart';
@@ -124,7 +125,7 @@ class TransactionItem {
 
 class TransactionsScreen extends StatefulWidget {
   final List<TransactionItem> transactions;
-  final VoidCallback? onRefresh;
+  final Future<void> Function()? onRefresh;
   final String? customerName;
   final String? primaryAccountNumber;
   final List<BankAccount> accounts;
@@ -196,9 +197,19 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       }).toList();
     }
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+    return RefreshIndicator(
+      color: PayPinkTheme.wine,
+      onRefresh: () async {
+        HapticFeedback.mediumImpact();
+        if (widget.onRefresh != null) {
+          await widget.onRefresh!();
+        } else {
+          await Future<void>.delayed(const Duration(milliseconds: 500));
+        }
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -229,7 +240,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     IconButton(
                       icon: Icon(Icons.refresh_rounded, color: brandWine, size: 22),
                       tooltip: 'Sync via Gateway',
-                      onPressed: widget.onRefresh,
+                      onPressed: () => widget.onRefresh?.call(),
                     ),
                 ],
               ),
@@ -444,7 +455,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           const SizedBox(height: 90),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildFilterChip(String label, String value, bool isDark) {
@@ -453,7 +464,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final textMuted = isDark ? PayPinkTheme.darkMuted : PayPinkTheme.muted;
 
     return GestureDetector(
-      onTap: () => setState(() => _filter = value),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _filter = value);
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(

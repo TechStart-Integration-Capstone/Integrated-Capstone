@@ -1,4 +1,14 @@
 # Changelog
+- 2026-10-12 — Mobile App Display Name Rebranding to "PayPink Bank" (`AndroidManifest.xml`, `Info.plist`, `manifest.json`, `index.html`, `main.dart`):
+  - **Android & iOS App Label Alignment:** Updated `android:label` in `AndroidManifest.xml` from `paypink_mobile` to `PayPink Bank`, aligning the home screen icon label and app drawer title. Updated `CFBundleDisplayName` and `CFBundleName` in `Info.plist`.
+  - **Web & PWA Metadata Consistency:** Updated `name` and `short_name` in `web/manifest.json`, `<title>` and `<meta name="apple-mobile-web-app-title">` in `web/index.html`, and `MaterialApp(title: ...)` in `main.dart` to `PayPink Bank`.
+  - **Verification:** 0 analyzer issues, 57/57 mobile tests pass clean. — [Antigravity]
+
+- 2026-10-12 — Mobile App Launcher Icon Scale & Border Plate Alignment (`pubspec.yaml`, `AndroidManifest.xml`, `assets/images/paypink_app_icon*.png`, `res/mipmap-*`):
+  - **Refined Glyph Sizing & Margins:** Scaled the Heart-P brandmark down from 670px to 440px within the 1024x1024 canvas (occupying ~64% of the Android adaptive safe zone / ~43% of total canvas), giving the icon generous breathing room matching the visual proportions of standard system icons like YouTube.
+  - **Eliminated Android Legacy Plate & Border:** Resolved the launcher border/drop-shadow plate artifact by configuring full-bleed `paypink_app_icon_bg.png` (`#F9D9E0`) as `adaptive_icon_background`, creating `ic_launcher_round.xml` in `mipmap-anydpi-v26`, copying density-specific round mipmaps across `mipmap-*`, and declaring `android:roundIcon="@mipmap/ic_launcher_round"` in `AndroidManifest.xml` so modern Android launchers render the native adaptive icon directly rather than wrapping legacy fallbacks.
+  - **Lint & Test Quality Assurance:** Cleaned deprecated form and switch members in `savings_hub_screen.dart`; verified 0 `flutter analyze` issues and 57/57 mobile tests pass clean. — [Antigravity]
+
 - 2026-10-12 — CI/CD Pipeline Alignment & Hardening (`.github/workflows/pipeline.yml`):
   - **Stage 2 Datastore Readiness & Automated Init:** Separated TCP socket acceptance (`SELECT 1`) from schema readiness (`SELECT 1 FROM dbo.ACCOUNT`). In clean runner environments, automated sequential execution of mounted scripts (`01_schema.sql` through `09_external_clearing.sql`), ensuring all tables, schemas (`app`/`t24`), seeds, and system clearing accounts exist before microservice launch.
   - **Unified Migration Execution:** Consolidated `scripts/migrate_external_clearing.sql` directly into `Ensure idempotent migrations`, replacing the fragile runner-scoped bash step that lacked password propagation.
@@ -32,6 +42,30 @@
   - **Root Cause #1 Fixed (Readiness Probe):** `sqlcmd` without `-b` returns exit code `0` on login even when the SQL query fails with `Msg 208: Invalid object name`, causing the Stage 2 (`test-stage`) readiness loop to exit before `/mssql-server-setup-scripts.d/01_schema.sql` through `10_savings.sql` executed (`CUSTOMER table not found in app or dbo schema` and `Msg 208 ... Invalid object name 'app.CUSTOMER'`).
   - **Root Cause #2 Fixed (13 Newman Failures — Missing `t24.SAVINGS_RESERVATION`):** `T24HoldService.placeHold()` and `T24PostingService.executeDoubleEntryPosting()` call `accountRepository.protectReservations()`, which queries `t24.SAVINGS_RESERVATION`. Because `scripts/migrate_savings.sql` was not wired into `docker/docker-compose.yml` or `.github/workflows/pipeline.yml`, `t24-adapter` threw `Invalid object name 't24.SAVINGS_RESERVATION'`, causing all 13 Newman failures across T24 holds/transfers, remittance saga execution, and loan disbursement.
   - **Fixes Applied:** Mounted `scripts/migrate_savings.sql` as `/mssql-server-setup-scripts.d/10_savings.sql:ro` in `docker/docker-compose.yml`, updated the Stage 2 readiness probe (`-b` + `THROW 50000` guard checking `app.CUSTOMER`, `t24.ACCOUNT`, `t24.SAVINGS_RESERVATION`, and `PH1000000EXT`), and wired `scripts/migrate_savings.sql` into both Stage 2 (`Ensure idempotent migrations`) and Stage 3 (`Apply additive database migrations`).
+
+- 2026-10-12 — PayPink Heart-P Brand Launcher Icon Overhaul (`pubspec.yaml`, `assets/images/`, `res/`):
+  - **Custom Heart-P Vector Rasterization**: Vectorized and smoothed user-provided signature Heart-P brandmark (hot pink `#E55879` loop with terminal heart on soft pastel blush `#F9D9E0`) at ultra-crisp 1024×1024 master resolution.
+  - **Android Adaptive Icon Sync**: Synchronized `adaptive_icon_background: "#F9D9E0"` and generated all Android density mipmaps and `mipmap-anydpi-v26/ic_launcher.xml` via `flutter_launcher_icons`.
+  - **Validation**: `flutter analyze` 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-12 — Mobile App Launcher Icon & Branding Integration (`pubspec.yaml`, `mobile/android/app/src/main/res/`):
+  - **SVG-to-PNG Vector Asset Rasterization**: Recreated the canonical PayPink web personal banking logo from `frontend/bank/index.html` as high-definition 1024×1024 PNGs (`paypink_app_icon.png` and `paypink_app_icon_fg.png`) with verified 32-bit PNG magic bytes.
+  - **Adaptive Icon Generation (`flutter_launcher_icons`)**: Configured and ran `flutter_launcher_icons` v0.13.1 to generate all density mipmaps (`mdpi` through `xxxhdpi`), modern Android 8+ adaptive XML (`mipmap-anydpi-v26/ic_launcher.xml`), and wine background token (`#651c3e`).
+  - **Manifest & Package Integrity**: Maintained `applicationId = "com.example.paypink_mobile"` and standard manifest references, preventing ADB attach hangs or emulator icon cache collisions.
+  - **Validation**: `flutter analyze` 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-12 — Mobile Pull-to-Refresh Integration (`dashboard_screen.dart`, `transactions_screen.dart`, `accounts_screen.dart`, `loans_screen.dart`, `main.dart`):
+  - **Swipe-to-Refresh Feeds (`RefreshIndicator`)**: Wrapped `SingleChildScrollView` and `ListView` in `RefreshIndicator(color: PayPinkTheme.wine)` across Dashboard (Overview), Accounts, Transactions, and Loans screens.
+  - **Always-Scrollable Scroll Physics**: Attached `physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics())` so swipe-down gestures trigger reliably on short content or small screen displays.
+  - **Re-Entrancy & Concurrency Guard**: Guarded `_loadLiveDatabaseData` with `_isRefreshingData` in `main.dart` to prevent race conditions or stacked backend requests during rapid refresh gestures.
+  - **Haptic Tactile Feedback**: Attached `HapticFeedback.mediumImpact()` to the refresh trigger in each screen for responsive tactile confirmation.
+  - **Validation**: `flutter analyze` passed with 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-12 — Mobile Haptic Tactile Feedback Integration (`dashboard_screen.dart`, `transactions_screen.dart`, `remittance_screen.dart`):
+  - **Quick Action Touch Feedback**: Added `HapticFeedback.selectionClick()` to quick action buttons (`Send`, `Loans`, `Report`) in `dashboard_screen.dart`.
+  - **Category Filter Feedback**: Added `HapticFeedback.selectionClick()` to transaction category filter chips in `transactions_screen.dart`.
+  - **Transfer Success Feedback**: Added `HapticFeedback.mediumImpact()` upon successful remittance completion and receipt dialog display in `remittance_screen.dart`.
+  - **Validation**: `flutter analyze` 0 issues, all 51/51 mobile tests pass clean (`flutter test`). — [dom & Antigravity]
 
 - 2026-10-11 — Recover missing audit records during manual reconciliation — [aly]
   - reconciliation-service manual /run keeps the latest-50 limit and uses OutboxAuditRecovery to append missing PostgreSQL audit records from retained TRANSACTION_SUCCESS/REMITTANCE_COMPLETED outbox payloads. Recovery validates the successful ledger row, reference, account, currency, positive amount and original balance delta; missing/conflicting evidence stays unresolved. Existing audit rows, balances and outbox delivery statuses are never changed; unique-key conflict handling prevents duplicate inserts. Scheduled/Kafka checks remain detection-only.
@@ -203,6 +237,16 @@
 - 2026-10-09 — Customer bug fix 1: preserve reservations after core posting (`transaction-service`) — [aly]
   - Removed the second held-balance subtraction from `RemittanceLedgerService.commitLedgerMutation` after T24 has already settled the hold. Added a regression covering PHP 21,100 of unrelated reservations.
   - Validation: 29 transaction-service saga/recovery/hold tests passed. Local source change only; no migration or deployment.
+
+- 2026-10-10 — SessionLockWrapper Scope Alignment for Authenticated Sessions Only (`main.dart`):
+  - **Inactivity Auto-Lock Scoping:** Updated `MaterialApp.builder` in `main.dart` to require `_isAuthenticated == true` before wrapping `child` in `SessionLockWrapper`.
+  - **Prevent Pre-Login Lock Screen:** Idle timeout and backgrounding timers are now scoped strictly to active authenticated sessions, eliminating unwanted PIN lock overlays on the `LoginRegisterScreen`.
+  - **Validation:** All 51/51 Flutter unit and widget tests pass clean (`flutter test`). — [dom & Antigravity]
+
+- 2026-10-10 — Mobile PayPinkShimmer Skeleton Loaders Integration (`accounts_screen.dart`, `loans_screen.dart`):
+  - **PayPinkShimmer Integration**: Replaced generic `CircularProgressIndicator` spinners in `AccountsScreen` ([`accounts_screen.dart`](file:///c:/Users/FTM83759/Downloads/integrated2/Integrated-Capstone/mobile/lib/screens/accounts_screen.dart)) and `LoansScreen` ([`loans_screen.dart`](file:///c:/Users/FTM83759/Downloads/integrated2/Integrated-Capstone/mobile/lib/screens/loans_screen.dart)) with `PayPinkShimmer.accountCardSkeleton` and `PayPinkShimmer.transactionSkeletonList` components.
+  - **Enhanced UX**: Account cards and loans hub now display luxury brand-tailored animated shimmer skeletons during data fetching and state transitions.
+  - **Validation**: All 51/51 Flutter unit and widget tests pass clean (`flutter test`). — [dom & Antigravity]
 
 - 2026-10-10 — Mobile MPIN Database Audit, Dual-Key Compatibility & CI/CD Pipeline Migration Wiring (`BankingController.java`, `secure_token_storage.dart`, `pipeline.yml`, `docker-compose.yml`, `schema-azuresql.sql`):
   - **Audit & Resolution of Mobile MPIN Loop:** Audited and resolved the root cause of the mobile app repeatedly asking users to create a new MPIN. The mobile client was submitting `{"pin": "..."}`, whereas the backend `@Valid` model expected `{"mpin": "..."}`, causing a silent HTTP 400 rejection in `savePin()`.
