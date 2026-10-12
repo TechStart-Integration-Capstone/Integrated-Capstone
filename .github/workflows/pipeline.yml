@@ -143,17 +143,17 @@ jobs:
         run: |
           echo "Waiting for Azure SQL to finish schema initialization and accept connections..."
           SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
-          for i in $(seq 1 45); do
+          for i in $(seq 1 60); do
             if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
               SQLCMD="/opt/mssql-tools/bin/sqlcmd"
             fi
-            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1 FROM dbo.ACCOUNT" >/dev/null 2>&1; then
+            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -Q "IF OBJECT_ID('app.CUSTOMER', 'U') IS NULL OR OBJECT_ID('t24.ACCOUNT', 'U') IS NULL OR NOT EXISTS (SELECT 1 FROM t24.ACCOUNT WHERE account_number = 'PH1000000EXT') THROW 50000, 'Not ready', 1;" >/dev/null 2>&1; then
               echo "Azure SQL is initialized and ready."
               break
             fi
-            if [ "$i" -eq 45 ]; then
-              echo "Azure SQL failed to start after 90s"
-              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs azure-sql --tail=40
+            if [ "$i" -eq 60 ]; then
+              echo "Azure SQL failed to finish initialization after 120s"
+              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs azure-sql --tail=60
               exit 1
             fi
             sleep 2
@@ -351,10 +351,17 @@ jobs:
             SQLCMD="/opt/mssql-tools/bin/sqlcmd"
           fi
           PASS="PayPink2.0_StrongPass!"
-          if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -Q "SELECT 1" &>/dev/null; then
-            PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n')
-          fi
-          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql; do
+          ENV_PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n' || true)
+          for i in $(seq 1 30); do
+            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b -Q "SELECT 1" &>/dev/null; then
+              break
+            elif [ -n "$ENV_PASS" ] && docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$ENV_PASS" -C -b -Q "SELECT 1" &>/dev/null; then
+              PASS="$ENV_PASS"
+              break
+            fi
+            sleep 2
+          done
+          for f in scripts/migrate_phase1_schema_split.sql scripts/migrate_phase2_t24_core.sql scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to azure-sql-master..."
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
