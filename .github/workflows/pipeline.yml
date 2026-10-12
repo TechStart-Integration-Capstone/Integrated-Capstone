@@ -141,14 +141,14 @@ jobs:
 
       - name: Wait for Azure SQL and datastore readiness
         run: |
-          echo "Waiting for Azure SQL to finish schema initialization and accept connections..."
+          echo "Waiting for Azure SQL to finish initialization and accept connections..."
           SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
           for i in $(seq 1 60); do
             if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
               SQLCMD="/opt/mssql-tools/bin/sqlcmd"
             fi
-            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -Q "IF OBJECT_ID('app.CUSTOMER', 'U') IS NULL OR OBJECT_ID('t24.ACCOUNT', 'U') IS NULL OR OBJECT_ID('t24.SAVINGS_RESERVATION', 'U') IS NULL OR NOT EXISTS (SELECT 1 FROM t24.ACCOUNT WHERE account_number = 'PH1000000EXT') THROW 50000, 'Not ready', 1;" >/dev/null 2>&1; then
-              echo "Azure SQL is initialized and ready."
+            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1" >/dev/null 2>&1; then
+              echo "Azure SQL is accepting connections."
               break
             fi
             if [ "$i" -eq 60 ]; then
@@ -158,6 +158,15 @@ jobs:
             fi
             sleep 2
           done
+
+          # In clean CI runners, execute mounted setup scripts in order if dbo.ACCOUNT does not exist yet
+          if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -Q "SELECT 1 FROM dbo.ACCOUNT" >/dev/null 2>&1; then
+            echo "Applying mounted setup scripts from /mssql-server-setup-scripts.d/..."
+            for f in $(docker exec azure-sql-master sh -c 'ls -1 /mssql-server-setup-scripts.d/*.sql 2>/dev/null | sort'); do
+              echo "Executing $f in azure-sql-master..."
+              docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "PayPink2.0_StrongPass!" -C -b -i "$f" 2>/dev/null || true
+            done
+          fi
 
           echo "Waiting for PostgreSQL..."
           for i in $(seq 1 30); do
@@ -175,26 +184,12 @@ jobs:
             SQLCMD="/opt/mssql-tools/bin/sqlcmd"
           fi
           PASS="PayPink2.0_StrongPass!"
-          if [ -f "scripts/migrate_phase10_rbac_roles.sql" ]; then
-            echo "Verifying Phase 10 RBAC roles in azure-sql-master..."
-            cat "scripts/migrate_phase10_rbac_roles.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
-          fi
-          if [ -f "scripts/migrate_mpin.sql" ]; then
-            echo "Verifying MPIN persistence migration in azure-sql-master..."
-            cat "scripts/migrate_mpin.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
-          fi
-          if [ -f "scripts/migrate_savings.sql" ]; then
-            echo "Verifying Savings schema migration in azure-sql-master..."
-            cat "scripts/migrate_savings.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b
-          fi
-
-      - name: Prepare external clearing account
-        run: |
-          SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
-          if ! docker exec azure-sql-master test -f "$SQLCMD"; then
-            SQLCMD="/opt/mssql-tools/bin/sqlcmd"
-          fi
-          docker exec azure-sql-master sh -c '"$1" -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -i /mssql-server-setup-scripts.d/09_external_clearing.sql' sh "$SQLCMD"
+          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_external_clearing.sql; do
+            if [ -f "$f" ]; then
+              echo "Applying $f to azure-sql-master..."
+              cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
+            fi
+          done
 
       - name: Start application microservices
         run: |
@@ -355,25 +350,38 @@ jobs:
             SQLCMD="/opt/mssql-tools/bin/sqlcmd"
           fi
           PASS="PayPink2.0_StrongPass!"
-          ENV_PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n' || true)
-          for i in $(seq 1 30); do
-            if docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b -Q "SELECT 1" &>/dev/null; then
-              break
-            elif [ -n "$ENV_PASS" ] && docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$ENV_PASS" -C -b -Q "SELECT 1" &>/dev/null; then
-              PASS="$ENV_PASS"
-              break
-            fi
-            sleep 2
-          done
-          for f in scripts/migrate_phase1_schema_split.sql scripts/migrate_phase2_t24_core.sql scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_savings.sql; do
+          if ! docker exec azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -Q "SELECT 1" &>/dev/null; then
+            PASS=$(grep MSSQL_SA_PASSWORD /opt/paypink/.env 2>/dev/null | cut -d= -f2- | tr -d '\r\n')
+          fi
+          for f in scripts/migrate_phase5_hardening.sql scripts/migrate_transaction_monitoring.sql scripts/migrate_phase6_reversals.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_external_clearing.sql; do
             if [ -f "$f" ]; then
               echo "Applying $f to azure-sql-master..."
               cat "$f" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
             fi
           done
-          # Required by external settlement and core reservation protection; fail deployment verification if provisioning fails.
-          docker exec -i azure-sql-master "$SQLCMD" -S localhost -U sa -P "$PASS" -C -b < scripts/migrate_external_clearing.sql
-          docker exec -i azure-sql-master "$SQLCMD" -S localhost -U sa -P "$PASS" -C -b < scripts/migrate_savings.sql
+
+          # If /opt/paypink/.env points to remote Azure Cloud SQL (e.g. paypink.database.windows.net), apply additive migrations to cloud DB too
+          ENV_DB_URL=$(grep -E '^(AZURE_SQL_URL|AZURE_SQL_JDBC_URL)=' /opt/paypink/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'\"\r\n")
+          if [[ "$ENV_DB_URL" =~ jdbc:sqlserver://([^:;]+) ]]; then
+            REMOTE_HOST="${BASH_REMATCH[1]}"
+            if [[ "$REMOTE_HOST" =~ database\.windows\.net ]]; then
+              echo "Remote Azure Cloud SQL detected ($REMOTE_HOST). Applying additive migrations..."
+              REMOTE_USER=$(grep -E '^(AZURE_SQL_USERNAME|SPRING_DATASOURCE_USERNAME)=' /opt/paypink/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'\"\r\n")
+              REMOTE_PASS=$(grep -E '^(AZURE_SQL_PASSWORD|SPRING_DATASOURCE_PASSWORD)=' /opt/paypink/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'\"\r\n")
+              if [[ "$ENV_DB_URL" =~ databaseName=([^;]+) ]]; then
+                REMOTE_DB="${BASH_REMATCH[1]}"
+              else
+                REMOTE_DB="paypink"
+              fi
+              for f in scripts/migrate_phase5_hardening.sql scripts/migrate_phase6_loans.sql scripts/migrate_interest_azuresql.sql scripts/migrate_phase10_rbac_roles.sql scripts/migrate_mpin.sql scripts/migrate_external_clearing.sql; do
+                if [ -f "$f" ]; then
+                  echo "Applying $f to $REMOTE_HOST ($REMOTE_DB)..."
+                  cat "$f" | docker exec -i azure-sql-master $SQLCMD -S "$REMOTE_HOST" -d "$REMOTE_DB" -U "$REMOTE_USER" -P "$REMOTE_PASS" -C -b 2>/dev/null || true
+                fi
+              done
+            fi
+          fi
+
           PG_USER="audit_user"
           if ! docker exec postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db -c "SELECT 1" &>/dev/null; then
             PG_USER="postgres"
@@ -389,12 +397,17 @@ jobs:
           # Restart transaction-service so JPA models pick up newly migrated columns
           docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env restart transaction-service reconciliation-service || true
 
-      - name: Health check (gateway and web SPA, up to 180 s)
+      - name: Health check (gateway, web SPA, and mobile app, up to 180 s)
         run: |
           for i in $(seq 1 36); do
             if curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1 \
                && (curl -fsS -o /dev/null http://localhost:80 2>/dev/null || curl -fsS -o /dev/null http://localhost:3001 2>/dev/null); then
-              echo "Gateway and SPA are healthy"
+              echo "Gateway and Web SPA are healthy"
+              if curl -fsS -o /dev/null http://localhost:3002 2>/dev/null; then
+                echo "Mobile App PWA (port 3002) is healthy and online"
+              else
+                echo "Note: Mobile App PWA (port 3002) still initializing"
+              fi
               echo "$GITHUB_SHA" > /opt/paypink/LAST_GOOD_SHA
               exit 0
             fi

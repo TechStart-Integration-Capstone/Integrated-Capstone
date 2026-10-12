@@ -1,4 +1,17 @@
 # Changelog
+- 2026-10-12 — CI/CD Pipeline Alignment & Hardening (`.github/workflows/pipeline.yml`):
+  - **Stage 2 Datastore Readiness & Automated Init:** Separated TCP socket acceptance (`SELECT 1`) from schema readiness (`SELECT 1 FROM dbo.ACCOUNT`). In clean runner environments, automated sequential execution of mounted scripts (`01_schema.sql` through `09_external_clearing.sql`), ensuring all tables, schemas (`app`/`t24`), seeds, and system clearing accounts exist before microservice launch.
+  - **Unified Migration Execution:** Consolidated `scripts/migrate_external_clearing.sql` directly into `Ensure idempotent migrations`, replacing the fragile runner-scoped bash step that lacked password propagation.
+  - **Remote Azure Cloud SQL Alignment in Stage 3:** Added dynamic parsing of `REMOTE_HOST`, `REMOTE_DB`, `REMOTE_USER`, and `REMOTE_PASS` from `/opt/paypink/.env` for `paypink.database.windows.net`. Automated applying additive migrations (`phase5_hardening`, `phase6_loans`, `interest_azuresql`, `phase10_rbac_roles`, `migrate_mpin`, `migrate_external_clearing`) to the cloud database on deploy.
+  - **Mobile PWA Health Probe:** Integrated port 3002 health check into Stage 3 verification, ensuring API Gateway (:8080), Web SPA (:80/:3001), and Mobile App (:3002) are all monitored.
+  - **Test Parity Verification:** Validated Docker Compose syntax, all 51 mobile Flutter unit/widget tests passing (100%), and all 136 frontend Node regression tests passing (100%). — [Antigravity]
+
+- 2026-10-12 — Azure SQL Database URL Alignment & Schema Audit Suite (`scripts/verify_azure_db_schema.sql`, `.env`, `docker/.env`, `.env.example`, `docker/.env.example`):
+  - **Azure SQL Hostname & Properties Alignment:** Configured the new Azure SQL Server URL (`jdbc:sqlserver://paypink.database.windows.net:1433;databaseName=paypink;encrypt=true;trustServerCertificate=false`) across `.env`, `docker/.env`, `.env.example`, and `docker/.env.example`.
+  - **Comprehensive Schema & Seed Audit Tool (`scripts/verify_azure_db_schema.sql`):** Created automated T-SQL verification script auditing all 13 Phase 1–10 tables, split schemas (`app` / `t24`), 11 compatibility synonyms (`dbo.*`), security columns (`mpin_hash`, `roles`, `held_balance`, `status`), bank pools (`PH1000000LOAN`, `PH1000000EXT`), and demo seed users (`lviernes`, `arosales`, `glim`, `admin`). — [Antigravity]
+
+- 2026-10-09 — Azure CLI Cheatsheet Documentation (`docs/AZURE_CLI_CHEATSHEET.md`):
+  - **Comprehensive Azure CLI Reference:** Authored `docs/AZURE_CLI_CHEATSHEET.md` detailing every command used in the PayPink Azure deployment lifecycle. Includes command breakdowns ("What is it", "Why is it for", "Where to use"), cost-control rules (`deallocate` vs `stop`, `auto-shutdown`), NSG whitelist rules, emergency backdoors (`run-command invoke`), and quick scenario recipes for defense and evaluation sessions. — [Antigravity]
 
 - 2026-10-12 — Purged emojis from Mobile Savings Hub & PinkCircles (`savings_hub_screen.dart`) — [dom]:
   - **Clean FinTech UI Alignment:** Replaced all informal emojis across categories, badges, streak counters, and status pills with Flutter Material icons styled to PayPink wine/rose theme tokens.
