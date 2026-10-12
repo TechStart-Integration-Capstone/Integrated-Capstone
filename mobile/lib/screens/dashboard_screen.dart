@@ -11,6 +11,8 @@ import '../widgets/account_card_carousel.dart';
 import '../widgets/promo_banner.dart';
 import '../widgets/transaction_report_sheet.dart';
 import 'loans_screen.dart';
+import 'savings_hub_screen.dart';
+import '../services/savings_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool hideBalances;
@@ -70,6 +72,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
     return total;
+  }
+
+  SavingsOverview? _savingsOverview;
+
+  double get _savingsReserved =>
+      (_savingsOverview?.personalTotal ?? 0.0) + (_savingsOverview?.groupTotal ?? 0.0);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavingsOverview();
+  }
+
+  @override
+  void didUpdateWidget(covariant DashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.accounts != widget.accounts) {
+      _loadSavingsOverview();
+    }
+  }
+
+  Future<void> _loadSavingsOverview() async {
+    try {
+      final overview = await SavingsService.fetchOverview();
+      if (mounted && overview != null) {
+        setState(() {
+          _savingsOverview = overview;
+        });
+      }
+    } catch (_) {}
   }
 
   String get _currentMonthYear {
@@ -183,6 +215,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onChanged: widget.onRefreshData,
       onLoanPaymentSuccess: widget.onLoanPaymentSuccess,
     );
+  }
+
+  /// Savings Hub: personal savings goals, PinkCircles, streaks, and milestones.
+  void _openSavings() async {
+    await SavingsHubScreen.open(
+      context,
+      accounts: widget.accounts ?? const [],
+      onChanged: () {
+        widget.onRefreshData?.call();
+        _loadSavingsOverview();
+      },
+    );
+    _loadSavingsOverview();
   }
 
   void _openLoanApplicationSheet() {
@@ -338,6 +383,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontSize: 12,
                                   ),
                                 ),
+                                if (_savingsReserved > 0) ...[
+                                  const SizedBox(height: 10),
+                                  GestureDetector(
+                                    onTap: _openSavings,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.savings_outlined, color: PayPinkTheme.pink, size: 14),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            widget.hideBalances
+                                                ? 'Savings: \u2022\u2022\u2022\u2022\u2022\u2022'
+                                                : '\u20B1${_formatCurrency(_savingsReserved)} set aside in Savings',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 14),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             );
                           },
@@ -401,6 +479,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: Icons.north_east_rounded,
                 label: 'Send',
                 onTap: () => widget.onNavigateTab(2), // Transfer tab
+              ),
+              _buildQuickAction(
+                context,
+                icon: Icons.savings_outlined,
+                label: 'Savings',
+                onTap: _openSavings,
               ),
               _buildQuickAction(
                 context,
@@ -722,7 +806,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ? Icons.undo_rounded
                               : (isDlq
                                   ? Icons.hourglass_top_rounded
-                                  : (tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded)),
+                                  : (tx.transactionType.startsWith('SAVINGS_')
+                                      ? Icons.savings_outlined
+                                      : (tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded))),
                           color: isReversed
                               ? PayPinkTheme.amber
                               : (isDlq

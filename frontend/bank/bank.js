@@ -21,7 +21,7 @@ function balanceDisplayState() {
   if (!balanceDisplays || balanceDisplays.session !== state.session
       || balanceDisplays.generation !== state.generation || balanceDisplays.owner !== state.profile?.username) {
     balanceDisplays = {session:state.session, generation:state.generation, owner:state.profile?.username,
-      entries:new Map(), selectedAccount:''};
+      entries:new Map(), selectedAccount:'', allocationsOpen:new Set()};
   }
   return balanceDisplays;
 }
@@ -186,6 +186,7 @@ function heading(title, subtitle) {
 function renderPage() {
   const main = document.querySelector('#main');
   if (!state.session || !main) return;
+  document.querySelector('#account-savings-breakdown')?.rememberAllocations?.();
   const titles = {overview:'Overview',accounts:'My accounts',activity:'Transactions',transfer:'Transfers',loans:'Loans',savings:'Savings Hub'};
   document.title = `${titles[state.page]} — PayPink`;
   document.querySelector('#breadcrumb-page').textContent = titles[state.page];
@@ -236,6 +237,7 @@ async function loadOverviewBalance() {
 async function loadSavingsBreakdown() {
   const panel=document.querySelector('#account-savings-breakdown');
   if(!panel)return;
+  panel.rememberAllocations?.();
   const select=panel.querySelector('select'), content=panel.querySelector('[data-breakdown-content]');
   const accountId=select.value, cache=balanceDisplayState();
   cache.selectedAccount=accountId;
@@ -243,6 +245,7 @@ async function loadSavingsBreakdown() {
   const token=Symbol();panel.requestToken=token;
   const paint=()=>{
     if(!panel.isConnected||balanceDisplayState()!==cache||cache.entries.get(key)!==entry||panel.requestToken!==token)return;
+    panel.rememberAllocations?.();
     const data=entry.data;
     if(!data){
       content.innerHTML=entry.error?'<p role="status">Your savings breakdown is temporarily unavailable.</p>'
@@ -251,6 +254,14 @@ async function loadSavingsBreakdown() {
     }
     const row=(label,value)=>`<div><dt>${escapeHtml(label)}</dt><dd>${balance(value)}</dd></div>`;
     content.innerHTML=`<dl class="sv-funding">${row('Total account balance',data.accountBalance)}${row('Set aside for personal goals',data.personalReserved)}${row('Your PinkCircle contributions',data.circleReserved)}${Number(data.unlistedReservations)>0?row('Other savings reservations',data.unlistedReservations):''}${row('Available balance',data.availableBalance)}</dl><p>Set-aside money stays in your account. Release it in Savings Hub before spending or reallocating it.</p><details class="account-allocations"><summary>View allocations (${data.allocations.length})</summary>${data.allocations.length?`<dl class="sv-funding">${data.allocations.map(a=>row(a.name+' · '+(a.kind==='PINK_CIRCLE'?'PinkCircle · your contribution':'Personal goal'),a.amount)).join('')}</dl>`:'<p>No money is set aside for goals or PinkCircles in this account yet.</p>'}</details><p class="sv-modal-note">Account numbers are masked. Use Refresh for the latest balances.</p>`;
+    const allocations=content.querySelector('.account-allocations');
+    allocations.open=cache.allocationsOpen.has(accountId);
+    // Capture the live property before either redraw; toggle events can still be queued.
+    panel.rememberAllocations=()=>{
+      if(!panel.isConnected||!allocations.isConnected||balanceDisplayState()!==cache)return;
+      if(allocations.open)cache.allocationsOpen.add(accountId);
+      else cache.allocationsOpen.delete(accountId);
+    };
   };
   paint();
   await readSavingsBreakdown(accountId);

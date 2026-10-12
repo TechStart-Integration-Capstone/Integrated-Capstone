@@ -143,7 +143,7 @@ jobs:
         run: |
           echo "Waiting for Azure SQL to finish initialization and accept connections..."
           SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
-          for i in $(seq 1 45); do
+          for i in $(seq 1 60); do
             if ! docker exec azure-sql-master test -x "$SQLCMD" 2>/dev/null; then
               SQLCMD="/opt/mssql-tools/bin/sqlcmd"
             fi
@@ -151,9 +151,9 @@ jobs:
               echo "Azure SQL is accepting connections."
               break
             fi
-            if [ "$i" -eq 45 ]; then
-              echo "Azure SQL failed to start after 90s"
-              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs azure-sql --tail=40
+            if [ "$i" -eq 60 ]; then
+              echo "Azure SQL failed to finish initialization after 120s"
+              docker compose -p paypink-ci -f "$COMPOSE_FILE" --env-file /tmp/ci.env logs azure-sql --tail=60
               exit 1
             fi
             sleep 2
@@ -392,6 +392,8 @@ jobs:
               cat "$f" | docker exec -i postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db 2>/dev/null || true
             fi
           done
+          # Required simulation approval policy; existing volumes do not rerun init scripts.
+          docker exec -i postgres-immutable-audit psql -v ON_ERROR_STOP=1 -U "$PG_USER" -d ledger_audit_db < scripts/migrate_interest_single_admin_postgres.sql
           # Restart transaction-service so JPA models pick up newly migrated columns
           docker compose -p paypink -f "$COMPOSE_FILE" --env-file /opt/paypink/.env restart transaction-service reconciliation-service || true
 

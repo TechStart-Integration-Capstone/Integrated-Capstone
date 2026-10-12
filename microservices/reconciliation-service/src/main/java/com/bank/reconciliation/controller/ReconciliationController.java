@@ -21,10 +21,13 @@ public class ReconciliationController {
 
     @PostMapping("/run")
     public ResponseEntity<Map<String, Object>> triggerReconciliation() {
-        reconciliationService.runFullSweep();
+        var result = reconciliationService.runFullSweep();
         return ResponseEntity.ok(Map.of(
                 "status",  "COMPLETED",
-                "message", "Scheduled 15-minute system-wide reconciliation sweep completed successfully: Azure SQL vs PostgreSQL matched."
+                "checked", result.checked(), "recovered", result.recovered(),
+                "matched", result.matched(), "drifted", result.drifted(),
+                "message", String.format("Checked %d transactions: %d missing audit records recovered, %d matched, %d still drifted.",
+                        result.checked(), result.recovered(), result.matched(), result.drifted())
         ));
     }
 
