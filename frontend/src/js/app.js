@@ -103,11 +103,11 @@ let monitorRequest = null;
 let oracleAuditLogs = [];
 let outboxEvents = [];
 let postgresAudits = [
-    { id: 'AUD-PG-DB-9902', txId: '102', account: '001181233469', op: 'DEBIT', before: 684400.16, after: 683900.16, amt: 500.00, amount: 500.00, time: formatPhilippineDateTime(new Date(Date.now() - 1800000)) },
-    { id: 'AUD-PG-DB-9901', txId: '101', account: '001981233461', op: 'DEBIT', before: 200.00, after: 150.00, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
-    { id: 'AUD-PG-CR-9901', txId: '101', account: '001181233469', op: 'CREDIT', before: 683850.16, after: 683900.16, amt: 50.00, amount: 50.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
-    { id: 'AUD-PG-DB-9900', txId: '100', account: '001381233467', op: 'DEBIT', before: 60610.00, after: 45610.00, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) },
-    { id: 'AUD-PG-CR-9900', txId: '100', account: '001181233469', op: 'CREDIT', before: 668900.16, after: 683900.16, amt: 15000.00, amount: 15000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) }
+    { id: 'AUD-PG-DB-10012', txId: '10012', account: '001181233469', op: 'DEBIT', before: 136000.00, after: 131000.00, amt: 5000.00, amount: 5000.00, time: formatPhilippineDateTime(new Date(Date.now() - 1800000)) },
+    { id: 'AUD-PG-CR-10011', txId: '10011', account: '001181233469', op: 'CREDIT', before: 134100.00, after: 136000.00, amt: 1900.00, amount: 1900.00, time: formatPhilippineDateTime(new Date(Date.now() - 3600000)) },
+    { id: 'AUD-PG-DB-10010', txId: '10010', account: '001181233469', op: 'DEBIT', before: 135100.00, after: 134100.00, amt: 1000.00, amount: 1000.00, time: formatPhilippineDateTime(new Date(Date.now() - 5400000)) },
+    { id: 'AUD-PG-DB-0014', txId: '14', account: '001133218709', op: 'DEBIT', before: 89220.50, after: 84220.50, amt: 5000.00, amount: 5000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) },
+    { id: 'AUD-PG-CR-0014', txId: '14', account: '001181233469', op: 'CREDIT', before: 130100.00, after: 135100.00, amt: 5000.00, amount: 5000.00, time: formatPhilippineDateTime(new Date(Date.now() - 7200000)) }
 ];
 
 // Initialize Application on DOM Ready
@@ -550,9 +550,36 @@ async function handleOtcTellerSubmit(event) {
             generateOtcIdempotencyKey();
 
             // Refresh state across directory, monitor, and audit
+            const timeNow = formatPhilippineTime(new Date());
+            const accNumStr = opt.getAttribute('data-acc-num') || String(data.accountNumber || '');
+            const newAuditAction = otcOperationMode === 'DEBIT' ? 'OTC_CASH_WITHDRAWAL' : 'OTC_CASH_DEPOSIT';
+            oracleAuditLogs.unshift({
+                time: timeNow,
+                action: newAuditAction,
+                details: `Authorized ${opName} of ₱${formatCurrency(amountVal)} on account ${formatAccountNumber(accNumStr)} (${holder}). Master Azure SQL row committed.`
+            });
+            saveAuditsToStorage();
+            renderOracleAuditLogs();
+
+            if (data.beforeBalance !== undefined && data.afterBalance !== undefined) {
+                const txIdStr = String(data.transactionId || Date.now()).slice(-4);
+                postgresAudits.unshift({
+                    id: `AUD-PG-${otcOperationMode === 'DEBIT' ? 'DB' : 'CR'}-${txIdStr}`,
+                    txId: txIdStr,
+                    account: accNumStr,
+                    op: otcOperationMode,
+                    before: parseFloat(data.beforeBalance),
+                    after: parseFloat(data.afterBalance),
+                    amt: amountVal,
+                    amount: amountVal,
+                    time: formatPhilippineDateTime(new Date())
+                });
+                saveAuditsToStorage();
+                loadPostgresAuditLogs();
+            }
+
             await loadAllCustomers(true);
             await loadRecentTransactions();
-            await loadInitialAuditLogs();
         } else {
             const err = await res.json().catch(() => ({}));
             alert(`OTC Transaction Rejected: ${err.detail || err.message || err.title || 'Error executing balance mutation.'}`);
@@ -1535,6 +1562,7 @@ function renderTransactionFeed() {
 function renderOracleAuditLogs() {
     const box = document.getElementById('oracle-audit-logs');
     const tabBox = document.getElementById('audit-tab-oracle-logs');
+    if (!box && !tabBox) return;
 
     const html = oracleAuditLogs.map(l => `
         <div class="log-entry">
@@ -1632,13 +1660,24 @@ async function loadInitialAuditLogs() {
     if (savedOracle) {
         try {
             const parsed = JSON.parse(savedOracle);
-            if (Array.isArray(parsed) && parsed.length > 0) oracleAuditLogs = parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                // Purge any obsolete cached logs mentioning Oracle XE or stale account references
+                const cleanLogs = parsed.filter(l => !l.details?.includes('Oracle XE') && !l.details?.includes('ACC-PH-1001-8842') && !l.details?.includes('ACCOUNT #3'));
+                if (cleanLogs.length > 0) {
+                    oracleAuditLogs = cleanLogs;
+                }
+            }
         } catch (e) {}
     }
     if (savedPg) {
         try {
             const parsed = JSON.parse(savedPg);
-            if (Array.isArray(parsed) && parsed.length > 0) postgresAudits = parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                const cleanPg = parsed.filter(p => p.account !== 'ACC-PH-1001-8842' && p.account !== '001188421001');
+                if (cleanPg.length > 0) {
+                    postgresAudits = cleanPg;
+                }
+            }
         } catch (e) {}
     }
     if (savedOutbox) {
@@ -1651,9 +1690,9 @@ async function loadInitialAuditLogs() {
     if (oracleAuditLogs.length === 0) {
         oracleAuditLogs = [
             { time: formatPhilippineTime(new Date(Date.now() - 1800000)), action: 'SECURITY_AUDIT', details: 'Stateless JWT verified at API Gateway. User [lviernes] authorized with ROLE_CUSTOMER.' },
-            { time: formatPhilippineTime(new Date(Date.now() - 3600000)), action: 'ROW_LOCK_ACQUIRED', details: 'PESSIMISTIC_WRITE lock on ACCOUNT #3. Atomic Outbox Event published.' },
-            { time: formatPhilippineTime(new Date(Date.now() - 5400000)), action: 'TRANSACTION_SETTLED', details: 'PESONet settlement batch commit on Oracle XE. 0% Overdraft verified.' },
-            { time: formatPhilippineTime(new Date(Date.now() - 7200000)), action: 'ACID_MUTATION', details: 'Committed local ACID mutation of ₱15,000.0000 on ACC-PH-1001-8842.' }
+            { time: formatPhilippineTime(new Date(Date.now() - 3600000)), action: 'ROW_LOCK_ACQUIRED', details: 'PESSIMISTIC_WRITE lock on ACCOUNT #1. Atomic Outbox Event published.' },
+            { time: formatPhilippineTime(new Date(Date.now() - 5400000)), action: 'TRANSACTION_SETTLED', details: 'PESONet settlement batch commit on Azure SQL. 0% Overdraft verified.' },
+            { time: formatPhilippineTime(new Date(Date.now() - 7200000)), action: 'ACID_MUTATION', details: 'Committed local ACID mutation of ₱15,000.0000 on ACC 001 1 8123346 9.' }
         ];
         saveAuditsToStorage();
     }
@@ -1835,7 +1874,7 @@ async function handleIncomingTransferEvent(data) {
     oracleAuditLogs.unshift({
         time: timeStr,
         action: 'CUSTOMER_TRANSFER_ACID',
-        details: `Customer transfer of ₱${formatCurrency(amt)} from ${formatAccountNumber(senderAcc)} to ${formatAccountNumber(destAcc)} (Ref: ${txRef}). Committed with Oracle XE ACID double-entry.`
+        details: `Customer transfer of ₱${formatCurrency(amt)} from ${formatAccountNumber(senderAcc)} to ${formatAccountNumber(destAcc)} (Ref: ${txRef}). Committed with Azure SQL ACID double-entry.`
     });
     renderOracleAuditLogs();
 

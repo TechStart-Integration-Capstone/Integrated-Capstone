@@ -22,6 +22,29 @@
   - **Docker Bind-Mount Directory Cleanup & Recompilation:** Resolved OCI runtime mount failure (`not a directory`) caused by Docker auto-creating host directories for missing JARs (`loan-service.jar` and `t24-adapter.jar`). Rebuilt both artifacts via Maven `-DskipTests` and launched containers along with `api-gateway`.
   - **Live Cloud Database Connectivity Verified:** Confirmed `auth-service` successfully established HikariCP pool connection against `paypink.database.windows.net:1433` and initialized Spring Web context within 125s. Verified `api-gateway` HTTP 200 response on port 8080.
   - **Phase 11 Savings Goal Audit Added:** Updated `scripts/verify_azure_db_schema.sql` to audit newly merged Phase 11 savings tables (`app.PINK_CIRCLE`, `app.SAVINGS_GOAL`, `app.PINK_CIRCLE_MEMBER`, `app.SAVINGS_SCHEDULE`, `app.SAVINGS_ACTIVITY`, and `t24.SAVINGS_RESERVATION`). — [Antigravity]
+- 2026-10-12 — Remove Audit Logs Tab & Overview Card from Admin Portal (`frontend/index.html`, `frontend/admin/admin.js`, `frontend/src/js/app.js`) — [dom]:
+  - **Removed Audit Logs Tab:** Completely deleted the "View Audit Logs" button and the entire `#tab-audit` panel from the admin dashboard and sidebar navigation.
+  - **Removed Overview Audit Card:** Removed the "Recent audit activity" card from the Overview tab, leaving only the live Transaction History feed.
+  - **Clean DOM Safeguards:** Added null-safety guards in `app.js` to prevent any runtime exceptions now that the audit elements are gone.
+  - **Verification:** 11/11 transaction-monitor tests pass; deployed to `frontend-spa`.
+
+
+- 2026-10-12 — Admin Minimalist & Professional Redesign & PayPink App Wine Theme Alignment (`frontend/index.html`, `frontend/admin/admin.css`, `frontend/admin/admin.js`, `frontend/src/js/app.js`) — [dom]:
+  - **Full-Screen Light Theme Sign-In Portal:** Redesigned `#admin-login-view` with a crisp, minimal PayPink light theme (`#FFFFFF` card, soft `#f7edf2` ambient gradient, `#e6cbd8` borders, deep ink typography `#29242a`, and signature wine `#651c3e` accents), eliminating the dark theme mismatch.
+  - **Executive Operations & Treasury KPI Suite:** Removed the misplaced personal retail accounts carousel (`My Accounts` / `STRESS TEST_ACCOUNT`) from the Overview tab, replacing it with 4 top-level executive metrics (`Total Core Liquidity`, `Registered Bank Customers`, `Active Customer Accounts`, and `Core Microservices Mesh`).
+  - **Color Alignment with PayPink App:** Aligned palette across admin dashboard, topnav, sidebar pills, and cashier desk with the customer app tokens: `--wine: #651c3e`, `--wine-dark: #47142c`, `--pink: #f7d6e3`, `--paper: #faf9f6`, and `--green: #25745c`.
+  - **Cash Deposit Credit Leg & Transfer Normalization:** Fixed `CASH_DEPOSIT` transactions to strictly render as `CREDIT` (`+₱`, green, and categorized under CREDIT filter); updated monitor feed to display transfer routing directions (`Source → Target`).
+  - **Verification & Deployment:** Rebuilt and verified live inside container `frontend-spa`; all 11 transaction-monitor tests and 3 admin reconciliation tests pass clean.
+
+
+  - **Android & iOS App Label Alignment:** Updated `android:label` in `AndroidManifest.xml` from `paypink_mobile` to `PayPink Bank`, aligning the home screen icon label and app drawer title. Updated `CFBundleDisplayName` and `CFBundleName` in `Info.plist`.
+  - **Web & PWA Metadata Consistency:** Updated `name` and `short_name` in `web/manifest.json`, `<title>` and `<meta name="apple-mobile-web-app-title">` in `web/index.html`, and `MaterialApp(title: ...)` in `main.dart` to `PayPink Bank`.
+  - **Verification:** 0 analyzer issues, 57/57 mobile tests pass clean. — [Antigravity]
+
+- 2026-10-12 — Mobile App Launcher Icon Scale & Border Plate Alignment (`pubspec.yaml`, `AndroidManifest.xml`, `assets/images/paypink_app_icon*.png`, `res/mipmap-*`):
+  - **Refined Glyph Sizing & Margins:** Scaled the Heart-P brandmark down from 670px to 440px within the 1024x1024 canvas (occupying ~64% of the Android adaptive safe zone / ~43% of total canvas), giving the icon generous breathing room matching the visual proportions of standard system icons like YouTube.
+  - **Eliminated Android Legacy Plate & Border:** Resolved the launcher border/drop-shadow plate artifact by configuring full-bleed `paypink_app_icon_bg.png` (`#F9D9E0`) as `adaptive_icon_background`, creating `ic_launcher_round.xml` in `mipmap-anydpi-v26`, copying density-specific round mipmaps across `mipmap-*`, and declaring `android:roundIcon="@mipmap/ic_launcher_round"` in `AndroidManifest.xml` so modern Android launchers render the native adaptive icon directly rather than wrapping legacy fallbacks.
+  - **Lint & Test Quality Assurance:** Cleaned deprecated form and switch members in `savings_hub_screen.dart`; verified 0 `flutter analyze` issues and 57/57 mobile tests pass clean. — [Antigravity]
 
 - 2026-10-12 — CI/CD Pipeline Alignment & Hardening (`.github/workflows/pipeline.yml`):
   - **Stage 2 Datastore Readiness & Automated Init:** Separated TCP socket acceptance (`SELECT 1`) from schema readiness (`SELECT 1 FROM dbo.ACCOUNT`). In clean runner environments, automated sequential execution of mounted scripts (`01_schema.sql` through `09_external_clearing.sql`), ensuring all tables, schemas (`app`/`t24`), seeds, and system clearing accounts exist before microservice launch.
