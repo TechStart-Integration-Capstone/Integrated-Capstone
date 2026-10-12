@@ -26,8 +26,8 @@
                         <path d="M10 16L14 20L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                         <defs>
                             <linearGradient id="pink-grad" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-                                <stop stop-color="#E11D48"/>
-                                <stop offset="1" stop-color="#BE185D"/>
+                                <stop stop-color="#651c3e"/>
+                                <stop offset="1" stop-color="#47142c"/>
                             </linearGradient>
                         </defs>
                     </svg>
@@ -75,13 +75,13 @@
                     <span class="badge-text" id="header-jwt-badge">JWT: ROLE_ADMIN</span>
                 </button>
                 <div class="user-avatar-block" id="admin-user-profile">
-                    <div class="avatar-circle" id="admin-avatar-initials" style="background: linear-gradient(135deg, #E11D48, #DB2777); color: #FFF; font-weight: 800;">AD</div>
+                    <div class="avatar-circle" id="admin-avatar-initials" style="background: linear-gradient(135deg, #651c3e, #8a2a56); color: #FFF; font-weight: 800;">AD</div>
                     <div class="user-meta">
                         <div class="user-name" id="admin-user-name">System Administrator</div>
                         <div class="user-branch" id="admin-user-role">PayPink Core • ROLE_ADMIN</div>
                     </div>
                 </div>
-                <button id="btn-admin-logout" class="btn-admin-logout" onclick="handleAdminLogout()" title="Sign Out of Admin Portal" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(225, 29, 72, 0.08); color: var(--primary-rose); border: 1px solid var(--border-rose-medium); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                <button id="btn-admin-logout" class="btn-admin-logout" onclick="handleAdminLogout()" title="Sign Out of Admin Portal" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(101, 28, 62, 0.08); color: var(--primary-rose); border: 1px solid var(--border-rose-medium); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                     <span>Sign Out</span>
                 </button>
@@ -123,68 +123,109 @@
                 </button>
             </nav>
 
-            <!-- TAB 1: RETAIL BANKING & TRANSFERS -->
+            <!-- TAB 1: EXECUTIVE OPERATIONS & OTC DESK -->
             <section id="tab-dashboard" class="tab-panel active">
+                <!-- Executive Operations & Treasury KPIs -->
+                <div class="sla-metrics-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 1.5rem;">
+                    <div class="sla-card">
+                        <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"></line><line x1="3" y1="10" x2="21" y2="10"></line><polyline points="3" 10 12 3 21 10"></polyline><line x1="6" y1="10" x2="6" y2="21"></line><line x1="10" y1="10" x2="10" y2="21"></line><line x1="14" y1="10" x2="14" y2="21"></line><line x1="18" y1="10" x2="18" y2="21"></line></svg></div>
+                        <div class="sla-metric" id="overview-kpi-liquidity">₱1,164,830.66</div>
+                        <div class="sla-label">Total Core Liquidity (PHP)</div>
+                        <div class="sla-badge status-good">Azure SQL Master Reserves</div>
+                    </div>
+                    <div class="sla-card">
+                        <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
+                        <div class="sla-metric" id="overview-kpi-customers">4</div>
+                        <div class="sla-label">Registered Bank Customers</div>
+                        <div class="sla-badge">Identity Store</div>
+                    </div>
+                    <div class="sla-card">
+                        <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></div>
+                        <div class="sla-metric" id="overview-kpi-accounts">7</div>
+                        <div class="sla-label">Active Customer Accounts</div>
+                        <div class="sla-badge status-good">Verified Active</div>
+                    </div>
+                    <div class="sla-card">
+                        <div class="sla-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                        <div class="sla-metric">8 / 8 UP</div>
+                        <div class="sla-label">Core Microservices Mesh</div>
+                        <div class="sla-badge status-good">100% Operational</div>
+                    </div>
+                </div>
+
+                <div id="accounts-container" style="display: none;"></div>
+
                 <div class="dashboard-grid">
                     <!-- Left Column: Accounts & Quick Action -->
                     <div class="dashboard-left">
-                        <div class="section-card">
-                            <div class="card-header">
-                                <h2 class="card-title">My Accounts (customer_balance_master)</h2>
-                                <span class="badge-chip">Azure SQL</span>
-                            </div>
-                            <div class="accounts-carousel" id="accounts-container">
-                                <!-- Dynamic Account Cards injected by JS -->
-                            </div>
-                        </div>
 
-                        <!-- Transfer / Mutation Panel -->
-                        <div class="section-card transfer-card">
+                        <!-- Branch Cashier Desk (Over-The-Counter Cash Operations) -->
+                        <div class="section-card otc-desk-card">
                             <div class="card-header">
-                                <h2 class="card-title">Initiate Transfer / Ledger Mutation</h2>
-                                <div class="rails-badges">
-                                    <span class="rail-badge active" id="rail-instapay">InstaPay</span>
-                                    <span class="rail-badge" id="rail-pesonet">PESONet</span>
-                                    <span class="rail-badge" id="rail-qrph">QR Ph</span>
-                                </div>
+                                <h2 class="card-title">Branch Cashier Desk</h2>
+                                <span class="badge-chip">Level 4 Over-The-Counter</span>
                             </div>
-                            <form id="form-quick-transfer" class="transfer-form" onsubmit="handleTransferSubmit(event)">
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="select-source-account">Source Account</label>
-                                        <select id="select-source-account" class="form-control" required></select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="select-target-account">Beneficiary</label>
-                                        <select id="select-target-account" class="form-control">
-                                            <option value="4">Maria Santos (ACC-PH-2002-3311 - Makati CBD)</option>
-                                            <option value="5">Joshua Reyes (ACC-PH-3003-4422 - Ortigas Center)</option>
-                                            <option value="2">My Checking Account (ACC-PH-1001-9921)</option>
-                                        </select>
-                                    </div>
+                            <p class="section-subtitle" style="margin-top: 0.2rem; font-size: 0.82rem; color: var(--text-muted);">
+                                Authorized cash deposits and withdrawals across all registered customer accounts in Azure SQL.
+                            </p>
+
+                            <!-- Operation Mode Switch (Withdrawal vs Deposit) -->
+                            <div class="otc-op-switch" style="margin-top: 1rem;">
+                                <button type="button" id="btn-otc-mode-withdraw" class="otc-op-btn active-withdraw" onclick="setOtcOperationMode('DEBIT')">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m-7-7 7 7 7-7"/></svg>
+                                    Cash Withdrawal (Debit)
+                                </button>
+                                <button type="button" id="btn-otc-mode-deposit" class="otc-op-btn" onclick="setOtcOperationMode('CREDIT')">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5m-7 7 7-7 7 7"/></svg>
+                                    Cash Deposit (Credit)
+                                </button>
+                            </div>
+
+                            <form id="form-otc-teller" class="transfer-form" onsubmit="handleOtcTellerSubmit(event)">
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label for="otc-select-account">Select Customer Account</label>
+                                    <select id="otc-select-account" class="form-control" onchange="updateOtcAccountPreview()" required></select>
                                 </div>
 
+                                <!-- Live Account Balance Snapshot Card -->
+                                <div id="otc-account-preview" class="otc-preview-card">
+                                    <div class="otc-preview-left">
+                                        <span class="otc-preview-label">Account Holder</span>
+                                        <span id="otc-preview-holder" class="otc-preview-name">Loading...</span>
+                                        <span id="otc-preview-num" class="otc-preview-acct">—</span>
+                                    </div>
+                                    <div class="otc-preview-right" style="text-align: right;">
+                                        <span class="otc-preview-label" id="otc-preview-bal-label">Available Balance</span>
+                                        <span id="otc-preview-balance" class="otc-preview-bal">₱0.00</span>
+                                    </div>
+                                </div>
+
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="input-transfer-amount">Amount (PHP / ₱ &bull; max 4 decimals)</label>
+                                        <label for="otc-transfer-amount">Amount (PHP / ₱ &bull; max 4 decimals)</label>
                                         <div class="input-currency-wrapper">
                                             <span class="currency-prefix">₱</span>
-                                            <input type="number" step="0.0001" min="0.0001" id="input-transfer-amount" class="form-control currency-input" placeholder="1,500.0000" required>
+                                            <input type="number" step="0.0001" min="0.0001" id="otc-transfer-amount" class="form-control currency-input" placeholder="1,000.0000" oninput="validateOtcAmount()" required>
                                         </div>
-                                        <small class="field-hint">Up to 4 decimal places.</small>
+                                        <small id="otc-amount-hint" class="field-hint" style="color: var(--text-muted);">Max available: ₱0.00</small>
                                     </div>
                                     <div class="form-group">
-                                        <label for="input-idempotency-key">Transfer reference</label>
+                                        <label for="otc-idempotency-key">Mutation Reference</label>
                                         <div class="input-action-group">
-                                            <input type="text" id="input-idempotency-key" class="form-control code-font" readonly>
-                                            <button type="button" class="btn-secondary" onclick="generateNewIdempotencyKey()" title="Generate Unique Key"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
+                                            <input type="text" id="otc-idempotency-key" class="form-control code-font" readonly>
+                                            <button type="button" class="btn-secondary" onclick="generateOtcIdempotencyKey()" title="Generate Unique Key"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div class="form-group" style="margin-bottom: 1.25rem;">
+                                    <label for="otc-teller-remarks">Teller Notes / Audit Reason</label>
+                                    <input type="text" id="otc-teller-remarks" class="form-control" placeholder="e.g. Counter cash withdrawal requested by account holder" maxlength="255">
                                 </div>
 
                                 <div class="form-actions">
-                                    <button type="submit" id="btn-submit-transfer" class="btn-primary">
-                                        <span>Submit transfer</span>
+                                    <button type="submit" id="btn-submit-otc" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.75rem 1rem;">
+                                        <span id="btn-submit-otc-label">Execute Cash Withdrawal</span>
                                     </button>
                                 </div>
                             </form>
@@ -713,46 +754,49 @@
         </div>
     </div>
 
-    <!-- Dedicated Admin Security Sign-In Modal Gate -->
-    <div id="modal-admin-login" class="modal-backdrop active" style="z-index: 10000; backdrop-filter: blur(8px); background: rgba(15, 23, 42, 0.75);">
-        <div class="modal-card" style="max-width: 440px; border: 1px solid var(--primary-rose-medium); box-shadow: 0 25px 50px -12px rgba(225, 29, 72, 0.35);">
-            <div class="modal-header" style="flex-direction: column; align-items: center; text-align: center; border-bottom: none; padding: 2rem 1.5rem 0.5rem;">
-                <div class="logo-mark" style="width: 52px; height: 52px; margin-bottom: 0.75rem;">
-                    <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect width="36" height="36" rx="10" fill="url(#admin-modal-grad)" />
+    <!-- Dedicated Admin Security Sign-In Portal Screen -->
+    <div id="admin-login-view" class="admin-login-portal">
+        <div class="admin-login-card">
+            <div class="admin-login-header">
+                <div class="admin-login-logo">
+                    <svg width="48" height="48" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="36" height="36" rx="10" fill="url(#admin-portal-grad)" />
                         <path d="M10 18L15 23L26 12" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
                         <defs>
-                            <linearGradient id="admin-modal-grad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
-                                <stop stop-color="#E11D48" />
-                                <stop offset="1" stop-color="#DB2777" />
+                            <linearGradient id="admin-portal-grad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#651c3e" />
+                                <stop offset="1" stop-color="#8a2a56" />
                             </linearGradient>
                         </defs>
                     </svg>
                 </div>
-                <h3 style="font-size: 1.35rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.25rem;">PayPink Core Ledger</h3>
-                <span class="badge-chip" style="background: rgba(225, 29, 72, 0.1); color: var(--primary-rose); font-weight: 700; border: 1px solid var(--border-rose-medium);">Level 4 Supervisor • Administrator Clearance</span>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.75rem; line-height: 1.4;">
+                <h3 class="admin-login-title">PayPink Core Ledger</h3>
+                <span class="admin-login-clearance">Level 4 Supervisor • Administrator Clearance</span>
+                <p class="admin-login-desc">
                     Enter privileged administrator credentials to access real-time core mutation controls, Kafka streaming outbox records, and immutable audit logs.
                 </p>
             </div>
-            <div class="modal-body" style="padding: 0.75rem 1.5rem 1.75rem;">
+            <div class="admin-login-form">
                 <form id="admin-login-form" onsubmit="handleAdminLoginSubmit(event)">
-                    <div style="margin-bottom: 1rem;">
-                        <label style="display: block; font-weight: 700; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.35rem;">Admin Username</label>
-                        <input type="text" id="admin-login-username" class="form-input" style="width: 100%; padding: 0.75rem 0.9rem; border-radius: 6px; border: 1px solid var(--border-rose-medium); font-size: 0.9rem; font-family: var(--font-body);" value="admin" required autocomplete="username" placeholder="admin">
+                    <div class="form-group">
+                        <label for="admin-login-username">Admin Username</label>
+                        <input type="text" id="admin-login-username" class="admin-login-input" value="admin" required autocomplete="username" placeholder="admin">
                     </div>
-                    <div style="margin-bottom: 1.25rem;">
-                        <label style="display: block; font-weight: 700; font-size: 0.82rem; color: var(--text-primary); margin-bottom: 0.35rem;">Admin Password</label>
-                        <input type="password" id="admin-login-password" class="form-input" style="width: 100%; padding: 0.75rem 0.9rem; border-radius: 6px; border: 1px solid var(--border-rose-medium); font-size: 0.9rem; font-family: var(--font-body);" value="Admin@PayPink2026!" required autocomplete="current-password" placeholder="••••••••••••">
+                    <div class="form-group">
+                        <label for="admin-login-password">Admin Password</label>
+                        <input type="password" id="admin-login-password" class="admin-login-input" value="Admin@PayPink2026!" required autocomplete="current-password" placeholder="••••••••••••">
                     </div>
                     <div id="admin-login-error" style="display: none; padding: 0.65rem 0.85rem; background: #FFF1F2; border: 1px solid #FECDD3; border-radius: 6px; color: #E11D48; font-size: 0.8rem; margin-bottom: 1rem; font-weight: 600;">
                     </div>
-                    <button type="submit" id="btn-admin-submit-login" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 0.85rem; font-weight: 700; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(225, 29, 72, 0.3);">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    <button type="submit" id="btn-admin-submit-login" class="admin-login-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                         Authenticate with ROLE_ADMIN
                     </button>
-                    <div style="margin-top: 1rem; text-align: center; font-size: 0.78rem; color: var(--text-muted); background: var(--bg-card-subtle); padding: 0.5rem; border-radius: 6px;">
-                        Privileged Credentials: <code style="color: var(--primary-rose); font-weight: 700;">admin / Admin@PayPink2026!</code>
+                    <div class="admin-login-creds">
+                        Privileged Credentials: <code>admin / Admin@PayPink2026!</code>
+                    </div>
+                    <div class="admin-login-footer">
+                        Looking for retail banking? <a href="/bank/">Open Customer Banking &rarr;</a>
                     </div>
                 </form>
             </div>
@@ -763,8 +807,8 @@
     <div id="admin-toast" class="admin-toast" hidden></div>
 
     <!-- Script -->
-    <script src="src/js/app.js?v=20261006-interest"></script>
+    <script src="src/js/app.js?v=20261012-admin-otc"></script>
     <script src="admin/interest.js?v=20261006-1"></script>
-    <script src="admin/admin.js?v=20261008-bank-admin"></script>
+    <script src="admin/admin.js?v=20261012-admin-otc"></script>
 </body>
 </html>

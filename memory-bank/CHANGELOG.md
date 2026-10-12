@@ -1,5 +1,12 @@
 # Changelog
-- 2026-10-12 — Mobile App Display Name Rebranding to "PayPink Bank" (`AndroidManifest.xml`, `Info.plist`, `manifest.json`, `index.html`, `main.dart`):
+- 2026-10-12 — Admin Minimalist & Professional Redesign & PayPink App Wine Theme Alignment (`frontend/index.html`, `frontend/admin/admin.css`, `frontend/admin/admin.js`, `frontend/src/js/app.js`) — [dom]:
+  - **Full-Screen Light Theme Sign-In Portal:** Redesigned `#admin-login-view` with a crisp, minimal PayPink light theme (`#FFFFFF` card, soft `#f7edf2` ambient gradient, `#e6cbd8` borders, deep ink typography `#29242a`, and signature wine `#651c3e` accents), eliminating the dark theme mismatch.
+  - **Executive Operations & Treasury KPI Suite:** Removed the misplaced personal retail accounts carousel (`My Accounts` / `STRESS TEST_ACCOUNT`) from the Overview tab, replacing it with 4 top-level executive metrics (`Total Core Liquidity`, `Registered Bank Customers`, `Active Customer Accounts`, and `Core Microservices Mesh`).
+  - **Color Alignment with PayPink App:** Aligned palette across admin dashboard, topnav, sidebar pills, and cashier desk with the customer app tokens: `--wine: #651c3e`, `--wine-dark: #47142c`, `--pink: #f7d6e3`, `--paper: #faf9f6`, and `--green: #25745c`.
+  - **Cash Deposit Credit Leg & Transfer Normalization:** Fixed `CASH_DEPOSIT` transactions to strictly render as `CREDIT` (`+₱`, green, and categorized under CREDIT filter); updated monitor feed to display transfer routing directions (`Source → Target`).
+  - **Verification & Deployment:** Rebuilt and verified live inside container `frontend-spa`; all 11 transaction-monitor tests and 3 admin reconciliation tests pass clean.
+
+
   - **Android & iOS App Label Alignment:** Updated `android:label` in `AndroidManifest.xml` from `paypink_mobile` to `PayPink Bank`, aligning the home screen icon label and app drawer title. Updated `CFBundleDisplayName` and `CFBundleName` in `Info.plist`.
   - **Web & PWA Metadata Consistency:** Updated `name` and `short_name` in `web/manifest.json`, `<title>` and `<meta name="apple-mobile-web-app-title">` in `web/index.html`, and `MaterialApp(title: ...)` in `main.dart` to `PayPink Bank`.
   - **Verification:** 0 analyzer issues, 57/57 mobile tests pass clean. — [Antigravity]
@@ -22,6 +29,12 @@
 
 - 2026-10-09 — Azure CLI Cheatsheet Documentation (`docs/AZURE_CLI_CHEATSHEET.md`):
   - **Comprehensive Azure CLI Reference:** Authored `docs/AZURE_CLI_CHEATSHEET.md` detailing every command used in the PayPink Azure deployment lifecycle. Includes command breakdowns ("What is it", "Why is it for", "Where to use"), cost-control rules (`deallocate` vs `stop`, `auto-shutdown`), NSG whitelist rules, emergency backdoors (`run-command invoke`), and quick scenario recipes for defense and evaluation sessions. — [Antigravity]
+
+- 2026-10-12 — Admin Minimalist & Professional Redesign (`frontend/index.html`, `frontend/admin/admin.css`, `frontend/admin/admin.js`, `frontend/src/js/app.js`) — [dom]:
+  - **Full-Screen White Theme Sign-In Portal:** Redesigned `#admin-login-view` with a crisp, minimal PayPink light theme (`#FFFFFF` card, `#FDF2F8` ambient gradient, soft `#FBCFE8` borders, dark slate typography `#0F172A`, and vibrant `#E11D48` accents), eliminating the dark theme mismatch.
+  - **Executive Operations & Treasury KPI Suite:** Removed the misplaced personal retail accounts carousel (`My Accounts` / `STRESS TEST_ACCOUNT`) from the Overview tab, replacing it with 4 top-level executive metrics (`Total Core Liquidity`, `Registered Bank Customers`, `Active Customer Accounts`, and `Core Microservices Mesh`).
+  - **Minimal FinTech Dashboard UI Overhaul:** Completely transformed `admin.css` into a minimal, modern FinTech design system: 240px clean white sidebar with modern brand mark and `#FFF1F2` active tab pills, 64px top navigation bar with pill-badge PHT clock and Level 4 clearance indicators, modern audit event stream cards, and streamlined Over-The-Counter Cashier Desk with segmented withdrawal/deposit toggles and digital check slip balance previews.
+  - **Verification & Deployment:** All 11 transaction-monitor tests and 3 admin reconciliation tests pass clean; rebuilt and verified live inside container `frontend-spa`.
 
 - 2026-10-12 — Purged emojis from Mobile Savings Hub & PinkCircles (`savings_hub_screen.dart`) — [dom]:
   - **Clean FinTech UI Alignment:** Replaced all informal emojis across categories, badges, streak counters, and status pills with Flutter Material icons styled to PayPink wine/rose theme tokens.

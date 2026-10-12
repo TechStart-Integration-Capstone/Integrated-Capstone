@@ -90,7 +90,11 @@ let currentJwtToken = null;
 let currentCustomerId = 1;
 let selectedSourceAccountId = 1;
 let accountsData = [];
-let recentTransactions = [];
+let recentTransactions = [
+    { type: 'CASH_WITHDRAWAL', operation: 'DEBIT', ref: 'TX-PH-102-WD', referenceNo: 'TX-PH-102-WD', amount: 500.00, date: formatPhilippineDateTime(new Date(Date.now() - 1800000)), transactionDate: new Date(Date.now() - 1800000).toISOString(), status: 'SUCCESS' },
+    { type: 'CASH_DEPOSIT', operation: 'CREDIT', ref: 'TX-PH-101-DP', referenceNo: 'TX-PH-101-DP', amount: 50.00, date: formatPhilippineDateTime(new Date(Date.now() - 3600000)), transactionDate: new Date(Date.now() - 3600000).toISOString(), status: 'SUCCESS' },
+    { type: 'INTERBANK_TRANSFER', operation: 'CREDIT', ref: 'TX-PH-100-IT', referenceNo: 'TX-PH-100-IT', amount: 15000.00, date: formatPhilippineDateTime(new Date(Date.now() - 7200000)), transactionDate: new Date(Date.now() - 7200000).toISOString(), status: 'SUCCESS' }
+];
 // The monitor accepts only database responses; simulation/broadcast rows use recentTransactions.
 let monitorTransactions = [];
 let monitorLoadState = 'loading';
@@ -111,7 +115,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     startPhilippineClock();
     await detectApiBase();
     generateNewIdempotencyKey();
+    generateOtcIdempotencyKey();
     await initializeAuthSession();
+    renderTransactionFeed();
     await loadCustomerAndAccounts();
     await loadAllCustomers(false);
     await loadRecentTransactions();
@@ -124,7 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupRailsSelector();
     startTelemetryPolling();
     renderInitialLifecycleState();
-    if (document.getElementById('code-request-json')) testScenario('valid'); // Optional perimeter panel
+    if (document.getElementById('code-request-json') && typeof testScenario === 'function') testScenario('valid'); // Optional perimeter panel
     setupRealtimeSync(); // Cross-tab & broadcast real-time sync
 
     // Periodic live synchronization with Azure SQL Database
@@ -164,13 +170,21 @@ async function initializeAuthSession() {
 }
 
 function showAdminLoginModal() {
-    const modal = document.getElementById('modal-admin-login');
-    if (modal) modal.classList.add('active');
+    const loginView = document.getElementById('admin-login-view');
+    const appContainer = document.getElementById('app-container');
+    if (loginView) loginView.style.display = 'flex';
+    if (appContainer) appContainer.style.display = 'none';
+    const oldModal = document.getElementById('modal-admin-login');
+    if (oldModal) oldModal.classList.add('active');
 }
 
 function closeAdminLoginModal() {
-    const modal = document.getElementById('modal-admin-login');
-    if (modal) modal.classList.remove('active');
+    const loginView = document.getElementById('admin-login-view');
+    const appContainer = document.getElementById('app-container');
+    if (loginView) loginView.style.display = 'none';
+    if (appContainer) appContainer.style.display = 'block';
+    const oldModal = document.getElementById('modal-admin-login');
+    if (oldModal) oldModal.classList.remove('active');
 }
 
 async function handleAdminLoginSubmit(event) {
@@ -353,33 +367,163 @@ function selectAccount(accId) {
 }
 
 /**
- * 3. Quick Transfer / Ledger Mutation Submission
+ * 3. Over-The-Counter (OTC) Branch Cashier Desk & Direct Ledger Mutation
  */
-async function handleTransferSubmit(event) {
-    event.preventDefault();
+let otcOperationMode = 'DEBIT'; // 'DEBIT' (Withdrawal) or 'CREDIT' (Deposit)
 
-    const sourceAccountId = parseInt(document.getElementById('select-source-account').value);
-    const targetAccountId = parseInt(document.getElementById('select-target-account').value);
-    const amountVal = parseFloat(document.getElementById('input-transfer-amount').value);
-    const idempotencyKey = document.getElementById('input-idempotency-key').value;
+function setOtcOperationMode(mode) {
+    otcOperationMode = mode;
+    const btnWithdraw = document.getElementById('btn-otc-mode-withdraw');
+    const btnDeposit = document.getElementById('btn-otc-mode-deposit');
+    const previewCard = document.getElementById('otc-account-preview');
+    const balLabel = document.getElementById('otc-preview-bal-label');
+    const submitBtnLabel = document.getElementById('btn-submit-otc-label');
+
+    if (mode === 'DEBIT') {
+        if (btnWithdraw) btnWithdraw.className = 'otc-op-btn active-withdraw';
+        if (btnDeposit) btnDeposit.className = 'otc-op-btn';
+        if (previewCard) previewCard.classList.remove('deposit-mode');
+        if (balLabel) balLabel.textContent = 'Available to Withdraw';
+        if (submitBtnLabel) submitBtnLabel.textContent = 'Execute Cash Withdrawal';
+    } else {
+        if (btnWithdraw) btnWithdraw.className = 'otc-op-btn';
+        if (btnDeposit) btnDeposit.className = 'otc-op-btn active-deposit';
+        if (previewCard) previewCard.classList.add('deposit-mode');
+        if (balLabel) balLabel.textContent = 'Current Ledger Balance';
+        if (submitBtnLabel) submitBtnLabel.textContent = 'Execute Cash Deposit';
+    }
+    validateOtcAmount();
+}
+
+function generateOtcIdempotencyKey() {
+    const key = `MUT-OTC-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const input = document.getElementById('otc-idempotency-key');
+    if (input) input.value = key;
+    return key;
+}
+
+function populateOtcAccountSelect(customers) {
+    const select = document.getElementById('otc-select-account');
+    if (!select) return;
+
+    const previouslySelected = select.value;
+    let html = '';
+    (customers || []).forEach(c => {
+        const holderName = c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.username;
+        (c.accounts || []).forEach(acc => {
+            const typeLabel = (acc.accountType || 'SAVINGS').replace(/_/g, ' ');
+            const formattedNum = formatAccountNumber(acc.accountNumber);
+            const bal = parseFloat(acc.currentBalance || 0);
+            html += `<option value="${acc.accountId}" data-acc-id="${acc.accountId}" data-acc-num="${acc.accountNumber}" data-cust-name="${holderName}" data-balance="${bal}" data-type="${typeLabel}">${holderName} — ${formattedNum} (${typeLabel}) — ₱${formatCurrency(bal)}</option>`;
+        });
+    });
+
+    if (!html) {
+        html = '<option value="">No customer accounts loaded</option>';
+    }
+    select.innerHTML = html;
+    if (previouslySelected && select.querySelector(`option[value="${previouslySelected}"]`)) {
+        select.value = previouslySelected;
+    }
+    updateOtcAccountPreview();
+}
+
+function updateOtcAccountPreview() {
+    const select = document.getElementById('otc-select-account');
+    if (!select || !select.selectedOptions || select.selectedOptions.length === 0) return;
+    const opt = select.selectedOptions[0];
+    const holder = opt.getAttribute('data-cust-name') || '—';
+    const accNum = opt.getAttribute('data-acc-num') || '—';
+    const type = opt.getAttribute('data-type') || '—';
+    const bal = parseFloat(opt.getAttribute('data-balance') || '0');
+
+    const holderEl = document.getElementById('otc-preview-holder');
+    const numEl = document.getElementById('otc-preview-num');
+    const balEl = document.getElementById('otc-preview-balance');
+
+    if (holderEl) holderEl.textContent = holder;
+    if (numEl) numEl.textContent = `${formatAccountNumber(accNum)} • ${type}`;
+    if (balEl) balEl.textContent = `₱${formatCurrency(bal)}`;
+
+    validateOtcAmount();
+}
+
+function validateOtcAmount() {
+    const select = document.getElementById('otc-select-account');
+    const amtInput = document.getElementById('otc-transfer-amount');
+    const hint = document.getElementById('otc-amount-hint');
+    const btn = document.getElementById('btn-submit-otc');
+    if (!select || !amtInput || !hint) return;
+
+    const opt = select.selectedOptions?.[0];
+    const bal = parseFloat(opt?.getAttribute('data-balance') || '0');
+    const amt = parseFloat(amtInput.value || '0');
+
+    if (otcOperationMode === 'DEBIT') {
+        if (!isNaN(amt) && amt > bal) {
+            hint.textContent = `Insufficient funds: Requested ₱${formatCurrency(amt)} exceeds available ₱${formatCurrency(bal)}`;
+            hint.style.color = '#E11D48';
+            if (btn) btn.disabled = true;
+        } else {
+            const remaining = Math.max(0, bal - (isNaN(amt) ? 0 : amt));
+            hint.textContent = `Available: ₱${formatCurrency(bal)} (After withdrawal: ₱${formatCurrency(remaining)})`;
+            hint.style.color = 'var(--text-muted)';
+            if (btn) btn.disabled = false;
+        }
+    } else {
+        const newBal = bal + (isNaN(amt) ? 0 : amt);
+        hint.textContent = `Current: ₱${formatCurrency(bal)} (Post-deposit balance: ₱${formatCurrency(newBal)})`;
+        hint.style.color = '#059669';
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function handleOtcTellerSubmit(event) {
+    if (event) event.preventDefault();
+
+    const select = document.getElementById('otc-select-account');
+    const amtInput = document.getElementById('otc-transfer-amount');
+    const keyInput = document.getElementById('otc-idempotency-key');
+    const remarksInput = document.getElementById('otc-teller-remarks');
+    const btn = document.getElementById('btn-submit-otc');
+
+    if (!select || !select.selectedOptions || select.selectedOptions.length === 0) {
+        alert('Please select an active customer account.');
+        return;
+    }
+
+    const opt = select.selectedOptions[0];
+    const accountId = parseInt(opt.getAttribute('data-acc-id') || select.value);
+    const holder = opt.getAttribute('data-cust-name') || 'Customer';
+    const amountVal = parseFloat(amtInput ? amtInput.value : 0);
+    const bal = parseFloat(opt.getAttribute('data-balance') || 0);
 
     if (isNaN(amountVal) || amountVal <= 0) {
         alert('Please enter a valid positive amount.');
         return;
     }
 
+    if (otcOperationMode === 'DEBIT' && amountVal > bal) {
+        alert(`Insufficient funds: Requested withdrawal of ₱${formatCurrency(amountVal)} exceeds customer balance of ₱${formatCurrency(bal)}.`);
+        return;
+    }
+
+    let idempotencyKey = keyInput ? keyInput.value : '';
+    if (!idempotencyKey) idempotencyKey = generateOtcIdempotencyKey();
+
     const payload = {
-        accountId: sourceAccountId,
-        targetAccountId: targetAccountId,
+        accountId: accountId,
         mutationAmount: amountVal,
-        operation: 'DEBIT',
-        transactionType: getActiveRailType(),
+        operation: otcOperationMode,
+        transactionType: otcOperationMode === 'DEBIT' ? 'CASH_WITHDRAWAL' : 'CASH_DEPOSIT',
         currency: 'PHP',
         idempotencyKey: idempotencyKey
     };
 
-    // Trigger visual step 1 to 5 animation
-    animateLifecycleSteps(1, 5);
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Processing Over-The-Counter Mutation...';
+    }
 
     try {
         const res = await fetch(`${API_BASE}/ledger/mutate`, {
@@ -387,357 +531,45 @@ async function handleTransferSubmit(event) {
             headers: {
                 ...getAuthHeaders(),
                 'Content-Type': 'application/json',
-                'Idempotency-Key': idempotencyKey
+                'Idempotency-Key': idempotencyKey,
+                'X-Auth-Username': currentAdminSession?.username || 'admin'
             },
             body: JSON.stringify(payload)
         });
 
         if (res.ok) {
             const data = await res.json();
-            // Continue visual step 6 to 11 animation
-            animateLifecycleSteps(6, 11);
-            showReceiptModal(data);
-            await updateLocalStateAfterMutation(data);
-            generateNewIdempotencyKey();
+            showReceiptModal({
+                ...data,
+                accountHolder: holder
+            });
+            const opName = otcOperationMode === 'DEBIT' ? 'Cash Withdrawal' : 'Cash Deposit';
+            showAdminToast(`OTC ${opName} of ₱${formatCurrency(amountVal)} processed for ${holder}`);
+            if (amtInput) amtInput.value = '';
+            if (remarksInput) remarksInput.value = '';
+            generateOtcIdempotencyKey();
+
+            // Refresh state across directory, monitor, and audit
+            await loadAllCustomers(true);
+            await loadRecentTransactions();
+            await loadInitialAuditLogs();
         } else {
-            const err = await res.json();
-            alert(`Transfer Rejected: ${err.detail || err.title || 'Validation Error'}`);
+            const err = await res.json().catch(() => ({}));
+            alert(`OTC Transaction Rejected: ${err.detail || err.message || err.title || 'Error executing balance mutation.'}`);
         }
     } catch (e) {
-        // Fallback local simulation
-        animateLifecycleSteps(6, 11);
-        const refNo = `TX-PH-${Date.now()}-SIM`;
-        const sourceAcc = accountsData.find(a => a.accountId === sourceAccountId);
-        if (sourceAcc && sourceAcc.currentBalance >= amountVal) {
-            const before = sourceAcc.currentBalance;
-            sourceAcc.currentBalance -= amountVal;
-            const mockRes = {
-                transactionId: Math.floor(Math.random() * 9000) + 1000,
-                referenceNo: refNo,
-                accountId: sourceAccountId,
-                accountNumber: sourceAcc.accountNumber,
-                operation: 'DEBIT',
-                amount: amountVal,
-                currency: 'PHP',
-                beforeBalance: before,
-                afterBalance: sourceAcc.currentBalance,
-                status: 'SUCCESS'
-            };
-            showReceiptModal(mockRes);
-            await updateLocalStateAfterMutation(mockRes);
-            generateNewIdempotencyKey();
-        } else {
-            alert('Insufficient funds on source account.');
+        alert(`OTC Transaction failed: ${e.message}`);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<span id="btn-submit-otc-label">${otcOperationMode === 'DEBIT' ? 'Execute Cash Withdrawal' : 'Execute Cash Deposit'}</span>`;
         }
     }
 }
 
-async function updateLocalStateAfterMutation(data) {
-    // Update account balance
-    const acc = accountsData.find(a => a.accountId === data.accountId);
-    if (acc) {
-        acc.currentBalance = data.afterBalance;
-    }
-    renderAccountsCarousel(accountsData);
-    populateSourceAccountSelect(accountsData);
-
-    // Add to transaction feed
-    recentTransactions.unshift({
-        id: data.transactionId,
-        ref: data.referenceNo,
-        type: 'TRANSFER (DEBIT)',
-        amount: data.amount,
-        currency: data.currency || 'PHP',
-        date: new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString(),
-        status: 'SUCCESS'
-    });
-    saveTransactionsToStorage();
-    renderTransactionFeed();
-
-    // Add to Oracle synchronous security log
-    oracleAuditLogs.unshift({
-        time: formatPhilippineTime(new Date()),
-        action: 'TRANSFER_COMMITTED',
-        details: `ACID row lock committed for ₱${formatCurrency(data.amount)} on Account ${data.accountNumber}. New balance: ₱${formatCurrency(data.afterBalance)}. Ref: ${data.referenceNo}`
-    });
-    renderOracleAuditLogs();
-
-    // Add Outbox and Postgres entries in real-time
-    const cleanTx = String(data.transactionId || data.referenceNo || '').replace(/[^0-9]/g, '').slice(-4) || String(Math.floor(1000 + Math.random() * 9000));
-    if (!outboxEvents.some(e => String(e.txId) === String(cleanTx))) {
-        const nextEvtId = outboxEvents.length > 0 ? (Math.max(...outboxEvents.map(e => typeof e.eventId === 'number' ? e.eventId : 100)) + 1) : 101;
-        outboxEvents.unshift({
-            eventId: nextEvtId,
-            txId: cleanTx,
-            type: 'TRANSACTION_SUCCESS',
-            status: 'PROCESSED',
-            date: formatPhilippineTime(new Date())
-        });
-        renderOutboxTable();
-    }
-
-    const auditId = 'AUD-PG-DB-' + cleanTx;
-    if (!postgresAudits.some(a => a.id === auditId)) {
-        postgresAudits.unshift({
-            id: auditId,
-            txId: cleanTx,
-            accId: data.accountId,
-            account: data.accountNumber || (accountsData.length > 0 ? accountsData[0].accountNumber : '001181233469'),
-            op: data.operation || 'DEBIT',
-            amount: data.amount,
-            amt: data.amount,
-            before: data.beforeBalance,
-            after: data.afterBalance,
-            time: formatPhilippineDateTime(new Date())
-        });
-        saveAuditsToStorage();
-        loadPostgresAuditLogs();
-        renderPostgresAuditTable();
-    } else {
-        saveAuditsToStorage();
-    }
-}
-
-/**
- * 4. Double-Spend Race Condition Stress Simulator (Tab 2)
- */
-async function runStressSimulation() {
-    const threadCount = parseInt(document.getElementById('stress-thread-count').value);
-    const debitAmount = 50.0000;
-    const btn = document.getElementById('btn-run-stress-test');
-    const chip = document.getElementById('stress-status-chip');
-    const threadList = document.getElementById('thread-logs-list');
-
-    btn.disabled = true;
-    btn.textContent = 'Executing Simultaneous Threads...';
-    chip.textContent = 'Simulating Lock Contention...';
-    chip.className = 'badge-chip';
-    threadList.innerHTML = '<div class="empty-state">Threads actively competing for @Lock(PESSIMISTIC_WRITE) row lock...</div>';
-
-    try {
-        const res = await fetch(`${API_BASE}/stress/double-spend-test`, {
-            method: 'POST',
-            headers: {
-                ...getAuthHeaders(),
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                accountId: 3,
-                concurrentThreads: threadCount,
-                debitAmountPerThread: debitAmount,
-                initialBalance: 60.0000
-            })
-        });
-
-        if (res.ok) {
-            const data = await res.json();
-            renderStressResults(data);
-            return;
-        }
-    } catch (e) {
-        // Fallback in-browser concurrent simulation
-    }
-
-    // High-fidelity client-side multi-thread simulation fallback
-    await simulateClientSideStressTest(threadCount, debitAmount);
-}
-
-async function simulateClientSideStressTest(threadCount, debitAmount) {
-    let startingBalance = 60.0000;
-    let balance = startingBalance;
-    let committed = 0;
-    let rejected = 0;
-    const threadLogs = [];
-
-    for (let i = 1; i <= threadCount; i++) {
-        // Simulate pessimistic row serialization
-        if (balance >= debitAmount) {
-            balance -= debitAmount; // exactly 1 succeeds
-            committed++;
-            threadLogs.push({
-                threadIndex: i,
-                threadName: `Thread-${i}`,
-                status: 'COMMITTED',
-                message: `Successfully debited ₱50.00 with @Lock(PESSIMISTIC_WRITE) isolation. New balance: ₱${formatCurrency(balance)}`,
-                latencyMs: Math.floor(Math.random() * 8) + 4
-            });
-        } else {
-            rejected++;
-            threadLogs.push({
-                threadIndex: i,
-                threadName: `Thread-${i}`,
-                status: 'REJECTED_INSUFFICIENT_FUNDS',
-                message: `Safely blocked: Insufficient balance after previous thread committed. Required ₱50.00, Available ₱${formatCurrency(balance)}`,
-                latencyMs: Math.floor(Math.random() * 12) + 6
-            });
-        }
-    }
-
-    renderStressResults({
-        startingBalance: 60.00,
-        actualFinalBalance: balance,
-        successfulRequests: committed,
-        rejectedRequests: rejected,
-        totalAttemptedRequests: threadCount,
-        raceConditionPrevented: true,
-        threadLogs: threadLogs
-    });
-}
-
-function renderStressResults(data) {
-    document.getElementById('stress-starting-bal').textContent = `₱${formatCurrency(data.startingBalance)}`;
-    document.getElementById('stress-final-bal').textContent = `₱${formatCurrency(data.actualFinalBalance)}`;
-    document.getElementById('stress-success-count').textContent = data.successfulRequests;
-    document.getElementById('stress-rejected-count').textContent = data.rejectedRequests;
-    document.getElementById('stress-acc-current-bal').textContent = `₱${formatCurrency(data.actualFinalBalance)}`;
-
-    const chip = document.getElementById('stress-status-chip');
-    chip.textContent = data.raceConditionPrevented ? 'RACE CONDITION PREVENTED (0% OVERDRAFT)' : 'OVERDRAFT DETECTED';
-    chip.className = `badge-chip ${data.raceConditionPrevented ? 'tag-success' : 'tag-error'}`;
-
-    const threadList = document.getElementById('thread-logs-list');
-    threadList.innerHTML = (data.threadLogs || []).map(t => `
-        <div class="thread-log-item ${t.status === 'COMMITTED' ? 'committed' : 'rejected'}">
-            <span><strong>${t.threadName}</strong>: ${t.message}</span>
-            <span>${t.latencyMs} ms</span>
-        </div>
-    `).join('');
-
-    const btn = document.getElementById('btn-run-stress-test');
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 6px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Launch Concurrent Race Condition Test';
-}
-
-async function resetStressAccount() {
-    try {
-        await fetch(`${API_BASE}/accounts/3/reset-balance`, {
-            method: 'POST',
-            headers: {
-                ...getAuthHeaders(),
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ targetBalance: 60.00 })
-        });
-    } catch (e) {}
-
-    document.getElementById('stress-acc-current-bal').textContent = '₱60.00';
-    document.getElementById('stress-final-bal').textContent = '₱60.00';
-    document.getElementById('stress-success-count').textContent = '0';
-    document.getElementById('stress-rejected-count').textContent = '0';
-    document.getElementById('stress-status-chip').textContent = 'Reset to ₱60.00';
-    document.getElementById('thread-logs-list').innerHTML = '<div class="empty-state">Account balance restored to ₱60.00. Ready for stress execution.</div>';
-}
-
-/**
- * 5. JSR-380 & RFC-7807 Problem Details Inspector (Tab 4)
- */
-function testScenario(scenario) {
-    document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
-    event && event.currentTarget && event.currentTarget.classList.add('active');
-
-    let reqPayload = {};
-    let respPayload = {};
-    let statusBadge = 'HTTP 200 OK';
-    let badgeClass = 'badge-chip tag-success';
-
-    if (scenario === 'valid') {
-        reqPayload = {
-            accountId: 1,
-            mutationAmount: 250.5000,
-            operation: "DEBIT",
-            transactionType: "TRANSFER_INSTAPAY",
-            currency: "PHP"
-        };
-        respPayload = {
-            transactionId: 1042,
-            referenceNo: "TX-PH-171000000-8A9C",
-            accountId: 1,
-            accountNumber: "ACC-PH-1001-8842",
-            operation: "DEBIT",
-            amount: 250.5000,
-            currency: "PHP",
-            beforeBalance: 125450.0000,
-            afterBalance: 125199.5000,
-            status: "SUCCESS"
-        };
-    } else if (scenario === 'fraction') {
-        reqPayload = {
-            accountId: 1,
-            mutationAmount: 250.12345, // 5 decimal places violates @Digits(fraction=4)
-            operation: "DEBIT",
-            currency: "PHP"
-        };
-        respPayload = {
-            type: "https://api.paypink.ph/errors/validation-error",
-            title: "Payload Validation Fault",
-            status: 400,
-            detail: "The incoming ledger mutation request failed boundary validation constraints.",
-            instance: "/api/v1/ledger/mutate",
-            timestamp: new Date().toISOString(),
-            invalidParams: [
-                {
-                    name: "mutationAmount",
-                    reason: "Mutation amount must have at most 14 integer digits and up to 4 decimal places",
-                    rejectedValue: 250.12345
-                }
-            ]
-        };
-        statusBadge = 'HTTP 400 Bad Request (RFC-7807)';
-        badgeClass = 'badge-chip tag-error';
-    } else if (scenario === 'negative') {
-        reqPayload = {
-            accountId: 1,
-            mutationAmount: -100.0000, // Negative amount violates @Positive
-            operation: "DEBIT",
-            currency: "PHP"
-        };
-        respPayload = {
-            type: "https://api.paypink.ph/errors/validation-error",
-            title: "Payload Validation Fault",
-            status: 400,
-            detail: "The incoming ledger mutation request failed boundary validation constraints.",
-            instance: "/api/v1/ledger/mutate",
-            timestamp: new Date().toISOString(),
-            invalidParams: [
-                {
-                    name: "mutationAmount",
-                    reason: "Mutation amount must be strictly positive",
-                    rejectedValue: -100.0000
-                }
-            ]
-        };
-        statusBadge = 'HTTP 400 Bad Request (RFC-7807)';
-        badgeClass = 'badge-chip tag-error';
-    } else if (scenario === 'malformed') {
-        reqPayload = '{ "accountId": "INVALID_STR", "mutationAmount": "NOT_A_NUM" }';
-        respPayload = {
-            type: "https://api.paypink.ph/errors/malformed-payload",
-            title: "Malformed JSON Schema",
-            status: 400,
-            detail: "Unable to parse incoming JSON schema. Ensure numeric fields and types match API specifications.",
-            instance: "/api/v1/ledger/mutate",
-            timestamp: new Date().toISOString(),
-            invalidParams: [
-                {
-                    name: "payload",
-                    reason: "Cannot deserialize value of type java.lang.Long from String \"INVALID_STR\"",
-                    rejectedValue: null
-                }
-            ]
-        };
-        statusBadge = 'HTTP 400 Bad Request (RFC-7807)';
-        badgeClass = 'badge-chip tag-error';
-    }
-
-    const reqJsonEl = document.getElementById('code-request-json');
-    if (reqJsonEl) reqJsonEl.textContent = typeof reqPayload === 'string' ? reqPayload : JSON.stringify(reqPayload, null, 2);
-    const respJsonEl = document.getElementById('code-response-json');
-    if (respJsonEl) respJsonEl.textContent = JSON.stringify(respPayload, null, 2);
-    const badgeEl = document.getElementById('response-status-badge');
-    if (badgeEl) {
-        badgeEl.textContent = statusBadge;
-        badgeEl.className = badgeClass;
-    }
+// Backward compatibility alias for legacy bindings
+async function handleTransferSubmit(event) {
+    return handleOtcTellerSubmit(event);
 }
 
 /**
@@ -1040,6 +872,7 @@ async function loadAllCustomers(silent = false) {
             allCustomersData = await res.json();
             filterCustomerTable();
             updateExecutiveKPIs(allCustomersData);
+            populateOtcAccountSelect(allCustomersData);
             return;
         }
     } catch (e) {
@@ -1106,6 +939,7 @@ async function loadAllCustomers(silent = false) {
         ];
         filterCustomerTable();
         updateExecutiveKPIs(allCustomersData);
+        populateOtcAccountSelect(allCustomersData);
     }
 }
 
@@ -1127,6 +961,14 @@ function updateExecutiveKPIs(customers) {
     if (liqEl) liqEl.textContent = `₱${formatCurrency(totalLiquidity)}`;
     if (custEl) custEl.textContent = customers.length;
     if (accEl) accEl.textContent = totalAccounts;
+
+    const ovLiqEl = document.getElementById('overview-kpi-liquidity');
+    const ovCustEl = document.getElementById('overview-kpi-customers');
+    const ovAccEl = document.getElementById('overview-kpi-accounts');
+
+    if (ovLiqEl) ovLiqEl.textContent = `₱${formatCurrency(totalLiquidity)}`;
+    if (ovCustEl) ovCustEl.textContent = customers.length;
+    if (ovAccEl) ovAccEl.textContent = totalAccounts;
 }
 
 function filterCustomerTable() {
@@ -1471,6 +1313,7 @@ const PIPELINE_STEPS = [
 ];
 
 function renderTransactionMonitor() {
+    renderTransactionFeed();
     const tbody = document.getElementById('monitor-transactions-body');
     if (!tbody) return;
 
@@ -1488,7 +1331,11 @@ function renderTransactionMonitor() {
         if (monitorDateKey(tx.transactionDate) !== today) return false;
         if (!matchesStatusFilter(tx.status, statusFilter)) return false;
         if (typeFilter === 'TRANSFER' && !/TRANSFER|^EXT_/.test(tx.transactionType || '')) return false;
-        if ((typeFilter === 'CREDIT' || typeFilter === 'DEBIT') && tx.operation !== typeFilter) return false;
+        if (typeFilter === 'CREDIT' || typeFilter === 'DEBIT') {
+            const isDeposit = (tx.transactionType === 'CASH_DEPOSIT');
+            const effectiveOp = isDeposit ? 'CREDIT' : (tx.operation || 'DEBIT');
+            if (effectiveOp !== typeFilter) return false;
+        }
         return true;
     }).sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate)
         || String(b.transactionId).localeCompare(String(a.transactionId), 'en', { numeric: true }));
@@ -1499,18 +1346,24 @@ function renderTransactionMonitor() {
     }
 
     tbody.innerHTML = list.map(tx => {
-        const isCredit = tx.operation === 'CREDIT';
-        const sign = isCredit ? '+' : tx.operation === 'DEBIT' ? '-' : '';
+        const isDeposit = (tx.transactionType === 'CASH_DEPOSIT');
+        const effectiveOp = isDeposit ? 'CREDIT' : (tx.operation || 'DEBIT');
+        const isCredit = effectiveOp === 'CREDIT';
+        const sign = isCredit ? '+' : '-';
         const currency = tx.currency === 'PHP' ? '₱' : `${escapeMonitorText(tx.currency)} `;
         const displayStatus = normalizeDashboardStatus(tx.status);
+        const acctDisplay = tx.targetAccountNumber
+            ? `<div><strong>${escapeMonitorText(formatAccountNumber(tx.accountNumber))}</strong></div><div style="font-size: 10px; color: var(--text-muted);">→ ${escapeMonitorText(formatAccountNumber(tx.targetAccountNumber))}</div>`
+            : `<strong>${escapeMonitorText(formatAccountNumber(tx.accountNumber))}</strong>`;
+
         return `
         <tr>
             <td><code>${escapeMonitorText(tx.referenceNo)}</code></td>
             <td style="font-size: 0.8rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">${escapeMonitorText(formatPhilippineDateTime(tx.transactionDate))}</td>
-            <td><strong>${escapeMonitorText(formatAccountNumber(tx.accountNumber))}</strong></td>
+            <td>${acctDisplay}</td>
             <td><span class="badge-chip">${escapeMonitorText(tx.transactionType)}</span></td>
             <td><strong style="font-family: 'JetBrains Mono', monospace; color: ${isCredit ? 'var(--status-success)' : 'var(--primary-rose)'};">${sign}${currency}${formatCurrency(tx.amount)}</strong></td>
-            <td>${escapeMonitorText(tx.operation || '—')}</td>
+            <td>${escapeMonitorText(effectiveOp)}</td>
             <td>
                 <div style="display: inline-flex; align-items: center; gap: 8px;">
                     <span class="status-tag ${getStatusTagClass(displayStatus)}">${escapeMonitorText(displayStatus)}</span>
@@ -1634,24 +1487,49 @@ function renderTransactionFeed() {
     const feed = document.getElementById('transaction-feed');
     if (!feed) return;
 
-    feed.innerHTML = recentTransactions.map(tx => {
-        const isCredit = tx.type.includes('CREDIT') || tx.type.includes('IN');
+    const list = (monitorTransactions && monitorTransactions.length > 0)
+        ? monitorTransactions.slice(0, 5)
+        : (recentTransactions && recentTransactions.length > 0 ? recentTransactions.slice(0, 5) : []);
+
+    if (list.length === 0) {
+        feed.innerHTML = `
+            <div style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 12px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 6px; opacity: 0.5;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <div>No transactions recorded yet today.</div>
+                <div style="font-size: 11px; margin-top: 4px; color: var(--primary-rose);">Execute Cash Withdrawal or Deposit using the Branch Cashier Desk.</div>
+            </div>
+        `;
+        return;
+    }
+
+    feed.innerHTML = list.map(tx => {
+        const isCredit = (tx.operation === 'CREDIT') || (tx.transactionType === 'CASH_DEPOSIT') || (tx.type && (tx.type.includes('CREDIT') || tx.type.includes('IN')));
+        const refNo = tx.referenceNo || tx.ref || `TX-${tx.transactionId || '00'}`;
+        const typeStr = tx.transactionType || tx.type || (isCredit ? 'CASH_DEPOSIT' : 'CASH_WITHDRAWAL');
+        const amt = tx.amount || 0;
+        const dateStr = formatPhilippineTime(new Date(tx.transactionDate || tx.date || Date.now()));
+        const status = tx.status || 'SUCCESS';
+
         return `
-        <div class="tx-row">
-            <div class="tx-main">
-                <span class="tx-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="${isCredit ? '17 11 12 6 7 11' : '7 13 12 18 17 13'}"></polyline><line x1="12" y1="${isCredit ? '6' : '18'}" x2="12" y2="${isCredit ? '18' : '6'}"></line></svg></span>
+        <div class="tx-row" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: #faf9f6; border: 1px solid #ece8e7; border-radius: 8px; margin-bottom: 8px;">
+            <div class="tx-main" style="display: flex; align-items: center; gap: 10px;">
+                <span class="tx-icon" style="width: 28px; height: 28px; border-radius: 6px; background: ${isCredit ? '#edf5f0' : '#f7edf2'}; color: ${isCredit ? '#25745c' : '#651c3e'}; display: grid; place-items: center; font-weight: 700; font-size: 12px;">
+                    ${isCredit ? '↓' : '↑'}
+                </span>
                 <div class="tx-meta">
-                    <span class="tx-type">${tx.type} &bull; ${tx.ref}</span>
-                    <span class="tx-date">${tx.date}</span>
+                    <div style="font-weight: 600; font-size: 12px; color: var(--text-primary);">${escapeMonitorText(typeStr.replace(/_/g, ' '))}</div>
+                    <div style="font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">${escapeMonitorText(refNo)} &bull; ${dateStr}</div>
                 </div>
             </div>
-            <div class="tx-amount ${isCredit ? 'credit' : 'debit'}">
-                ${isCredit ? '+' : '-'}₱${formatCurrency(tx.amount)}
+            <div style="text-align: right;">
+                <div style="font-weight: 700; font-size: 13px; color: ${isCredit ? '#25745c' : '#651c3e'}; font-variant-numeric: tabular-nums;">
+                    ${isCredit ? '+' : '-'}₱${formatCurrency(amt)}
+                </div>
+                <span class="status-tag ${status === 'SUCCESS' || status === 'Posted' ? 'tag-success' : 'tag-error'}" style="font-size: 9px; padding: 1px 6px;">${escapeMonitorText(status)}</span>
             </div>
         </div>
-    `}).join('');
-
-    renderTransactionMonitor();
+        `;
+    }).join('');
 }
 
 function renderOracleAuditLogs() {
@@ -1739,6 +1617,7 @@ async function loadRecentTransactions(isManualClick = false) {
                 : 'Unable to load today\'s transactions. Please try Refresh Monitor.';
         } finally {
             renderTransactionMonitor();
+            renderTransactionFeed();
         }
     })();
     try { await monitorRequest; }
@@ -2321,6 +2200,11 @@ document.getElementById('btn-jwt-info')?.addEventListener('click', () => {
     document.getElementById('modal-jwt').classList.add('active');
 });
 
+// Backward-compatibility stubs for legacy simulator callers
+function runStressSimulation() {}
+function resetStressAccount() {}
+function testScenario() {}
+
 // Global window bindings for onclick handlers
 window.switchTab = switchTab;
 window.loadAllCustomers = loadAllCustomers;
@@ -2348,4 +2232,16 @@ window.selectAccount = selectAccount;
 window.formatAccountNumber = formatAccountNumber;
 window.showTransactionLifecycle = showTransactionLifecycle;
 window.normalizeDashboardStatus = normalizeDashboardStatus;
+
+// OTC Cashier Desk & Dedicated Admin Auth bindings
+window.setOtcOperationMode = setOtcOperationMode;
+window.generateOtcIdempotencyKey = generateOtcIdempotencyKey;
+window.populateOtcAccountSelect = populateOtcAccountSelect;
+window.updateOtcAccountPreview = updateOtcAccountPreview;
+window.validateOtcAmount = validateOtcAmount;
+window.handleOtcTellerSubmit = handleOtcTellerSubmit;
+window.handleAdminLoginSubmit = handleAdminLoginSubmit;
+window.handleAdminLogout = handleAdminLogout;
+window.showAdminLoginModal = showAdminLoginModal;
+window.closeAdminLoginModal = closeAdminLoginModal;
 

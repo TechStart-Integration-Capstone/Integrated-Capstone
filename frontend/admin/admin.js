@@ -12,21 +12,20 @@
     };
     const sidebar = document.createElement('aside');
     sidebar.className = 'admin-sidebar';
-    sidebar.innerHTML = '<a class="admin-brand" href="/" aria-label="PayPink admin home"><span class="admin-mark">p</span>PayPink<sup>®</sup></a><div class="admin-eyebrow">ADMIN WORKSPACE</div>';
+    sidebar.innerHTML = '<a class="admin-brand" href="/" aria-label="PayPink admin home"><span class="admin-mark">P</span><span>PayPink</span><span class="badge-chip" style="margin-left: auto; font-size: 9px; padding: 2px 7px; background: #f7edf2; color: #651c3e; border-color: #f1d7e2;">ADMIN</span></a><div class="admin-eyebrow">PORTAL WORKSPACE</div>';
     const nav = document.getElementById('app-tabs');
     nav.setAttribute('aria-label', 'Administration');
     sidebar.append(nav);
     const footer = document.createElement('div');
     footer.className = 'admin-sidebar-footer';
-    footer.innerHTML = '<span class="admin-environment">Simulation environment</span><a href="/bank/" class="admin-bank-link">Customer banking &#8599;</a>';
+    footer.innerHTML = '<span class="admin-environment">Core Banking Operations</span><a href="/bank/" class="admin-bank-link"><span>Customer Portal</span><span>&#8599;</span></a>';
     sidebar.append(footer);
     document.getElementById('app-container').prepend(sidebar);
-    document.querySelector('.nav-brand').innerHTML = '<div class="admin-breadcrumb">PayPink <span>/</span> Admin <span>/</span> <strong id="admin-current-page">Overview</strong></div>';
-    document.querySelector('.badge-text').textContent = 'Session details';
-    document.querySelector('.badge-icon').textContent = '↗';
-    document.querySelector('.avatar-circle').textContent = 'PP';
-    document.querySelector('.user-name').textContent = 'Operations';
-    document.querySelector('.user-branch').textContent = 'Simulation workspace';
+    document.querySelector('.nav-brand').innerHTML = '<div class="admin-breadcrumb">PayPink <span>/</span> Operations <span>/</span> <strong id="admin-current-page">Overview</strong></div>';
+    document.querySelector('.badge-text').textContent = 'ROLE_ADMIN';
+    document.querySelector('.avatar-circle').textContent = 'AD';
+    document.querySelector('.user-name').textContent = 'Administrator';
+    document.querySelector('.user-branch').textContent = 'PayPink Core • Level 4';
     const main = document.getElementById('main-content');
     const intro = document.createElement('div');
     intro.className = 'admin-page-heading';
@@ -39,9 +38,6 @@
     details.innerHTML = '<summary>System configuration</summary>';
     details.append(architecture);
     document.getElementById('tab-telemetry').append(details);
-    const titles = document.querySelectorAll('#tab-dashboard .card-title');
-    titles[0].textContent = 'Customer accounts';
-    titles[1].textContent = 'Transfer';
     Object.entries(pages).forEach(([id, page]) => {
         const button = document.getElementById(`tab-btn-${id}`);
         if (button) {

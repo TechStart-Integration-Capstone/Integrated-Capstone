@@ -1,10 +1,8 @@
 # PayPink 2.0 — Project Context
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
-_Active Working Branch: levi-feature_  
-_Last Updated: 2026-10-12 (CI/CD Pipeline Alignment & Hardening: Hardened pipeline.yml Stage 2 with reliable TCP readiness probe, automated /mssql-server-setup-scripts.d init on fresh runners, consolidated migrate_external_clearing.sql into idempotent migration execution loop, configured Stage 3 remote Azure SQL migration execution for paypink.database.windows.net, and added Mobile App PWA port 3002 to deployment health verification)_
-_Last Updated: 2026-10-12 (Aligned active environment and docker compose to new Azure SQL Server paypink.database.windows.net with trustServerCertificate=false, and created scripts/verify_azure_db_schema.sql to audit all 13 Phase 1-10 tables, split schemas, synonyms, system pools, and seeds)_
 _Active Working Branch: main_  
+_Last Updated: 2026-10-12 (Admin Minimalist & Professional Redesign & PayPink App Wine Theme Alignment: full-screen Light PayPink sign-in portal, Executive Treasury & Operations KPI suite on Overview, Over-The-Counter Cashier Desk with direct Azure SQL cash debit/credit mutations, CASH_DEPOSIT credit normalization, and theme aligned with customer banking app tokens --wine: #651c3e; all 11 monitor tests, 3 reconciliation tests pass clean by [dom])_  
 _Last Updated: 2026-10-12 (Purged emojis from Mobile Savings Hub & PinkCircles, replacing with Flutter Material outline icons styled with PayPink theme tokens; 57/57 mobile tests pass clean by [dom])_  
 _Last Updated: 2026-10-12 (Mobile Savings allocation breakdown on dashboard hero card, goal activity history sheets, and merged savings transactions in Activity feed by [dom])_  
 _Last Updated: 2026-10-12 (Mobile Savings Hub & PinkCircles feature parity: implemented SavingsService, SavingsHubScreen with personal/group tabs, real-time funding validation, and scheduled contributions; wired scripts/migrate_savings.sql into docker-compose and CI/CD pipeline for Azure VM persistence; 55/55 mobile tests pass clean by [dom])_  
