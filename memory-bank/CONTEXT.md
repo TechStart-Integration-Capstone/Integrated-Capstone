@@ -2,6 +2,7 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: levi-feature_  
+_Last Updated: 2026-10-12 (Resolved self-hosted runner EACCES permission denied error in prod-deploy checkout by adding pre-checkout sudo chown -R on runner workspace and configuring clean: false on actions/checkout@v5; pipeline and docs pushed to origin/levi-feature by [Antigravity])_  
 _Last Updated: 2026-10-12 (Main branch changes pulled and integrated; CI/CD pipeline.yml aligned across Stages 2 & 3 with scripts/migrate_savings.sql for t24.SAVINGS_RESERVATION and Phase 11 schemas across ephemeral CI and remote Azure Cloud SQL paypink.database.windows.net; verified clean Compose syntax and Git commit state by [Antigravity])_  
 _Last Updated: 2026-10-12 (Resolved API Gateway mount conflict by compiling microservices/api-gateway/pom.xml via Maven; verified api-gateway container health on port 8080 (HTTP 200); verified Nginx port 80 reverse proxy for banking login and profile inquiry /api/v1/auth/banking/me returning 3 accounts totaling ₱181,547.44 directly to the browser by [Antigravity])_  
 _Last Updated: 2026-10-12 (Live Cloud Database paypink.database.windows.net verified 100% operational; credentials synchronized to Integrated@123 in /opt/paypink/.env; backend microservices force-recreated; customer login (lviernes) and admin login (admin) issuing valid JWTs; live accounts returning 3 active accounts totaling ₱181,547.44 via /api/v1/auth/banking/me by [Antigravity])_  

@@ -284,7 +284,13 @@ jobs:
       group: prod-deploy
       cancel-in-progress: false
     steps:
+      - name: Clean runner workspace permissions
+        run: |
+          sudo chown -R $(id -u):$(id -g) /home/azureuser/actions-runner/_work 2>/dev/null || true
+
       - uses: actions/checkout@v5
+        with:
+          clean: false
 
       - name: Check free disk space
         run: |
