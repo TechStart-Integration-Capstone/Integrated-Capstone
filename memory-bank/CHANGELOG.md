@@ -1,4 +1,8 @@
 # Changelog
+- 2026-10-12 — CI/CD Self-Hosted Runner Workspace Permission Hardening (`.github/workflows/pipeline.yml`):
+  - **Pre-Checkout Runner Permission Normalization:** Resolved GitHub Actions runner failure (`EACCES: permission denied, rmdir .../microservices/api-gateway/target`) on Azure VM self-hosted runner by adding an automated `sudo chown -R $(id -u):$(id -g) /home/azureuser/actions-runner/_work` pre-checkout step in Stage 3 (`prod-deploy`).
+  - **Non-Destructive Checkout Configuration:** Set `clean: false` on `actions/checkout@v5` in Stage 3, preventing Node workspace purge errors when host target directories or bind-mounted JARs are concurrently referenced by running Docker containers. — [Antigravity]
+
 - 2026-10-12 — Main Branch Integration & CI/CD Pipeline Parity Alignment (`.github/workflows/pipeline.yml`):
   - **Main Branch Fast-Forward Integration:** Pulled and integrated all latest commits from `origin/main` (`43cc924`) into working branch `levi-feature`, including PR #60 (Mobile Haptic feedback, pull-to-refresh, adaptive Heart-P launcher icons, shimmer skeletons) and commit `43cc924` (Admin portal minimalist redesign and Cash Deposit credit normalization).
   - **CI/CD Savings Migration Alignment:** Re-aligned `.github/workflows/pipeline.yml` by wiring `scripts/migrate_savings.sql` into the Stage 2 idempotent migration loop, Stage 3 local `azure-sql-master` deployment loop, and Stage 3 remote Azure Cloud SQL (`paypink.database.windows.net`) migration loop, ensuring `t24.SAVINGS_RESERVATION` and Phase 11 tables are consistently applied across both ephemeral CI and live cloud environments.
