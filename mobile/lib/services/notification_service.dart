@@ -1,21 +1,36 @@
 import '../screens/transactions_screen.dart';
 import 'account_service.dart';
+import 'savings_service.dart';
 import 'secure_token_storage.dart';
 
-/// In-app notifications derived from the customer's server-side transaction history,
-/// using the same rules as the web app (frontend/bank/notifications.js), which mirror
-/// notification-service's debit/credit alerts. Nothing here is invented on the device.
+/// In-app notifications derived from the customer's server-side transaction history
+/// and pending PinkCircle invitations, using the same rules as the web app
+/// (frontend/bank/notifications.js). Nothing here is invented on the device.
 class NotificationService {
   static const _types = {'TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_DISBURSEMENT', 'LOAN_REPAYMENT'};
 
-  /// Builds the inbox (newest first) from server transactions.
+  /// Builds the inbox (newest first) from server transactions and PinkCircle invitations.
   /// Read and dismissed IDs are applied so the UI can show unread state.
   static List<Map<String, dynamic>> fromTransactions(
     List<TransactionItem> transactions, {
+    List<PinkCircleItem> circles = const [],
     Set<String> read = const {},
     Set<String> hidden = const {},
   }) {
     final items = <Map<String, dynamic>>[];
+    for (final circle in circles) {
+      if (!circle.isInvited) continue;
+      final id = 'CIRCLE_INVITE:${circle.circleId}';
+      if (hidden.contains(id)) continue;
+      items.add({
+        'id': id,
+        'title': 'PinkCircle invitation',
+        'message':
+            'You have been invited to join "${circle.name}" (target: ${formatPeso(circle.targetAmount)}). Open Savings Hub → PinkCircles to accept.',
+        'time': circle.targetDate.isNotEmpty ? 'Target: ${circle.targetDate}' : 'Pending invitation',
+        'unread': !read.contains(id),
+      });
+    }
     for (final tx in transactions) {
       final type = tx.transactionType.toUpperCase();
       if (!_types.contains(type) && !type.startsWith('EXT_')) continue;

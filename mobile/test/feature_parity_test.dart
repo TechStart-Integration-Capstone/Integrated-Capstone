@@ -3,6 +3,7 @@ import 'package:paypink_mobile/screens/transactions_screen.dart';
 import 'package:paypink_mobile/services/account_service.dart';
 import 'package:paypink_mobile/services/notification_service.dart';
 import 'package:paypink_mobile/services/report_service.dart';
+import 'package:paypink_mobile/services/savings_service.dart';
 
 Map<String, dynamic> loanJson({
   String status = 'ACTIVE',
@@ -52,7 +53,7 @@ void main() {
     });
   });
 
-  group('Notifications come from server transactions', () {
+  group('Notifications come from server transactions and PinkCircle invitations', () {
     TransactionItem tx(String id, String type, String status, {bool credit = false}) => TransactionItem(
           id: id,
           title: 't',
@@ -84,6 +85,35 @@ void main() {
       expect(items.every((n) => n['unread'] == true), isTrue);
     });
 
+    test('includes pending PinkCircle invitations in notifications', () {
+      final invitedCircle = PinkCircleItem.fromJson({
+        'circle_id': 'CIR-77',
+        'name': 'Baguio Trip',
+        'target_amount': 30000.0,
+        'savedAmount': 5000.0,
+        'target_date': '2026-12-15',
+        'membership_status': 'INVITED',
+        'members': [],
+      });
+      final activeCircle = PinkCircleItem.fromJson({
+        'circle_id': 'CIR-88',
+        'name': 'Active Squad',
+        'target_amount': 20000.0,
+        'savedAmount': 5000.0,
+        'membership_status': 'ACTIVE',
+        'members': [],
+      });
+      final items = NotificationService.fromTransactions(
+        [tx('PP-20261012-1-OUT', 'TRANSFER_OUT', 'Completed')],
+        circles: [invitedCircle, activeCircle],
+      );
+      expect(items, hasLength(2));
+      expect(items.first['id'], 'CIRCLE_INVITE:CIR-77');
+      expect(items.first['title'], 'PinkCircle invitation');
+      expect(items.first['message'], contains('Baguio Trip'));
+      expect(items.first['unread'], isTrue);
+    });
+
     test('read and dismissed state is applied by ID', () {
       final items = NotificationService.fromTransactions(
         [tx('1', 'TRANSFER_IN', 'Completed', credit: true), tx('2', 'TRANSFER_OUT', 'Completed')],
@@ -93,6 +123,24 @@ void main() {
       expect(items, hasLength(1));
       expect(items.single['unread'], isFalse);
     });
+  });
+
+  test('AccountSavingsBreakdown computes totalAllocated from personal, circle, and unlisted reservations', () {
+    final breakdown = AccountSavingsBreakdown.fromJson({
+      'accountBalance': 50000,
+      'personalReserved': 12000,
+      'circleReserved': 3500,
+      'unlistedReservations': 0,
+      'availableBalance': 34500,
+      'allocations': [
+        {'goal_id': 'G-1', 'name': 'Emergency', 'saved_amount': 12000, 'goal_type': 'PERSONAL'},
+        {'goal_id': 'G-2', 'name': 'Trip Circle', 'saved_amount': 3500, 'goal_type': 'CIRCLE'},
+      ],
+    });
+    expect(breakdown.totalAllocated, 15500);
+    expect(breakdown.availableBalance, 34500);
+    expect(breakdown.accountBalance, 50000);
+    expect(breakdown.allocations, hasLength(2));
   });
 
   test('report date range follows the web limit of 366 days', () {

@@ -428,11 +428,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         ],
                       ),
                       onTap: () {
-                        final cleanRef = tx.id.startsWith('TXN-')
-                            ? tx.id
-                            : (tx.id.startsWith('TRX-')
-                                ? tx.id.replaceFirst('TRX-', 'TXN-')
-                                : 'TXN-2026-${tx.id.replaceAll(RegExp(r'[^0-9]'), '').padRight(5, '0').substring(0, 5)}');
+                        final cleanRef = tx.id.trim().isNotEmpty ? tx.id.trim() : 'N/A';
                         PayPinkBottomSheets.showTransactionDetails(
                           context,
                           name: tx.title,

@@ -6,3 +6,6 @@ String? getWebLocal(String key) => null;
 void removeWebLocal(String key) {}
 
 void clearWebLocal() {}
+
+bool copyToWebClipboard(String text) => false;
+

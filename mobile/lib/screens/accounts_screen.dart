@@ -7,6 +7,8 @@ import '../widgets/dynamic_card_deck.dart';
 import '../widgets/loan_payment_sheet.dart';
 import '../services/account_service.dart';
 import '../widgets/paypink_shimmer.dart';
+import '../services/web_storage_stub.dart'
+    if (dart.library.html) '../services/web_storage_web.dart';
 
 class AccountsScreen extends StatefulWidget {
   final bool hideBalances;
@@ -101,8 +103,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               hideBalances: widget.hideBalances,
               onToggleHideBalances: widget.onToggleHideBalances,
               onOpenTransfer: () => widget.onNavigateTab?.call(2),
-              onOpenDetails: () {
-                final acct = deposits.first;
+              onSelectAccount: (acct) {
                 final holder = widget.userName?.isNotEmpty == true ? widget.userName! : acct.displayName;
                 PayPinkBottomSheets.showAccountDetails(
                   context,
@@ -142,7 +143,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                       border: Border.all(color: isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink),
                     ),
                     child: Text(
-                      '$totalLinked linked',
+                      widget.accounts == null ? 'Loading…' : '$totalLinked linked',
                       style: PayPinkTheme.body(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -467,11 +468,13 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 children: [
                   GestureDetector(
                     onTap: () {
-                      Clipboard.setData(ClipboardData(text: fullNumber.replaceAll(' ', '')));
+                      final rawNumber = account.accountNumber.replaceAll(RegExp(r'\s+'), '');
+                      copyToWebClipboard(rawNumber);
+                      Clipboard.setData(ClipboardData(text: rawNumber));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           backgroundColor: PayPinkTheme.wine,
-                          content: Text('Copied $name number to clipboard'),
+                          content: Text('Copied Account Number: $rawNumber'),
                           duration: const Duration(seconds: 2),
                         ),
                       );

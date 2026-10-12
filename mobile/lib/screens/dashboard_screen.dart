@@ -14,6 +14,7 @@ import '../widgets/transaction_report_sheet.dart';
 import 'loans_screen.dart';
 import 'savings_hub_screen.dart';
 import '../services/savings_service.dart';
+import '../widgets/paypink_shimmer.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool hideBalances;
@@ -364,13 +365,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 10),
                         Builder(
                           builder: (context) {
+                            final bool isAccountsLoading = widget.accounts == null && widget.totalBalance == null;
+                            final depositAccounts = widget.accounts?.where((a) => !a.isLoan).toList() ?? const <BankAccount>[];
                             final double effectiveBalance = widget.totalBalance ??
-                                (widget.accounts != null && widget.accounts!.isNotEmpty
-                                    ? widget.accounts!.fold<double>(0.0, (double sum, a) => sum + a.currentBalance)
-                                    : 50.00);
-                            final accountCount = (widget.accounts != null && widget.accounts!.isNotEmpty)
-                                ? widget.accounts!.length
-                                : 2;
+                                (depositAccounts.isNotEmpty
+                                    ? depositAccounts.fold<double>(0.0, (double sum, a) => sum + a.currentBalance)
+                                    : 0.00);
+                            final accountCount = depositAccounts.length;
 
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,9 +379,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 Text(
                                   widget.hideBalances
                                       ? '\u2022\u2022\u2022\u2022\u2022\u2022'
-                                      : '\u20B1${_formatCurrency(effectiveBalance)}',
+                                      : (isAccountsLoading ? 'Loading\u2026' : '\u20B1${_formatCurrency(effectiveBalance)}'),
                                   style: PayPinkTheme.display(
-                                    fontSize: 38,
+                                    fontSize: isAccountsLoading && !widget.hideBalances ? 26 : 38,
                                     fontWeight: FontWeight.w600,
                                     color: Colors.white,
                                     letterSpacing: -1.2,
@@ -388,7 +389,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Across $accountCount account${accountCount == 1 ? '' : 's'}. All yours.',
+                                  widget.accounts == null
+                                      ? 'Loading your accounts\u2026'
+                                      : 'Across $accountCount account${accountCount == 1 ? '' : 's'}. All yours.',
                                   style: PayPinkTheme.body(
                                     color: const Color(0xFFE2B4CB),
                                     fontSize: 12,
@@ -674,7 +677,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: Border.all(color: isDark ? PayPinkTheme.darkGlassBorder : PayPinkTheme.pink),
                     ),
                     child: Text(
-                      '${widget.accounts != null && widget.accounts!.isNotEmpty ? widget.accounts!.length : 2} linked',
+                      widget.accounts == null ? 'Loading\u2026' : '${widget.accounts!.length} linked',
                       style: PayPinkTheme.body(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
@@ -699,9 +702,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Dynamic Swipeable Account Cards Carousel (hidden until real accounts load)
-          if (_carouselAccounts.isNotEmpty)
-          AccountCardCarousel(
+          // Dynamic Swipeable Account Cards Carousel (shimmer skeleton while real accounts load)
+          if (widget.accounts == null)
+            PayPinkShimmer.accountCardSkeleton(isDark: isDark)
+          else if (_carouselAccounts.isNotEmpty)
+            AccountCardCarousel(
             accounts: _carouselAccounts,
             cardHolder: widget.userFullName?.isNotEmpty == true ? widget.userFullName! : widget.userName,
             hideBalances: widget.hideBalances,

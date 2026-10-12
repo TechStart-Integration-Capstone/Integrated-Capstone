@@ -813,7 +813,12 @@ class AccountService {
 
         if (remResp.statusCode == 200 || remResp.statusCode == 201 || remResp.statusCode == 202) {
           final data = jsonDecode(remResp.body);
-          final ref = data['referenceId'] ?? data['transactionId'] ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+          final ref = data['referenceNo'] ??
+              data['reference'] ??
+              data['referenceNumber'] ??
+              data['referenceId'] ??
+              data['transactionId'] ??
+              'TRF-${DateTime.now().millisecondsSinceEpoch}';
           return TransferReceipt(
             success: true,
             referenceId: ref.toString(),
@@ -924,22 +929,38 @@ class AccountService {
 
     List<TransactionItem> results = [];
 
-    // 1. Primary endpoint: ApiConfig.transactionsPath (/transactions/activity CQRS feed)
+    // 1. Primary endpoint: /auth/banking/transactions (matches Web bank.js reference numbers)
     try {
-      final response = await _api.get(
-        ApiConfig.transactionsPath,
+      final bankResp = await _api.get(
+        '/auth/banking/transactions',
         queryParams: queryParams.isNotEmpty ? queryParams : null,
       );
-
-      if (response.statusCode == 200) {
-        final dynamic decoded = jsonDecode(response.body);
+      if (bankResp.statusCode == 200) {
+        final dynamic decoded = jsonDecode(bankResp.body);
         results = _extractAndMapTransactions(decoded);
       }
     } catch (e) {
-      debugPrint('[AccountService] /transactions/activity error: $e');
+      debugPrint('[AccountService] /auth/banking/transactions error: $e');
     }
 
-    // 2. Fallback to /transactions (API Gateway route)
+    // 2. Fallback to ApiConfig.transactionsPath (/transactions/activity CQRS feed)
+    if (results.isEmpty) {
+      try {
+        final response = await _api.get(
+          ApiConfig.transactionsPath,
+          queryParams: queryParams.isNotEmpty ? queryParams : null,
+        );
+
+        if (response.statusCode == 200) {
+          final dynamic decoded = jsonDecode(response.body);
+          results = _extractAndMapTransactions(decoded);
+        }
+      } catch (e) {
+        debugPrint('[AccountService] /transactions/activity fallback error: $e');
+      }
+    }
+
+    // 3. Fallback to /transactions (API Gateway route)
     if (results.isEmpty) {
       try {
         final fallbackResp = await _api.get(
@@ -952,22 +973,6 @@ class AccountService {
         }
       } catch (e) {
         debugPrint('[AccountService] /transactions fallback error: $e');
-      }
-    }
-
-    // 3. Fallback to /auth/banking/transactions
-    if (results.isEmpty) {
-      try {
-        final bankResp = await _api.get(
-          '/auth/banking/transactions',
-          queryParams: queryParams.isNotEmpty ? queryParams : null,
-        );
-        if (bankResp.statusCode == 200) {
-          final dynamic decoded = jsonDecode(bankResp.body);
-          results = _extractAndMapTransactions(decoded);
-        }
-      } catch (e) {
-        debugPrint('[AccountService] /auth/banking/transactions fallback error: $e');
       }
     }
 
@@ -1060,7 +1065,13 @@ class AccountService {
       final rawType = item['transactionType']?.toString().toUpperCase() ?? item['type']?.toString().toUpperCase() ?? '';
       final isCredit = op == 'CREDIT' || rawType == 'CREDIT' || rawType.contains('IN') || rawType == 'DEPOSIT' || rawType == 'WELCOME_GIFT' || rawType == 'LOAN_DISBURSEMENT';
 
-      final ref = item['reference'] ?? item['referenceNo'] ?? item['id']?.toString() ?? item['transactionId']?.toString() ?? 'TRF-${DateTime.now().millisecondsSinceEpoch}';
+      final ref = item['reference'] ??
+          item['referenceNo'] ??
+          item['referenceNumber'] ??
+          item['requestReference'] ??
+          item['id']?.toString() ??
+          item['transactionId']?.toString() ??
+          'TRF-${DateTime.now().millisecondsSinceEpoch}';
       final status = item['status']?.toString().toUpperCase() ?? 'COMPLETED';
       final acct = item['accountNumber']?.toString() ?? '';
       final last4 = acct.length >= 4 ? acct.substring(acct.length - 4) : acct;
