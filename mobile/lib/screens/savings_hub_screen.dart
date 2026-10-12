@@ -539,19 +539,17 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              if (goal.savedAmount > 0) ...[
-                OutlinedButton(
-                  onPressed: () => _openFundingModal(goal, 'RELEASE'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: muted,
-                    side: BorderSide(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  ),
-                  child: const Text('Release', style: TextStyle(fontSize: 12)),
+              OutlinedButton(
+                onPressed: () => _openFundingModal(goal, 'RELEASE'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: muted,
+                  side: BorderSide(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
-                const SizedBox(width: 8),
-              ],
+                child: const Text('Release', style: TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 onPressed: () => _openScheduleModal(goal),
                 tooltip: 'Savings Plan',
@@ -609,6 +607,29 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
 
   Widget _buildCircleCard(PinkCircleItem circle, bool isDark, Color ink, Color muted) {
     final activeMembers = circle.members.where((m) => m.status == 'ACTIVE').toList();
+    final myMember = circle.members.where((m) => m.isYou).firstOrNull;
+    final myGoalFromOverview = (_overview?.goals ?? []).where((g) {
+      if (myMember?.goalId != null && g.goalId == myMember!.goalId) return true;
+      if (g.circleId != null && g.circleId == circle.circleId) return true;
+      return false;
+    }).firstOrNull;
+    final fallbackAccountId = _savingsAccounts.isNotEmpty
+        ? _savingsAccounts.first.accountId
+        : (_accounts.isNotEmpty ? _accounts.first.accountId : 0);
+    final myGoal = myGoalFromOverview ??
+        (myMember?.goalId != null
+            ? SavingsGoalItem(
+                goalId: myMember!.goalId!,
+                accountId: fallbackAccountId,
+                circleId: circle.circleId,
+                name: circle.name,
+                category: 'GROUP',
+                targetAmount: circle.targetAmount,
+                savedAmount: myMember.savedAmount ?? 0.0,
+                targetDate: circle.targetDate,
+                streak: 0,
+              )
+            : null);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -705,6 +726,49 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
                   ),
                 )),
             const SizedBox(height: 14),
+            if (myGoal != null) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _openFundingModal(myGoal, 'ALLOCATE'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: PayPinkTheme.wine,
+                        side: BorderSide(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      child: const Text('＋ Add money', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () => _openFundingModal(myGoal, 'RELEASE'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: muted,
+                      side: BorderSide(color: isDark ? PayPinkTheme.darkLine : PayPinkTheme.line),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    child: const Text('Release', style: TextStyle(fontSize: 12)),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: () => _openScheduleModal(myGoal),
+                    tooltip: 'Savings Plan',
+                    icon: const Icon(Icons.schedule_rounded, size: 20),
+                    color: PayPinkTheme.wine,
+                  ),
+                  IconButton(
+                    onPressed: () => _openGoalActivityModal(myGoal),
+                    tooltip: 'Goal Activity',
+                    icon: const Icon(Icons.history_rounded, size: 20),
+                    color: PayPinkTheme.wine,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(
@@ -826,6 +890,7 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
   Future<void> _openFundingModal(SavingsGoalItem goal, String type) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isAllocate = type == 'ALLOCATE';
+    final needsFundingCheck = isAllocate || goal.accountId == 0;
 
     showModalBottomSheet(
       context: context,
@@ -834,9 +899,9 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetCtx) {
         return FutureBuilder<SavingsFundingDetails?>(
-          future: isAllocate ? SavingsService.checkFunding(goal.goalId) : null,
+          future: needsFundingCheck ? SavingsService.checkFunding(goal.goalId) : null,
           builder: (context, snapshot) {
-            if (isAllocate && snapshot.connectionState == ConnectionState.waiting) {
+            if (needsFundingCheck && snapshot.connectionState == ConnectionState.waiting) {
               return const SizedBox(
                 height: 250,
                 child: Center(child: CircularProgressIndicator(color: PayPinkTheme.wine)),
@@ -844,9 +909,12 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
             }
 
             final funding = snapshot.data;
+            final effectiveAccountId = (funding != null && funding.accountId > 0)
+                ? funding.accountId
+                : goal.accountId;
             final maxAmount = isAllocate
                 ? (funding?.maximumContribution ?? 0.0)
-                : goal.savedAmount;
+                : (funding != null && funding.goalSavedAmount > 0 ? funding.goalSavedAmount : goal.savedAmount);
 
             final amountCtrl = TextEditingController();
 
@@ -885,6 +953,22 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
                       ),
                     ),
                     const SizedBox(height: 14),
+                  ] else if (!isAllocate) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? PayPinkTheme.darkCard : const Color(0xFFFDF2F8),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          _statRow('Saved in goal', _formatCurrency(maxAmount), isDark),
+                          const SizedBox(height: 4),
+                          _statRow('Max you can release', _formatCurrency(maxAmount), isDark, highlight: true),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                   ],
                   TextField(
                     controller: amountCtrl,
@@ -911,7 +995,7 @@ class _SavingsHubScreenState extends State<SavingsHubScreen> {
                         }
                         Navigator.pop(sheetCtx);
                         final res = await SavingsService.executeOperation(
-                          accountId: goal.accountId,
+                          accountId: effectiveAccountId,
                           goalId: goal.goalId,
                           amount: val,
                           type: type,

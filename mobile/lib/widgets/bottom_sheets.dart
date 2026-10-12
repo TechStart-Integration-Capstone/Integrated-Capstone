@@ -3,10 +3,18 @@ import 'package:flutter/services.dart';
 import '../theme/paypink_theme.dart';
 import '../screens/pin_auth_screen.dart';
 import '../services/account_service.dart';
+import '../services/savings_service.dart';
+import '../services/web_storage_stub.dart'
+    if (dart.library.html) '../services/web_storage_web.dart';
 
 class PayPinkBottomSheets {
-  /// Deposit account details. Shows the available balance only, and interest from [account]
-  /// using the bank's real savings tiers (checking accounts earn no interest).
+  static void _copyText(String text) {
+    copyToWebClipboard(text);
+    Clipboard.setData(ClipboardData(text: text));
+  }
+
+  /// Deposit account details. Shows the available balance, allocated savings hub balance,
+  /// and interest from [account] using the bank's real savings tiers.
   static void showAccountDetails(
     BuildContext context, {
     required String name,
@@ -20,6 +28,16 @@ class PayPinkBottomSheets {
     final rate = account?.annualInterestRatePercent;
     final posting = BankAccount.nextInterestPostingDate();
     final earnsInterest = account?.earnsInterest ?? false;
+    final rawNumber = (account != null && account.accountNumber.trim().isNotEmpty)
+        ? account.accountNumber.replaceAll(RegExp(r'\s+'), '')
+        : fullNumber.replaceAll(RegExp(r'\s+'), '');
+    final displayNumber = (account != null && account.formattedNumber.trim().isNotEmpty)
+        ? account.formattedNumber
+        : fullNumber;
+    final acctId = account?.accountId ?? 0;
+    final breakdownFuture = acctId > 0
+        ? SavingsService.fetchAccountBreakdown(acctId, fallbackBalance: balance)
+        : Future<AccountSavingsBreakdown?>.value(null);
 
     showModalBottomSheet(
       context: context,
@@ -27,67 +45,88 @@ class PayPinkBottomSheets {
       backgroundColor: Colors.transparent,
       builder: (ctx) => _SheetContainer(
         title: 'Account Details',
-        child: Column(
-          children: [
-            _DetailRow(label: 'Account Number', value: fullNumber, isMono: true),
-            _DetailRow(label: 'Available Balance', value: formatPeso(balance), isBold: true),
-            if (account != null && earnsInterest && rate != null) ...[
-              _DetailRow(label: 'Interest Rate', value: '${rate.toStringAsFixed(2)}% p.a.'),
-              _DetailRow(
-                label: 'Interest Earned Per Day',
-                value: '≈ ${formatPeso(account.estimatedDailyInterest)}',
-              ),
-              _DetailRow(
-                label: 'Next Interest Posting',
-                value: BankAccount.formatDueDate(posting.toIso8601String()) ?? '',
-              ),
-            ] else if (account != null && !account.isLoan)
-              const _DetailRow(label: 'Interest', value: 'Not interest-bearing'),
-            _DetailRow(
-              label: 'Account Holder',
-              value: name.isNotEmpty ? name : 'PayPink Client',
-              isBold: true,
-            ),
-            _DetailRow(label: 'Account Type', value: type, isMono: true),
-            _DetailRow(
-              label: 'Status',
-              value: status,
-              valueColor: PayPinkTheme.green,
-              isBold: true,
-            ),
-            if (account != null && earnsInterest) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Savings earn 1% below ₱1,000, 2.5% below ₱10,000 and 4% from ₱10,000, on the whole balance. Interest accrues daily and is added on the last day of each month.',
-                style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted, height: 1.4),
-              ),
-            ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: fullNumber.replaceAll(' ', '')));
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: PayPinkTheme.wine,
-                      content: Text('Copied $fullNumber to clipboard'),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.copy_rounded, size: 16),
-                label: const Text('Copy Account Number'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: PayPinkTheme.wine,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  textStyle: PayPinkTheme.body(fontWeight: FontWeight.w700),
+        child: FutureBuilder<AccountSavingsBreakdown?>(
+          future: breakdownFuture,
+          builder: (context, snapshot) {
+            final breakdown = snapshot.data;
+            final allocated = breakdown?.totalAllocated ?? 0.0;
+            final availableVal = breakdown != null ? breakdown.availableBalance : balance;
+            final isWaiting = acctId > 0 && snapshot.connectionState == ConnectionState.waiting;
+
+            return Column(
+              children: [
+                _DetailRow(label: 'Account Number', value: displayNumber, isMono: true),
+                _DetailRow(label: 'Available Balance', value: formatPeso(availableVal), isBold: true),
+                _DetailRow(
+                  label: 'Allocated in Savings Hub',
+                  value: isWaiting ? 'Loading…' : formatPeso(allocated),
+                  valueColor: PayPinkTheme.wine,
+                  isBold: true,
                 ),
-              ),
-            ),
-          ],
+                if (breakdown != null && allocated > 0)
+                  _DetailRow(
+                    label: 'Total Account Balance',
+                    value: formatPeso(breakdown.accountBalance),
+                  ),
+                if (account != null && earnsInterest && rate != null) ...[
+                  _DetailRow(label: 'Interest Rate', value: '${rate.toStringAsFixed(2)}% p.a.'),
+                  _DetailRow(
+                    label: 'Interest Earned Per Day',
+                    value: '≈ ${formatPeso(account.estimatedDailyInterest)}',
+                  ),
+                  _DetailRow(
+                    label: 'Next Interest Posting',
+                    value: BankAccount.formatDueDate(posting.toIso8601String()) ?? '',
+                  ),
+                ] else if (account != null && !account.isLoan)
+                  const _DetailRow(label: 'Interest', value: 'Not interest-bearing'),
+                _DetailRow(
+                  label: 'Account Holder',
+                  value: name.isNotEmpty ? name : 'PayPink Client',
+                  isBold: true,
+                ),
+                _DetailRow(label: 'Account Type', value: type, isMono: true),
+                _DetailRow(
+                  label: 'Status',
+                  value: status,
+                  valueColor: PayPinkTheme.green,
+                  isBold: true,
+                ),
+                if (account != null && earnsInterest) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Savings earn 1% below ₱1,000, 2.5% below ₱10,000 and 4% from ₱10,000, on the whole balance. Interest accrues daily and is added on the last day of each month.',
+                    style: PayPinkTheme.body(fontSize: 11, color: PayPinkTheme.muted, height: 1.4),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      _copyText(rawNumber);
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: PayPinkTheme.wine,
+                          content: Text('Copied Account Number: $rawNumber'),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('Copy Account Number'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: PayPinkTheme.wine,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      textStyle: PayPinkTheme.body(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -652,7 +691,7 @@ class PayPinkBottomSheets {
               ),
               const SizedBox(height: 16),
 
-              _DetailRow(label: 'Reference ID', value: refId, isMono: true),
+              _DetailRow(label: 'Reference Number', value: refId, isMono: true),
               _DetailRow(label: 'Date & Time', value: date),
               _DetailRow(label: 'Description', value: name),
               if (account != null && account.isNotEmpty)
@@ -678,7 +717,7 @@ class PayPinkBottomSheets {
          PAYPINK OFFICIAL RECEIPT
 ========================================
 Status: ${isReversed ? 'REVERSED / REFUNDED' : 'COMPLETED'}
-Reference ID: $refId
+Reference Number: $refId
 Date: $date
 Description: $name
 ${account != null ? 'From: $account\n' : ''}${counterparty != null ? 'To: $counterparty\n' : ''}Amount: ${isCredit ? '+' : '-'}₱${amount.toStringAsFixed(2)}
@@ -687,7 +726,7 @@ Status: ${isReversed ? 'Reversed' : 'Settled & Verified'}
 ========================================
 Thank you for banking with PayPink!
 ''';
-                        Clipboard.setData(ClipboardData(text: receiptText));
+                        _copyText(receiptText);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             backgroundColor: PayPinkTheme.wine,
@@ -1239,7 +1278,8 @@ Thank you for banking with PayPink!
               height: 48,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  Clipboard.setData(const ClipboardData(text: 'paypink://pay?acc=001150468001'));
+                  final rawAcc = (accountNumber?.isNotEmpty == true ? accountNumber! : '001150468001').replaceAll(' ', '');
+                  _copyText('paypink://pay?acc=$rawAcc');
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

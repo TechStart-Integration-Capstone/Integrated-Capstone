@@ -27,3 +27,29 @@ void clearWebLocal() {
     html.window.localStorage.clear();
   } catch (_) {}
 }
+
+/// Copies [text] to the browser clipboard, working on both HTTPS and plain HTTP origins.
+bool copyToWebClipboard(String text) {
+  try {
+    final textarea = html.TextAreaElement()
+      ..value = text
+      ..style.position = 'fixed'
+      ..style.left = '-9999px'
+      ..style.top = '0'
+      ..setAttribute('readonly', '');
+    html.document.body?.append(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+    final copied = html.document.execCommand('copy');
+    textarea.remove();
+    if (copied) return true;
+  } catch (_) {}
+  try {
+    html.window.navigator.clipboard?.writeText(text);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+

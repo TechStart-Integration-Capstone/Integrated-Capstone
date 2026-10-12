@@ -570,9 +570,6 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
     if (settled != _currentIndex) {
       HapticFeedback.selectionClick();
       setState(() => _currentIndex = settled);
-      if (widget.onSelectAccount != null && settled < _effectiveAccounts.length) {
-        widget.onSelectAccount!(_effectiveAccounts[settled]);
-      }
     }
   }
 
@@ -842,7 +839,13 @@ class _DynamicCardDeckState extends State<DynamicCardDeck> {
                             icon: Icons.tune_rounded,
                             label: 'Details',
                             isDark: isDark,
-                            onTap: widget.onOpenDetails ?? () {},
+                            onTap: () {
+                              if (widget.onSelectAccount != null) {
+                                widget.onSelectAccount!(activeAccount);
+                              } else if (widget.onOpenDetails != null) {
+                                widget.onOpenDetails!();
+                              }
+                            },
                           ),
                         ),
                         const SizedBox(width: 10),

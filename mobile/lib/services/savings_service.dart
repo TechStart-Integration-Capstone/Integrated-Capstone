@@ -58,6 +58,7 @@ class SavingsGoalItem {
   });
 
   bool get isCompleted => savedAmount >= targetAmount && targetAmount > 0;
+  bool get isCircleGoal => circleId != null && circleId!.isNotEmpty;
   double get progressRatio => targetAmount > 0 ? (savedAmount / targetAmount).clamp(0.0, 1.0) : 0.0;
   int get progressPercent => (progressRatio * 100).round();
 
@@ -222,6 +223,54 @@ class SavingsFundingDetails {
       goalSavedAmount: (json['goalSavedAmount'] as num?)?.toDouble() ?? 0.0,
       remainingTarget: (json['remainingTarget'] as num?)?.toDouble() ?? 0.0,
       maximumContribution: (json['maximumContribution'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+class AccountSavingsBreakdown {
+  final double accountBalance;
+  final double personalReserved;
+  final double circleReserved;
+  final double unlistedReservations;
+  final double availableBalance;
+  final List<({String name, String kind, double amount})> allocations;
+
+  AccountSavingsBreakdown({
+    required this.accountBalance,
+    required this.personalReserved,
+    required this.circleReserved,
+    this.unlistedReservations = 0.0,
+    required this.availableBalance,
+    this.allocations = const [],
+  });
+
+  double get totalAllocated => personalReserved + circleReserved + unlistedReservations;
+
+  factory AccountSavingsBreakdown.fromJson(Map<String, dynamic> json) {
+    double parseNum(dynamic val) {
+      if (val is num) return val.toDouble();
+      return double.tryParse(val?.toString() ?? '0') ?? 0.0;
+    }
+
+    final rawAllocations = json['allocations'] as List<dynamic>? ?? [];
+    final parsedAllocations = <({String name, String kind, double amount})>[];
+    for (final a in rawAllocations) {
+      if (a is Map) {
+        parsedAllocations.add((
+          name: a['name']?.toString() ?? 'Savings Goal',
+          kind: a['kind']?.toString() ?? 'PERSONAL',
+          amount: parseNum(a['amount']),
+        ));
+      }
+    }
+
+    return AccountSavingsBreakdown(
+      accountBalance: parseNum(json['accountBalance']),
+      personalReserved: parseNum(json['personalReserved']),
+      circleReserved: parseNum(json['circleReserved']),
+      unlistedReservations: parseNum(json['unlistedReservations']),
+      availableBalance: parseNum(json['availableBalance']),
+      allocations: parsedAllocations,
     );
   }
 }
@@ -397,6 +446,60 @@ class SavingsService {
       return null;
     }
   }
+
+  /// Fetches savings breakdown (allocated money in Savings Hub) for a specific account:
+  /// GET /api/v1/accounts/savings/accounts/{accountId}/breakdown
+  static Future<AccountSavingsBreakdown?> fetchAccountBreakdown(
+    int accountId, {
+    double fallbackBalance = 0.0,
+  }) async {
+    if (accountId > 0) {
+      try {
+        final res = await _api.get('$_base/accounts/$accountId/breakdown');
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          if (data is Map<String, dynamic>) {
+            return AccountSavingsBreakdown.fromJson(data);
+          }
+        }
+      } catch (e) {
+        debugPrint('[SavingsService] fetchAccountBreakdown error: $e');
+      }
+    }
+
+    // Fallback: compute allocated savings for this account from SavingsOverview
+    try {
+      final overview = await fetchOverview();
+      if (overview != null) {
+        final acctGoals = accountId > 0
+            ? overview.goals.where((g) => g.accountId == accountId).toList()
+            : overview.goals;
+        final personal = acctGoals
+            .where((g) => !g.isCircleGoal)
+            .fold<double>(0.0, (sum, g) => sum + g.savedAmount);
+        final circle = acctGoals
+            .where((g) => g.isCircleGoal)
+            .fold<double>(0.0, (sum, g) => sum + g.savedAmount);
+        final allocated = personal + circle;
+        return AccountSavingsBreakdown(
+          accountBalance: fallbackBalance,
+          personalReserved: personal,
+          circleReserved: circle,
+          availableBalance: (fallbackBalance - allocated).clamp(0.0, double.infinity),
+          allocations: acctGoals
+              .where((g) => g.savedAmount > 0)
+              .map((g) => (
+                    name: g.name,
+                    kind: g.isCircleGoal ? 'PINK_CIRCLE' : 'PERSONAL',
+                    amount: g.savedAmount,
+                  ))
+              .toList(),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
 
   /// Allocates (adds) or Releases money from a savings goal: POST /api/v1/accounts/savings/operations
   static Future<({bool success, String message})> executeOperation({

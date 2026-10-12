@@ -14,6 +14,7 @@ import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'services/account_service.dart';
+import 'services/savings_service.dart';
 import 'services/secure_token_storage.dart';
 import 'widgets/bottom_sheets.dart';
 import 'widgets/profile_sheet.dart';
@@ -280,9 +281,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     }
     return 'P';
   }
-  // In-app notifications, derived from server transactions (same rules as the web app).
+  // In-app notifications, derived from server transactions and PinkCircle invitations (same rules as the web app).
   List<Map<String, dynamic>> _notifications = [];
   List<TransactionItem> _serverTransactions = [];
+  List<PinkCircleItem> _circles = [];
   Set<String> _readNotificationIds = {};
   Set<String> _hiddenNotificationIds = {};
 
@@ -312,13 +314,17 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   void _rebuildNotifications() {
     _notifications = NotificationService.fromTransactions(
       _serverTransactions,
+      circles: _circles,
       read: _readNotificationIds,
       hidden: _hiddenNotificationIds,
     );
   }
 
   void _persistNotificationState() {
-    final current = NotificationService.fromTransactions(_serverTransactions).map((n) => n['id'] as String);
+    final current = NotificationService.fromTransactions(
+      _serverTransactions,
+      circles: _circles,
+    ).map((n) => n['id'] as String);
     NotificationService.saveIds(widget.currentUser, 'read', _readNotificationIds, current);
     NotificationService.saveIds(widget.currentUser, 'hidden', _hiddenNotificationIds, current);
   }
@@ -340,6 +346,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         profileError = e.message;
       }
       final txs = await AccountService.fetchTransactions();
+      List<PinkCircleItem> circles = _circles;
+      try {
+        circles = await SavingsService.fetchCircles();
+      } catch (_) {}
       if (!mounted) return;
       if (profileError != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -383,6 +393,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         }
 
         _serverTransactions = txs;
+        _circles = circles;
         _rebuildNotifications();
 
         if (txs.isNotEmpty) {

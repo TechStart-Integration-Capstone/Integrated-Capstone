@@ -105,8 +105,9 @@ class RemittanceService {
         final body = jsonDecode(response.body);
         final refId = body['referenceNo'] ??
             body['reference'] ??
-            body['transactionId'] ??
+            body['referenceNumber'] ??
             body['referenceId'] ??
+            body['transactionId'] ??
             'TRF-${DateTime.now().millisecondsSinceEpoch}';
         final isProcessing = response.statusCode == 202;
 
@@ -160,8 +161,10 @@ class RemittanceService {
         circuitBreaker.recordSuccess();
         final body = jsonDecode(remResponse.body);
         final refId = body['referenceNo'] ??
-            body['transactionId'] ??
+            body['reference'] ??
+            body['referenceNumber'] ??
             body['referenceId'] ??
+            body['transactionId'] ??
             'TRF-${DateTime.now().millisecondsSinceEpoch}';
         final isProcessing = remResponse.statusCode == 202;
 

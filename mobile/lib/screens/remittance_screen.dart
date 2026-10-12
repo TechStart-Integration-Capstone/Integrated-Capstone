@@ -12,6 +12,8 @@ import '../services/secure_token_storage.dart';
 import '../services/remittance_service.dart';
 import '../services/account_service.dart';
 import '../widgets/loading_overlay_wrapper.dart';
+import '../services/web_storage_stub.dart'
+    if (dart.library.html) '../services/web_storage_web.dart';
 
 
 class RemittanceScreen extends StatefulWidget {
@@ -945,15 +947,20 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
 
   void _initDefaultAccounts() {
     if (widget.accounts != null && widget.accounts!.isNotEmpty) {
-      _sourceAccount = widget.accounts!.first.accountNumber;
+      final eligibleSources = widget.accounts!.where((a) => a.canBeTransferSource).toList();
+      _sourceAccount = (eligibleSources.isNotEmpty ? eligibleSources.first : widget.accounts!.first).accountNumber;
       if (widget.accounts!.length > 1) {
-        _ownTargetAccount = widget.accounts![1].accountNumber;
+        final other = widget.accounts!.firstWhere(
+          (a) => a.accountNumber != _sourceAccount,
+          orElse: () => widget.accounts![1],
+        );
+        _ownTargetAccount = other.accountNumber;
       } else {
         _ownTargetAccount = widget.accounts!.first.accountNumber;
       }
     } else {
-      _sourceAccount = 'everyday-5046';
-      _ownTargetAccount = 'savings-8504';
+      _sourceAccount = '';
+      _ownTargetAccount = '';
     }
   }
 
@@ -961,7 +968,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   void didUpdateWidget(covariant RemittanceScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.accounts != oldWidget.accounts && widget.accounts != null && widget.accounts!.isNotEmpty) {
-      if (_sourceAccount.isEmpty || _sourceAccount.contains('everyday-5046')) {
+      if (_sourceAccount.isEmpty || !widget.accounts!.any((a) => a.accountNumber == _sourceAccount)) {
         _initDefaultAccounts();
         _updateCalculations();
       }
@@ -1109,13 +1116,20 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
   }) {
     final fromAcct = _getAccount(_sourceAccount);
     final toAcct = _getAccount(_ownTargetAccount);
+    final isAccountsLoading = widget.accounts == null;
 
-    final fromName = fromAcct?.displayName ?? 'Checking Account';
-    final fromNum = fromAcct?.maskedNumber ?? (_sourceAccount.length >= 4 ? '•••• ${_sourceAccount.substring(_sourceAccount.length - 4)}' : _sourceAccount);
+    final fromName = fromAcct?.displayName ?? (isAccountsLoading ? 'Loading account…' : 'Checking Account');
+    final fromNum = fromAcct?.maskedNumber ??
+        (isAccountsLoading
+            ? '••••'
+            : (_sourceAccount.length >= 4 ? '•••• ${_sourceAccount.substring(_sourceAccount.length - 4)}' : 'No account'));
     final fromBal = fromAcct?.currentBalance ?? 0.0;
 
-    final toName = toAcct?.displayName ?? 'Savings Account';
-    final toNum = toAcct?.maskedNumber ?? (_ownTargetAccount.length >= 4 ? '•••• ${_ownTargetAccount.substring(_ownTargetAccount.length - 4)}' : _ownTargetAccount);
+    final toName = toAcct?.displayName ?? (isAccountsLoading ? 'Loading account…' : 'Savings Account');
+    final toNum = toAcct?.maskedNumber ??
+        (isAccountsLoading
+            ? '••••'
+            : (_ownTargetAccount.length >= 4 ? '•••• ${_ownTargetAccount.substring(_ownTargetAccount.length - 4)}' : 'No account'));
     final toBal = toAcct?.currentBalance ?? 0.0;
 
     return Container(
@@ -1348,7 +1362,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
     }
 
     // Dynamic balance check against selected account's live balance
-    double maxAvailable = 50.00;
+    double maxAvailable = 0.00;
     String sourceName = 'Selected Account';
     if (widget.accounts != null && widget.accounts!.isNotEmpty) {
       final match = widget.accounts!.firstWhere(
@@ -1774,7 +1788,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
                     ),
                     child: Column(
                       children: [
-                        _receiptRow('Reference No.', refId, isMono: true, isDark: isDark, canCopy: true),
+                        _receiptRow('Reference Number', refId, isMono: true, isDark: isDark, canCopy: true),
                         Divider(color: textLine, height: 14),
                         _receiptRow('Date & Time', formattedDate, isDark: isDark),
                         Divider(color: textLine, height: 14),
@@ -1847,7 +1861,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
 ========================================
        PAYPINK OFFICIAL RECEIPT
 ========================================
-Reference: $refId
+Reference Number: $refId
 Status: COMPLETED
 Amount: ₱${amt.toStringAsFixed(2)}
 Type: $transferType
@@ -1858,6 +1872,7 @@ Transfer Fee: ₱0.00
 ========================================
 Thank you for banking with PayPink!
 ''';
+                            copyToWebClipboard(receiptText);
                             Clipboard.setData(ClipboardData(text: receiptText));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -1945,6 +1960,7 @@ Thank you for banking with PayPink!
                 const SizedBox(width: 4),
                 InkWell(
                   onTap: () {
+                    copyToWebClipboard(value);
                     Clipboard.setData(ClipboardData(text: value));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -2172,11 +2188,15 @@ Thank you for banking with PayPink!
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        value: _sourceAccount.isNotEmpty ? _sourceAccount : null,
+                        value: _sourceAccount.isNotEmpty &&
+                                widget.accounts != null &&
+                                widget.accounts!.any((a) => a.canBeTransferSource && a.accountNumber == _sourceAccount)
+                            ? _sourceAccount
+                            : '',
                         isExpanded: true,
                         dropdownColor: isDark ? PayPinkTheme.darkPaper : Colors.white,
                         style: PayPinkTheme.body(fontSize: 13, color: textInk),
-                        items: widget.accounts != null && widget.accounts!.isNotEmpty
+                        items: widget.accounts != null && widget.accounts!.any((a) => a.canBeTransferSource)
                             ? widget.accounts!.where((a) => a.canBeTransferSource).map((a) {
                                 return DropdownMenuItem<String>(
                                   value: a.accountNumber,
@@ -2187,17 +2207,16 @@ Thank you for banking with PayPink!
                                 );
                               }).toList()
                             : [
-                                DropdownMenuItem(
-                                  value: 'everyday-5046',
-                                  child: Text('Everyday account · •••• 5046 · ₱50.00', style: PayPinkTheme.body(fontSize: 13, color: textInk)),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'savings-8504',
-                                  child: Text('Savings account · 001 1 5968504 7 · ₱0.00', style: PayPinkTheme.body(fontSize: 13, color: textInk)),
+                                DropdownMenuItem<String>(
+                                  value: '',
+                                  child: Text(
+                                    widget.accounts == null ? 'Loading accounts…' : 'No active accounts available',
+                                    style: PayPinkTheme.body(fontSize: 13, color: textMuted),
+                                  ),
                                 ),
                               ],
                         onChanged: (val) {
-                          if (val != null) {
+                          if (val != null && val.isNotEmpty) {
                             setState(() {
                               _sourceAccount = val;
                               _updateCalculations();
