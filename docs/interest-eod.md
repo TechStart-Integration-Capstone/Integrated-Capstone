@@ -35,6 +35,11 @@ PostgreSQL holds immutable daily interest snapshots. The existing ledger column 
    followed by [migrate_interest_approval_postgres.sql](../scripts/migrate_interest_approval_postgres.sql)
    before deploying the recovery API. These add immutable resolution metadata and
    separate preparation/approval records; existing amounts and dates are preserved.
+   Existing installations must also apply
+   [migrate_interest_single_admin_postgres.sql](../scripts/migrate_interest_single_admin_postgres.sql)
+   last to remove the legacy different-admin trigger. Current bootstrap and approval
+   migrations preserve this single-admin policy when rerun. Docker init scripts run
+   only for a new PostgreSQL volume; recreating containers does not migrate existing data.
 2. Set the transaction-service environment:
 
    ```text
@@ -137,8 +142,9 @@ Authorization: Bearer <admin JWT>
 ```
 
 An outage never authorizes forfeiting a customer's earned interest. Missing data stays
-unresolved until historical evidence is verified. Recovery requires two different admin
-identities: one prepares a proposal and the other reviews and approves it.
+unresolved until its backfill is approved. In this project's single-admin workflow,
+the same authenticated admin may file a proposal and approve it in a separate action.
+Both immutable records retain the actor, reason and timestamp.
 
 Prepare a complete historical manifest for one past business date:
 
@@ -168,30 +174,30 @@ calculated from the supplied balance; loans require the historical contract rate
 Interest amounts are calculated by the server, never supplied by the caller.
 An empty manifest is valid only when the verified source confirms there were no
 eligible accounts. An unknown balance or missing evidence must never be represented
-as zero. Both admins must verify the source and completeness; the service cannot
+as zero. The admin must verify the source and completeness at filing and review; the service cannot
 automatically establish those facts from current account data.
 
 The response includes `proposalId`, the stored manifest, `preparedBy`, `requestHash`
 and `status: "PENDING_APPROVAL"`. The missing day and month remain incomplete.
-The second admin retrieves the exact immutable proposal for review:
+The reviewing admin retrieves the exact immutable proposal for review:
 
 ```http
 GET /api/v1/interest/eod/backfills/<proposalId>
-Authorization: Bearer <second admin JWT>
+Authorization: Bearer <admin JWT>
 ```
 
 After checking the historical source, balances, contract rates and account coverage:
 
 ```http
 POST /api/v1/interest/eod/backfills/<proposalId>/approve
-Authorization: Bearer <second admin JWT>
+Authorization: Bearer <admin JWT>
 Content-Type: application/json
 
 {"reason": "Independently checked the export and complete account coverage", "confirmed": true}
 ```
 
-The original preparer cannot approve, including through a case variant of their
-username. The API and PostgreSQL both enforce this separation. Approval, calculated
+The original preparer may approve using the same login. Filing and approval remain
+separate operations, and a matching approval is still required. Approval, calculated
 accruals and the completion record commit together in PostgreSQL. Only then can the
 month post. No account balance changes until monthly posting. The review endpoint
 then reports `APPROVED` and `approvedBy`. Approval identity, reason and timestamp are
@@ -207,11 +213,45 @@ day is sealed, a different manifest or replacement returns 409. New backfills ar
 refused for already posted periods. No existing PostgreSQL rows are updated or deleted.
 
 `WAIVER` requests are rejected, and PostgreSQL rejects new waiver completion records.
-If an older version created waivers or backfills without independent approval, their
+If an older version created waivers or backfills without a matching approval record, their
 audit records are retained but no longer count as complete days. This API cannot
 overwrite those sealed records. They require a separately reviewed adjustment process;
 that process, including compensation for delayed capitalization, is not implemented
 here. Recovery does not recalculate already sealed later balances or interest amounts.
+
+## Populate the local demo through a past date
+
+For the explicitly requested demo recovery using **current savings balances**, run
+this from the updated repository on the computer hosting the Interest page and its
+PostgreSQL container:
+
+```powershell
+.\scripts\backfill_interest_savings.ps1 -ThroughDate '2026-10-10'
+```
+
+Enter the admin login when prompted. The script uses `http://localhost:3001/api/v1`
+and `postgres-immutable-audit` / `ledger_audit_db` / `audit_user` by default;
+override its connection parameters only to point at the same stack as the page.
+It applies the single-admin migration, reads all accounts through the authenticated
+admin API, captures active PHP savings balances once, and fills only missing dates
+in the selected month through the requested date. Accounts created after each
+Manila day-end are excluded. An active LOAN account stops this savings-only workflow
+because it would need separate balance/rate evidence. Completed days are skipped.
+
+Each date is filed, fetched for review, checked against the captured manifest and
+approved using the same admin. Existing proposals are never automatically approved;
+the script files its own capture and preserves previous audit records. Source and
+reason fields document that current balances were reused for a demo, rather than
+claiming reconstructed historical balances. The usual Interest date/status display
+is retained; no additional banner is added. This input is appropriate to the requested
+demo, not historical recovery of an actual banking ledger.
+
+The script verifies that no requested days remain missing and never invokes monthly
+posting. Accrual records can affect credits when that month is eventually posted.
+October remains `ACCRUING` before month-end after all elapsed days are complete.
+If it fails or the response is uncertain, inspect/refresh the Interest page before
+rerunning; committed days will be skipped on retry. No rebuild or restart is needed
+to remove the legacy PostgreSQL approval trigger for an app already using this policy.
 
 ## Verification
 

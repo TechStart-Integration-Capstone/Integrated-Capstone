@@ -744,29 +744,20 @@ function testScenario(scenario) {
  * 6. @Scheduled & Real-Time Cross-Database Reconciliation (Tab 5)
  */
 async function triggerScheduledReconciliation() {
-    let succeeded = false;
     try {
         const res = await fetch(`${API_BASE}/reconciliation/run`, {
             method: 'POST',
             headers: getAuthHeaders()
         });
-        if (res.ok) succeeded = true;
-    } catch (e) {}
-
-    if (!succeeded) {
-        try {
-            const directRes = await fetch(`${API_BASE}/reconciliation/run`, {
-                method: 'POST',
-                headers: getAuthHeaders()
-            });
-            if (directRes.ok) succeeded = true;
-        } catch (e) {}
+        if (!res.ok) throw new Error('Reconciliation did not complete. Refresh the results before trying again.');
+        const result = await res.json();
+        await loadReconciliationLogs();
+        await syncBackendTransactions();
+        renderTransactionMonitor();
+        alert(result.message || 'Reconciliation completed. Review the results for remaining discrepancies.');
+    } catch (e) {
+        alert(e.message || 'Reconciliation could not complete. Refresh the results before trying again.');
     }
-
-    await loadReconciliationLogs();
-    await syncBackendTransactions();
-    renderTransactionMonitor();
-    alert('Scheduled 15-minute system-wide reconciliation sweep completed successfully: Azure SQL vs PostgreSQL matched.');
 }
 
 let latestReconciliationLogs = [];
@@ -797,7 +788,7 @@ async function loadReconciliationLogs() {
         renderReconciliationTable(logs);
         return;
     }
-    renderMockReconciliationTable();
+    renderReconciliationTable([]);
 }
 
 function renderReconciliationTable(logs) {

@@ -32,18 +32,11 @@ DROP TRIGGER IF EXISTS interest_approval_no_truncate ON interest_backfill_approv
 CREATE TRIGGER interest_approval_no_truncate BEFORE TRUNCATE ON interest_backfill_approval
     FOR EACH STATEMENT EXECUTE FUNCTION reject_interest_truncate();
 
-CREATE OR REPLACE FUNCTION guard_interest_approval() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM interest_backfill_proposal WHERE proposal_id = NEW.proposal_id
-               AND lower(trim(prepared_by)) = lower(trim(NEW.approved_by))) THEN
-        RAISE EXCEPTION 'A different administrator must approve the backfill';
-    END IF;
-    RETURN NEW;
-END;
-$$;
+-- Single-admin simulation: keep distinct immutable filing and approval records,
+-- but do not require different usernames. Reapplying this migration must not restore
+-- the legacy separation trigger after the single-admin migration has run.
 DROP TRIGGER IF EXISTS interest_approval_guard ON interest_backfill_approval;
-CREATE TRIGGER interest_approval_guard BEFORE INSERT ON interest_backfill_approval
-    FOR EACH ROW EXECUTE FUNCTION guard_interest_approval();
+DROP FUNCTION IF EXISTS guard_interest_approval();
 
 CREATE OR REPLACE FUNCTION guard_interest_resolution() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -58,7 +51,7 @@ BEGIN
                 AND p.request_json->>'sourceReference' = NEW.source_reference
                 AND jsonb_array_length(p.request_json->'accounts') = NEW.account_count
         ) THEN
-            RAISE EXCEPTION 'Backfill requires an independently approved matching proposal';
+            RAISE EXCEPTION 'Backfill requires a separately approved matching proposal';
         END IF;
     ELSIF NEW.resolution_type <> 'SNAPSHOT' OR NEW.proposal_id IS NOT NULL THEN
         RAISE EXCEPTION 'Invalid interest resolution';

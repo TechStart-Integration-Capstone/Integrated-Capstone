@@ -7,6 +7,7 @@ import com.bank.reconciliation.repository.oracle.TransactionRepository;
 import com.bank.reconciliation.repository.postgres.LedgerMutationAuditRepository;
 import com.bank.reconciliation.repository.postgres.ReconciliationLogRepository;
 import com.bank.reconciliation.service.ReconciliationService;
+import com.bank.reconciliation.service.OutboxAuditRecovery;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,12 +37,13 @@ class ReconciliationServiceTest {
     @Mock private TransactionRepository        transactionRepository;
     @Mock private LedgerMutationAuditRepository auditRepository;
     @Mock private ReconciliationLogRepository   reconLogRepository;
+    @Mock private OutboxAuditRecovery auditRecovery;
     private ReconciliationService               service;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach void setUp() {
-        service = new ReconciliationService(transactionRepository, auditRepository, reconLogRepository, objectMapper);
+        service = new ReconciliationService(transactionRepository, auditRepository, reconLogRepository, objectMapper, auditRecovery);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -119,7 +121,11 @@ class ReconciliationServiceTest {
         when(auditRepository.findByTransactionId(11L)).thenReturn(Optional.empty());
         when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.runFullSweep();
+        var result = service.runFullSweep();
+        assertThat(result.checked()).isEqualTo(2);
+        assertThat(result.recovered()).isZero();
+        assertThat(result.matched()).isEqualTo(2);
+        verifyNoInteractions(auditRecovery);
 
         verify(reconLogRepository,times(2)).save(any(ReconciliationLog.class));
     }
@@ -156,5 +162,32 @@ class ReconciliationServiceTest {
     void onTransactionEvent_malformedJson_noException() {
         assertThatNoException().isThrownBy(() -> service.onTransactionEvent("BAD{{{"));
         verify(reconLogRepository,never()).save(any());
+    }
+
+    @Test void manualSweepRecoversThenRechecksBeforeReportingMatched() {
+        var tx = oracleTx(30L, "SUCCESS", new BigDecimal("300"));
+        when(transactionRepository.findTop50ByOrderByTransactionDateDesc()).thenReturn(List.of(tx));
+        when(auditRepository.findByTransactionId(30L)).thenReturn(Optional.empty(), Optional.of(pgAudit(30L, tx.getAmount())));
+        when(auditRecovery.recover(tx)).thenReturn(true);
+        when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        assertThat(service.runFullSweep()).isEqualTo(new ReconciliationService.SweepResult(1, 1, 1, 0));
+        verify(auditRecovery).recover(tx);
+    }
+
+    @Test void missingEvidenceRemainsDriftedAfterManualSweep() {
+        var tx = oracleTx(31L, "SUCCESS", new BigDecimal("300"));
+        when(transactionRepository.findTop50ByOrderByTransactionDateDesc()).thenReturn(List.of(tx));
+        when(auditRepository.findByTransactionId(31L)).thenReturn(Optional.empty());
+        when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        assertThat(service.runFullSweep()).isEqualTo(new ReconciliationService.SweepResult(1, 0, 0, 1));
+    }
+
+    @Test void existingAmountMismatchIsNeverRepairedOrReportedMatched() {
+        var tx = oracleTx(32L, "SUCCESS", new BigDecimal("300"));
+        when(transactionRepository.findTop50ByOrderByTransactionDateDesc()).thenReturn(List.of(tx));
+        when(auditRepository.findByTransactionId(32L)).thenReturn(Optional.of(pgAudit(32L, new BigDecimal("301"))));
+        when(reconLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        assertThat(service.runFullSweep()).isEqualTo(new ReconciliationService.SweepResult(1, 0, 0, 1));
+        verifyNoInteractions(auditRecovery);
     }
 }
