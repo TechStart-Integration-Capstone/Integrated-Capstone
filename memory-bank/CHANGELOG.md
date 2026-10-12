@@ -1,5 +1,25 @@
 # Changelog
 
+- 2026-10-12 — Purged emojis from Mobile Savings Hub & PinkCircles (`savings_hub_screen.dart`) — [dom]:
+  - **Clean FinTech UI Alignment:** Replaced all informal emojis across categories, badges, streak counters, and status pills with Flutter Material icons styled to PayPink wine/rose theme tokens.
+  - **Category & Badge Icons:** Category mappings now use standard Material outline icons (`shield_outlined`, `card_giftcard_rounded`, `flight_takeoff_rounded`, `confirmation_number_outlined`, `star_outline_rounded`); Badges Hall of Fame uses `savings_outlined`, `shield_outlined`, `verified_outlined`, `diamond_outlined`, and `check_rounded`.
+  - **Verification:** Verified 0 emoji codepoints remaining in `mobile/lib/`; all 57/57 mobile tests pass clean.
+
+- 2026-10-12 — Mobile Dashboard savings allocation breakdown & activity integration (`dashboard_screen.dart`, `savings_hub_screen.dart`, `account_service.dart`, `transactions_screen.dart`) — [dom]:
+  - **Dashboard Savings Allocation Breakdown:** Added dynamic savings reserved pill on the hero balance card when personal goals or PinkCircles have locked funds (`_savingsReserved > 0`), providing instant visual distinction between spendable available balance and reserved savings.
+  - **Goal Activity Sheets & Main Feed Merging:** Added dedicated "Goal Activity" history sheets (`GET /api/v1/accounts/savings/activity`) on goal cards matching Web SPA (`savings-live.js`), and merged `SAVINGS_SET_ASIDE` / `SAVINGS_RELEASE` operations into `AccountService.fetchTransactions()` so savings operations surface in Recent Activity and the Activity tab with a Savings filter.
+  - **Testing:** Added `SavingsActivityItem` unit tests; all 57/57 mobile tests pass clean.
+
+- 2026-10-12 — Mobile Savings Hub & PinkCircles parity with Azure VM deployment (`savings_hub_screen.dart`, `savings_service.dart`, `pipeline.yml`, `docker-compose.yml`) — [dom]:
+  - **Mobile Savings Hub & PinkCircles:** Implemented `mobile/lib/services/savings_service.dart` and `mobile/lib/screens/savings_hub_screen.dart` mirroring Web SPA (`savings-live.js`), featuring Personal Savings Goals, shared PinkCircles group goals, real-time live funding validation (`/funding-details`), deposit/release modal sheets, streak tracking, and Badges Hall of Fame. Added quick action navigation to `dashboard_screen.dart` and HTTP `put()` in `api_client.dart`.
+  - **Azure SQL VM & CI/CD Persistence:** Mounted `scripts/migrate_savings.sql` into `docker/docker-compose.yml` (`10_savings.sql:ro`) and added idempotent execution to Stage 2 and Stage 3 in `.github/workflows/pipeline.yml`, ensuring tables (`app.SAVINGS_GOAL`, `app.PINK_CIRCLE`, `app.PINK_CIRCLE_MEMBER`, `app.SAVINGS_SCHEDULE`, `t24.SAVINGS_RESERVATION`) exist on Azure SQL and survive VM redeployment.
+  - **Testing:** Added `mobile/test/savings_hub_screen_test.dart`; all 55/55 mobile tests pass clean.
+
+- 2026-10-12 — Fix CI/CD Azure SQL readiness probe race condition, missing `t24.SAVINGS_RESERVATION` table, and Stage 3 migration ordering (`.github/workflows/pipeline.yml`, `docker/docker-compose.yml`):
+  - **Root Cause #1 Fixed (Readiness Probe):** `sqlcmd` without `-b` returns exit code `0` on login even when the SQL query fails with `Msg 208: Invalid object name`, causing the Stage 2 (`test-stage`) readiness loop to exit before `/mssql-server-setup-scripts.d/01_schema.sql` through `10_savings.sql` executed (`CUSTOMER table not found in app or dbo schema` and `Msg 208 ... Invalid object name 'app.CUSTOMER'`).
+  - **Root Cause #2 Fixed (13 Newman Failures — Missing `t24.SAVINGS_RESERVATION`):** `T24HoldService.placeHold()` and `T24PostingService.executeDoubleEntryPosting()` call `accountRepository.protectReservations()`, which queries `t24.SAVINGS_RESERVATION`. Because `scripts/migrate_savings.sql` was not wired into `docker/docker-compose.yml` or `.github/workflows/pipeline.yml`, `t24-adapter` threw `Invalid object name 't24.SAVINGS_RESERVATION'`, causing all 13 Newman failures across T24 holds/transfers, remittance saga execution, and loan disbursement.
+  - **Fixes Applied:** Mounted `scripts/migrate_savings.sql` as `/mssql-server-setup-scripts.d/10_savings.sql:ro` in `docker/docker-compose.yml`, updated the Stage 2 readiness probe (`-b` + `THROW 50000` guard checking `app.CUSTOMER`, `t24.ACCOUNT`, `t24.SAVINGS_RESERVATION`, and `PH1000000EXT`), and wired `scripts/migrate_savings.sql` into both Stage 2 (`Ensure idempotent migrations`) and Stage 3 (`Apply additive database migrations`).
+
 - 2026-10-12 — PayPink Heart-P Brand Launcher Icon Overhaul (`pubspec.yaml`, `assets/images/`, `res/`):
   - **Custom Heart-P Vector Rasterization**: Vectorized and smoothed user-provided signature Heart-P brandmark (hot pink `#E55879` loop with terminal heart on soft pastel blush `#F9D9E0`) at ultra-crisp 1024×1024 master resolution.
   - **Android Adaptive Icon Sync**: Synchronized `adaptive_icon_background: "#F9D9E0"` and generated all Android density mipmaps and `mipmap-anydpi-v26/ic_launcher.xml` via `flutter_launcher_icons`.
