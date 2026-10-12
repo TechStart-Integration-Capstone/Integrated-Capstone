@@ -116,9 +116,14 @@ async function api(path, {method = 'GET', body, authenticated = true, headers: c
     throw new Error('Your session has ended. Please log in again.');
   }
   if (!response.ok) {
-    const errorMsg = [data?.detail, data?.message, data?.reason, data?.error, data?.title]
+    const rawMsg = [data?.detail, data?.message, data?.reason, data?.error, data?.title]
       .find(value => typeof value === 'string' && value.trim()) || (response.status === 429
       ? 'Too many requests. Please wait a moment and try again.' : 'We couldn’t complete your request. Please try again.');
+    const errorMsg = rawMsg
+      .replaceAll('\u00E2\u0082\u00B1', '₱')
+      .replaceAll('\u00E2\u201A\u00B1', '₱')
+      .replaceAll('â‚±', '₱')
+      .replace(/(₱\d+(?:,\d{3})*\.\d{2})00\b/g, '$1');
     const error = new Error(errorMsg);
     error.status = response.status;
     error.data = data;

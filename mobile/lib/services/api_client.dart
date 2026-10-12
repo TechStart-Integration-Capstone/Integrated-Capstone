@@ -45,7 +45,8 @@ class ApiClient {
     final requestHeaders = await _buildHeaders(headers, requiresAuth: requiresAuth);
 
     try {
-      final response = await _client.get(uri, headers: requestHeaders).timeout(ApiConfig.requestTimeout);
+      final raw = await _client.get(uri, headers: requestHeaders).timeout(ApiConfig.requestTimeout);
+      final response = _ensureUtf8Response(raw);
       _handleResponseStatus(response);
       return response;
     } catch (e) {
@@ -71,11 +72,12 @@ class ApiClient {
     final encodedBody = body != null ? (body is String ? body : jsonEncode(body)) : null;
 
     try {
-      final response = await _client.post(
+      final raw = await _client.post(
         uri,
         headers: requestHeaders,
         body: encodedBody,
       ).timeout(ApiConfig.requestTimeout);
+      final response = _ensureUtf8Response(raw);
 
       _handleResponseStatus(response);
       return response;
@@ -100,17 +102,59 @@ class ApiClient {
     final encodedBody = body != null ? (body is String ? body : jsonEncode(body)) : null;
 
     try {
-      final response = await _client.put(
+      final raw = await _client.put(
         uri,
         headers: requestHeaders,
         body: encodedBody,
       ).timeout(ApiConfig.requestTimeout);
+      final response = _ensureUtf8Response(raw);
 
       _handleResponseStatus(response);
       return response;
     } catch (e) {
       rethrow;
     }
+  }
+
+  static http.Response _ensureUtf8Response(http.Response response) {
+    final ct = response.headers['content-type'] ?? '';
+    if (!ct.toLowerCase().contains('charset=')) {
+      final updatedHeaders = Map<String, String>.from(response.headers);
+      updatedHeaders['content-type'] =
+          ct.isEmpty ? 'application/json; charset=utf-8' : '$ct; charset=utf-8';
+      return http.Response.bytes(
+        response.bodyBytes,
+        response.statusCode,
+        request: response.request,
+        headers: updatedHeaders,
+        isRedirect: response.isRedirect,
+        persistentConnection: response.persistentConnection,
+        reasonPhrase: response.reasonPhrase,
+      );
+    }
+    return response;
+  }
+
+  /// Decodes an HTTP response body as UTF-8 regardless of whether the server
+  /// included `; charset=utf-8` on `application/json` or `application/problem+json`.
+  static String decodeBody(http.Response response) {
+    return normalizeCurrencyText(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+  }
+
+  /// Repairs Latin-1/Windows-1252 mojibake of the peso sign (`₱`, UTF-8 `E2 82 B1`
+  /// decoded as `\u00E2\u0082\u00B1` / `â‚±`) and trims 4-decimal SQL scale (`.0000` -> `.00`).
+  static String normalizeCurrencyText(String input) {
+    if (input.isEmpty) return input;
+    return input
+        .replaceAll('\u00E2\u0082\u00B1', '₱')
+        .replaceAll('\u00E2\u201A\u00B1', '₱')
+        .replaceAll('â‚±', '₱')
+        .replaceAllMapped(
+          RegExp(r'(₱\d+(?:,\d{3})*\.\d{2})00\b'),
+          (m) => m.group(1)!,
+        );
   }
 
   Uri _buildUri(String endpoint, Map<String, String>? queryParams) {
@@ -172,12 +216,13 @@ class ApiClient {
     if (statusCode == 429) {
       return 'Too many requests. Please wait a moment and try again.';
     }
+    final normalizedBody = normalizeCurrencyText(responseBody);
     try {
-      final data = jsonDecode(responseBody);
+      final data = jsonDecode(normalizedBody);
       if (data is Map<String, dynamic>) {
         final msg = data['error'] ?? data['message'] ?? data['detail'] ?? data['reason'];
         if (msg != null && msg.toString().trim().isNotEmpty) {
-          return msg.toString().trim();
+          return normalizeCurrencyText(msg.toString().trim());
         }
       }
     } catch (_) {}

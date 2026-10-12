@@ -303,7 +303,7 @@ public class RemittanceOrchestratorService {
                 RemittanceLedgerService.CustomerLimits limits = ledgerService.getCustomerLimits(callerCustomerId);
                 if (request.getAmount().compareTo(limits.perTxLimit()) > 0) {
                     String reason = String.format("Transaction amount (₱%s) exceeds per-transaction limit of ₱%s",
-                            request.getAmount().toPlainString(), limits.perTxLimit().toPlainString());
+                            formatCurrencyAmount(request.getAmount()), formatCurrencyAmount(limits.perTxLimit()));
                     try {
                         ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
                                 Remittance.STEP_LIMIT_CHECK, reason, risk, "transaction-service");
@@ -313,7 +313,7 @@ public class RemittanceOrchestratorService {
                 BigDecimal todaySum = ledgerService.getTodayCumulativeTransferAmount(callerCustomerId);
                 if (todaySum.add(request.getAmount()).compareTo(limits.dailyLimit()) > 0) {
                     String reason = String.format("Daily transfer limit of ₱%s exceeded. Cumulative today: ₱%s, attempted: ₱%s",
-                            limits.dailyLimit().toPlainString(), todaySum.toPlainString(), request.getAmount().toPlainString());
+                            formatCurrencyAmount(limits.dailyLimit()), formatCurrencyAmount(todaySum), formatCurrencyAmount(request.getAmount()));
                     try {
                         ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
                                 Remittance.STEP_LIMIT_CHECK, reason, risk, "transaction-service");
@@ -324,7 +324,7 @@ public class RemittanceOrchestratorService {
 
             // ── Step 6: Funds Check ──────────────────────────────────────────────────
             if (sourceAcc.availableBalance().compareTo(request.getAmount()) < 0) {
-                String reason = "Insufficient available funds in source account (Available: " + sourceAcc.availableBalance() + ")";
+                String reason = "Insufficient available funds in source account (Available: ₱" + formatCurrencyAmount(sourceAcc.availableBalance()) + ")";
                 try {
                     ledgerService.recordFailedRemittance(request, referenceNo, idempotencyKey, callerCustomerId,
                             Remittance.STEP_FUNDS_CHECK, reason, risk, "transaction-service");
@@ -564,5 +564,14 @@ public class RemittanceOrchestratorService {
         } catch (Exception e) {
             return "TX-PH-" + System.currentTimeMillis() + "-" + java.util.UUID.randomUUID().toString().substring(0, 6);
         }
+    }
+
+    private static String formatCurrencyAmount(BigDecimal value) {
+        if (value == null) return "0.00";
+        BigDecimal stripped = value.stripTrailingZeros();
+        if (stripped.scale() <= 2) {
+            return stripped.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        }
+        return stripped.toPlainString();
     }
 }

@@ -141,7 +141,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       }
 
       if (response != null && response.statusCode == 200) {
-        final dynamic decoded = jsonDecode(response.body);
+        final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
         List<dynamic> items = [];
         if (decoded is List) {
           items = decoded;
@@ -214,7 +214,7 @@ class _RemittanceScreenState extends State<RemittanceScreen> {
       }
 
       if (response != null && response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+        final decoded = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
         if (decoded is Map<String, dynamic>) {
           return decoded;
         }

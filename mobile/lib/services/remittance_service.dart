@@ -98,11 +98,13 @@ class RemittanceService {
           )
           .timeout(ApiConfig.requestTimeout);
 
+      final responseBody = ApiClient.decodeBody(response);
+
       if (response.statusCode == 200 ||
           response.statusCode == 201 ||
           response.statusCode == 202) {
         circuitBreaker.recordSuccess();
-        final body = jsonDecode(response.body);
+        final body = jsonDecode(responseBody);
         final refId = body['referenceNo'] ??
             body['reference'] ??
             body['referenceNumber'] ??
@@ -124,7 +126,7 @@ class RemittanceService {
       // If primary endpoint returned a definitive business error (e.g. 400, 403, 409, 422, 500), return error directly instead of sending duplicate requests
       if (response.statusCode != 404) {
         circuitBreaker.recordFailure();
-        final errorMsg = _extractErrorMessage(response.body);
+        final errorMsg = _extractErrorMessage(responseBody);
         return RemittanceResult(
           success: false,
           message: errorMsg.isNotEmpty
@@ -155,11 +157,13 @@ class RemittanceService {
           )
           .timeout(ApiConfig.requestTimeout);
 
+      final remResponseBody = ApiClient.decodeBody(remResponse);
+
       if (remResponse.statusCode == 200 ||
           remResponse.statusCode == 201 ||
           remResponse.statusCode == 202) {
         circuitBreaker.recordSuccess();
-        final body = jsonDecode(remResponse.body);
+        final body = jsonDecode(remResponseBody);
         final refId = body['referenceNo'] ??
             body['reference'] ??
             body['referenceNumber'] ??
@@ -179,7 +183,7 @@ class RemittanceService {
       } else {
         circuitBreaker.recordFailure();
         final errorMsg = _extractErrorMessage(
-            remResponse.body.isNotEmpty ? remResponse.body : response.body);
+            remResponseBody.isNotEmpty ? remResponseBody : responseBody);
         return RemittanceResult(
           success: false,
           message: errorMsg.isNotEmpty
@@ -199,11 +203,13 @@ class RemittanceService {
   }
 
   static String _extractErrorMessage(String responseBody) {
+    final normalized = ApiClient.normalizeCurrencyText(responseBody);
     try {
-      final data = jsonDecode(responseBody);
-      return data['detail'] ?? data['message'] ?? data['error'] ?? responseBody;
+      final data = jsonDecode(normalized);
+      final raw = data['detail'] ?? data['message'] ?? data['error'] ?? normalized;
+      return ApiClient.normalizeCurrencyText(raw.toString());
     } catch (_) {
-      return responseBody;
+      return normalized;
     }
   }
 
@@ -245,8 +251,10 @@ class RemittanceService {
           )
           .timeout(ApiConfig.requestTimeout);
 
+      final responseBody = ApiClient.decodeBody(response);
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
+        final body = jsonDecode(responseBody);
         final status = (body['status'] ?? 'COMPLETED').toString().toUpperCase();
         final pending = status == 'PENDING';
         return RemittanceResult(
@@ -260,7 +268,7 @@ class RemittanceService {
           bank: body['bank']?.toString(),
         );
       }
-      final errorMsg = _extractErrorMessage(response.body);
+      final errorMsg = _extractErrorMessage(responseBody);
       return RemittanceResult(
         success: false,
         message: errorMsg.isNotEmpty ? errorMsg : 'Transfer failed with status ${response.statusCode}',
@@ -286,7 +294,7 @@ class RemittanceService {
         headers: {'Accept': 'application/json', 'Authorization': 'Bearer $token'},
       ).timeout(ApiConfig.requestTimeout);
       if (response.statusCode == 200) {
-        final list = jsonDecode(response.body);
+        final list = jsonDecode(ApiClient.decodeBody(response));
         if (list is List) {
           return list.whereType<Map>().map((r) => ExternalRecipient(
                 bank: r['bank']?.toString() ?? '',
@@ -316,7 +324,7 @@ class RemittanceService {
       ).timeout(ApiConfig.requestTimeout);
 
       if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
+        final body = jsonDecode(ApiClient.decodeBody(response));
         return (body['status'] ?? 'PROCESSING').toString().toUpperCase();
       }
     } catch (e) {
