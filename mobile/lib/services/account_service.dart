@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'api_config.dart';
 import 'api_client.dart';
 import 'secure_token_storage.dart';
+import 'savings_service.dart';
 import '../screens/transactions_screen.dart';
 
 final NumberFormat _pesoFormat = NumberFormat('#,##0.00', 'en_US');
@@ -971,6 +972,39 @@ class AccountService {
       }
     }
 
+    // 4. Fetch and merge Savings activity (ALLOCATE & RELEASE)
+    try {
+      final savingsActs = await SavingsService.fetchActivity();
+      for (final sa in savingsActs) {
+        if (sa.amount <= 0) continue;
+        final isAllocate = sa.type == 'ALLOCATE';
+        results.add(TransactionItem(
+          id: sa.operationId,
+          title: isAllocate ? 'Set aside for Savings' : 'Released from Savings',
+          date: _formatSavingsDate(sa.createdAt),
+          account: 'Savings Account',
+          amount: sa.amount,
+          isCredit: !isAllocate,
+          transactionType: isAllocate ? 'SAVINGS_SET_ASIDE' : 'SAVINGS_RELEASE',
+          status: sa.status == 'CONFIRMED' ? 'Completed' : sa.status,
+          timestamp: sa.createdAt,
+          counterparty: 'Savings Goal',
+          sourceAccount: isAllocate ? 'Savings Account' : 'Savings Goal',
+          recipientAccount: isAllocate ? 'Savings Goal' : 'Savings Account',
+        ));
+      }
+    } catch (e) {
+      debugPrint('[AccountService] savings activity merge error: $e');
+    }
+
+    // Sort all transactions chronologically descending (newest first)
+    results.sort((a, b) {
+      if (a.timestamp != null && b.timestamp != null) {
+        return b.timestamp!.compareTo(a.timestamp!);
+      }
+      return 0;
+    });
+
     // Apply local filtering for filterType and accountId if backend returned unfiltered data
     if (results.isNotEmpty) {
       if (filterType != null && filterType.isNotEmpty && filterType.toUpperCase() != 'ALL') {
@@ -994,6 +1028,16 @@ class AccountService {
     }
 
     return results;
+  }
+
+  static String _formatSavingsDate(DateTime parsedTime) {
+    final now = DateTime.now();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final isToday = parsedTime.year == now.year && parsedTime.month == now.month && parsedTime.day == now.day;
+    final hour = parsedTime.hour > 12 ? parsedTime.hour - 12 : (parsedTime.hour == 0 ? 12 : parsedTime.hour);
+    final ampm = parsedTime.hour >= 12 ? 'PM' : 'AM';
+    final timeStr = '${hour.toString().padLeft(2, '0')}:${parsedTime.minute.toString().padLeft(2, '0')} $ampm';
+    return isToday ? 'Today · $timeStr' : '${months[parsedTime.month - 1]} ${parsedTime.day}, ${parsedTime.year}';
   }
 
   static List<TransactionItem> _extractAndMapTransactions(dynamic decoded) {

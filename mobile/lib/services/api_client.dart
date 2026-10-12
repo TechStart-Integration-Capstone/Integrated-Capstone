@@ -84,6 +84,35 @@ class ApiClient {
     }
   }
 
+  /// Performs a PUT request with automatic Bearer token injection
+  Future<http.Response> put(
+    String endpoint, {
+    dynamic body,
+    Map<String, String>? headers,
+    bool requiresAuth = true,
+  }) async {
+    final uri = _buildUri(endpoint, null);
+    final requestHeaders = await _buildHeaders(
+      headers,
+      requiresAuth: requiresAuth,
+    );
+
+    final encodedBody = body != null ? (body is String ? body : jsonEncode(body)) : null;
+
+    try {
+      final response = await _client.put(
+        uri,
+        headers: requestHeaders,
+        body: encodedBody,
+      ).timeout(ApiConfig.requestTimeout);
+
+      _handleResponseStatus(response);
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Uri _buildUri(String endpoint, Map<String, String>? queryParams) {
     final cleanEndpoint = endpoint.startsWith('/') ? endpoint : '/$endpoint';
     final fullUrl = '${ApiConfig.baseUrl}$cleanEndpoint';

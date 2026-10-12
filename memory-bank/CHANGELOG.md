@@ -1,5 +1,20 @@
 # Changelog
 
+- 2026-10-12 — Purged emojis from Mobile Savings Hub & PinkCircles (`savings_hub_screen.dart`) — [dom]:
+  - **Clean FinTech UI Alignment:** Replaced all informal emojis across categories, badges, streak counters, and status pills with Flutter Material icons styled to PayPink wine/rose theme tokens.
+  - **Category & Badge Icons:** Category mappings now use standard Material outline icons (`shield_outlined`, `card_giftcard_rounded`, `flight_takeoff_rounded`, `confirmation_number_outlined`, `star_outline_rounded`); Badges Hall of Fame uses `savings_outlined`, `shield_outlined`, `verified_outlined`, `diamond_outlined`, and `check_rounded`.
+  - **Verification:** Verified 0 emoji codepoints remaining in `mobile/lib/`; all 57/57 mobile tests pass clean.
+
+- 2026-10-12 — Mobile Dashboard savings allocation breakdown & activity integration (`dashboard_screen.dart`, `savings_hub_screen.dart`, `account_service.dart`, `transactions_screen.dart`) — [dom]:
+  - **Dashboard Savings Allocation Breakdown:** Added dynamic savings reserved pill on the hero balance card when personal goals or PinkCircles have locked funds (`_savingsReserved > 0`), providing instant visual distinction between spendable available balance and reserved savings.
+  - **Goal Activity Sheets & Main Feed Merging:** Added dedicated "Goal Activity" history sheets (`GET /api/v1/accounts/savings/activity`) on goal cards matching Web SPA (`savings-live.js`), and merged `SAVINGS_SET_ASIDE` / `SAVINGS_RELEASE` operations into `AccountService.fetchTransactions()` so savings operations surface in Recent Activity and the Activity tab with a Savings filter.
+  - **Testing:** Added `SavingsActivityItem` unit tests; all 57/57 mobile tests pass clean.
+
+- 2026-10-12 — Mobile Savings Hub & PinkCircles parity with Azure VM deployment (`savings_hub_screen.dart`, `savings_service.dart`, `pipeline.yml`, `docker-compose.yml`) — [dom]:
+  - **Mobile Savings Hub & PinkCircles:** Implemented `mobile/lib/services/savings_service.dart` and `mobile/lib/screens/savings_hub_screen.dart` mirroring Web SPA (`savings-live.js`), featuring Personal Savings Goals, shared PinkCircles group goals, real-time live funding validation (`/funding-details`), deposit/release modal sheets, streak tracking, and Badges Hall of Fame. Added quick action navigation to `dashboard_screen.dart` and HTTP `put()` in `api_client.dart`.
+  - **Azure SQL VM & CI/CD Persistence:** Mounted `scripts/migrate_savings.sql` into `docker/docker-compose.yml` (`10_savings.sql:ro`) and added idempotent execution to Stage 2 and Stage 3 in `.github/workflows/pipeline.yml`, ensuring tables (`app.SAVINGS_GOAL`, `app.PINK_CIRCLE`, `app.PINK_CIRCLE_MEMBER`, `app.SAVINGS_SCHEDULE`, `t24.SAVINGS_RESERVATION`) exist on Azure SQL and survive VM redeployment.
+  - **Testing:** Added `mobile/test/savings_hub_screen_test.dart`; all 55/55 mobile tests pass clean.
+
 - 2026-10-12 — Fix CI/CD Azure SQL readiness probe race condition and Stage 3 migration ordering (`.github/workflows/pipeline.yml`, `docker/docker-compose.yml`):
   - **Root Cause Fixed:** `sqlcmd` without `-b` returns exit code `0` on login even when the SQL query fails with `Msg 208: Invalid object name`, causing the Stage 2 (`test-stage`) readiness loop to exit before `/mssql-server-setup-scripts.d/01_schema.sql` through `09_external_clearing.sql` executed (`CUSTOMER table not found in app or dbo schema` and `Msg 208 ... Invalid object name 'app.CUSTOMER'`).
   - **Stage 2 Readiness Probe (`.github/workflows/pipeline.yml`):** Added `-b` to `sqlcmd`, extended wait limit to 120s (60 iterations), and replaced `SELECT 1 FROM dbo.ACCOUNT` with an explicit `THROW 50000` guard verifying `app.CUSTOMER`, `t24.ACCOUNT`, and `PH1000000EXT` (`09_external_clearing.sql`) exist before running idempotent migrations or starting microservices.

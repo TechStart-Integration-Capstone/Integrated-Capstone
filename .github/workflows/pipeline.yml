@@ -183,6 +183,10 @@ jobs:
             echo "Verifying MPIN persistence migration in azure-sql-master..."
             cat "scripts/migrate_mpin.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
           fi
+          if [ -f "scripts/migrate_savings.sql" ]; then
+            echo "Verifying savings migration in azure-sql-master..."
+            cat "scripts/migrate_savings.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
+          fi
 
       - name: Prepare external clearing account
         run: |
@@ -369,6 +373,10 @@ jobs:
           done
           # Required by external settlement; fail deployment verification if provisioning fails.
           docker exec -i azure-sql-master "$SQLCMD" -S localhost -U sa -P "$PASS" -C -b < scripts/migrate_external_clearing.sql
+          if [ -f "scripts/migrate_savings.sql" ]; then
+            echo "Applying savings schema migration to azure-sql-master..."
+            cat "scripts/migrate_savings.sql" | docker exec -i azure-sql-master $SQLCMD -S localhost -U sa -P "$PASS" -C -b 2>/dev/null || true
+          fi
           PG_USER="audit_user"
           if ! docker exec postgres-immutable-audit psql -U "$PG_USER" -d ledger_audit_db -c "SELECT 1" &>/dev/null; then
             PG_USER="postgres"

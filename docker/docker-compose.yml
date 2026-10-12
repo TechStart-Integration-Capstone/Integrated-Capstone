@@ -24,6 +24,7 @@ services:
       - ./../scripts/migrate_phase10_rbac_roles.sql:/mssql-server-setup-scripts.d/07_rbac_roles.sql:ro
       - ./../scripts/migrate_mpin.sql:/mssql-server-setup-scripts.d/08_mpin.sql:ro
       - ./../scripts/migrate_external_clearing.sql:/mssql-server-setup-scripts.d/09_external_clearing.sql:ro
+      - ./../scripts/migrate_savings.sql:/mssql-server-setup-scripts.d/10_savings.sql:ro
     healthcheck:
       test:
         [

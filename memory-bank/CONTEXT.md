@@ -2,6 +2,9 @@
 
 _Project Team: Team 4 (Collaborative Capstone; no single owner)_  
 _Active Working Branch: main_  
+_Last Updated: 2026-10-12 (Purged emojis from Mobile Savings Hub & PinkCircles, replacing with Flutter Material outline icons styled with PayPink theme tokens; 57/57 mobile tests pass clean by [dom])_  
+_Last Updated: 2026-10-12 (Mobile Savings allocation breakdown on dashboard hero card, goal activity history sheets, and merged savings transactions in Activity feed by [dom])_  
+_Last Updated: 2026-10-12 (Mobile Savings Hub & PinkCircles feature parity: implemented SavingsService, SavingsHubScreen with personal/group tabs, real-time funding validation, and scheduled contributions; wired scripts/migrate_savings.sql into docker-compose and CI/CD pipeline for Azure VM persistence; 55/55 mobile tests pass clean by [dom])_  
 _Last Updated: 2026-10-12 (Fixed CI/CD Azure SQL readiness probe race condition in .github/workflows/pipeline.yml and docker/docker-compose.yml by adding sqlcmd -b flag, verifying app.CUSTOMER / t24.ACCOUNT / PH1000000EXT setup completion, and prepending idempotent schema-split migrations in Stage 3 prod-deploy)_
 _Last Updated: 2026-10-11 (Gated mobile DevHttpOverrides behind kDebugMode; eliminated offline fake receipts and fixed shadowed response statuses in AccountService and RemittanceService; pruned premature startup BLoC events; added Redis rate limiting to auth routes in API Gateway by [dom])_
 _Last Updated: 2026-10-10 (Mobile MPIN Database Persistence Audit & CI/CD Pipeline Wiring: resolved silent HTTP 400 rejection via dual-key 'mpin'/'pin' support in BankingController and SecureTokenStorage; wired scripts/migrate_mpin.sql into GitHub Actions pipeline.yml Stages 2 and 3, docker-compose.yml, and schema-azuresql.sql; live Azure SQL persistence verified for lviernes and arosales; 54/54 auth-service tests and 38/38 mobile tests pass clean by [dom & Antigravity])_

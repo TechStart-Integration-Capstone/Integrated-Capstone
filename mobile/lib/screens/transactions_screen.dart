@@ -69,6 +69,12 @@ class TransactionItem {
   }
 
   String get displayType {
+    if (transactionType == 'SAVINGS_SET_ASIDE') {
+      return 'Savings Set Aside';
+    }
+    if (transactionType == 'SAVINGS_RELEASE') {
+      return 'Savings Release';
+    }
     if (transactionType == 'LOAN_PAYMENT' || title.toLowerCase().contains('loan payment')) {
       return 'Loan Payment';
     }
@@ -97,6 +103,7 @@ class TransactionItem {
       title.toLowerCase().contains('checking');
 
   bool get isSavingsRelated =>
+      transactionType.startsWith('SAVINGS_') ||
       account.toLowerCase().contains('savings') ||
       account.toLowerCase().contains('5968') ||
       account.toLowerCase().contains('1963') ||
@@ -337,7 +344,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               ? Icons.undo_rounded
                               : (isDlq
                                   ? Icons.hourglass_top_rounded
-                                  : (tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded)),
+                                  : (tx.transactionType.startsWith('SAVINGS_')
+                                      ? Icons.savings_outlined
+                                      : (tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded))),
                           color: isReversed
                               ? PayPinkTheme.amber
                               : (isDlq
