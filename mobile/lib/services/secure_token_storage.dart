@@ -112,7 +112,7 @@ class SecureTokenStorage {
 
   /// Hashes and securely persists user MPIN, remembering which user it belongs to.
   /// Also synchronizes authoritative hash to Azure SQL database via auth-service.
-  static Future<void> savePin(String pin, {String? owner}) async {
+  static Future<bool> savePin(String pin, {String? owner, String? currentPin}) async {
     final cleanPin = pin.trim();
     final bytes = utf8.encode('paypink_salt_$cleanPin');
     final digest = sha256.convert(bytes);
@@ -127,20 +127,31 @@ class SecureTokenStorage {
     try {
       final token = await getToken();
       if (token != null && token.isNotEmpty) {
+        final body = <String, dynamic>{
+          'mpin': cleanPin,
+          'pin': cleanPin,
+        };
+        if (currentPin != null && currentPin.trim().isNotEmpty) {
+          body['currentMpin'] = currentPin.trim();
+        }
         final resp = await ApiClient().post(
           '/auth/banking/mpin',
-          body: {'mpin': cleanPin, 'pin': cleanPin},
+          body: body,
           requiresAuth: true,
         ).timeout(const Duration(seconds: 4));
         if (resp.statusCode == 200 || resp.statusCode == 201) {
           debugPrint('[SecureTokenStorage] MPIN successfully persisted to connected database.');
+          return true;
         } else {
           debugPrint('[SecureTokenStorage] Remote MPIN DB save status: ${resp.statusCode} ${resp.body}');
+          return false;
         }
       }
     } catch (e) {
       debugPrint('[SecureTokenStorage] Remote MPIN DB save notice: $e');
+      return false;
     }
+    return true;
   }
 
   /// True when this device holds an MPIN for [username] or customer has an MPIN in DB.
@@ -207,6 +218,9 @@ class SecureTokenStorage {
           } else if (data is Map && data['valid'] == false) {
             return false;
           }
+        } else if (resp.statusCode == 400) {
+          // Explicit authoritative rejection from Azure database
+          return false;
         }
       }
     } catch (e) {

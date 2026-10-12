@@ -129,7 +129,7 @@ public class BankingController {
         return banking.activity(token);
     }
 
-    public record SetMpinRequest(String mpin, String pin, String currentMpin) {
+    public record SetMpinRequest(String mpin, String pin, String currentMpin, String password) {
         public String resolvedMpin() {
             String val = (mpin != null && !mpin.isBlank()) ? mpin : pin;
             return val != null ? val.trim() : null;
@@ -157,7 +157,7 @@ public class BankingController {
         if (targetMpin == null || !targetMpin.matches("^\\d{6}$")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MPIN must be exactly 6 digits.");
         }
-        banking.setMpin(token, targetMpin, request.currentMpin());
+        banking.setMpin(token, targetMpin, request != null ? request.currentMpin() : null, request != null ? request.password() : null);
         return Map.of("success", true, "message", "MPIN saved successfully.");
     }
 

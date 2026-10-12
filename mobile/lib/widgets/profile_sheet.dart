@@ -150,15 +150,16 @@ class _ProfileSheetState extends State<ProfileSheet> {
     final hasPin = await SecureTokenStorage.hasPin();
     if (!mounted) return;
 
+    String? verifiedCurrentPin;
     if (hasPin) {
-      // Step 1: Verify current PIN
-      final verified = await PinAuthSheet.show(
+      // Step 1: Verify current PIN and capture it to authenticate change on Azure DB
+      verifiedCurrentPin = await PinAuthSheet.promptForPin(
         context,
         title: 'Verify Current MPIN',
         description: 'Enter your existing 6-digit MPIN to authorize changing your security credentials.',
       );
 
-      if (!verified || !mounted) return;
+      if (verifiedCurrentPin == null || !mounted) return;
     }
 
     // Step 2: Push PIN Setup screen to create and confirm new MPIN
@@ -170,6 +171,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
           mode: PinScreenMode.setup,
           username: widget.currentUser,
           fullName: _nameController.text,
+          currentPin: verifiedCurrentPin,
           isDarkMode: _isDark,
           onAuthSuccess: () {
             Navigator.pop(context);

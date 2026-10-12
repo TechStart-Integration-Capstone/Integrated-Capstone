@@ -14,6 +14,7 @@ class PinAuthScreen extends StatefulWidget {
   final PinScreenMode mode;
   final String? username;
   final String? fullName;
+  final String? currentPin;
   final VoidCallback? onAuthSuccess;
   final VoidCallback? onFallbackToPassword;
   final VoidCallback? onCancel;
@@ -24,6 +25,7 @@ class PinAuthScreen extends StatefulWidget {
     required this.mode,
     this.username,
     this.fullName,
+    this.currentPin,
     this.onAuthSuccess,
     this.onFallbackToPassword,
     this.onCancel,
@@ -158,7 +160,19 @@ class _PinAuthScreenState extends State<PinAuthScreen> with SingleTickerProvider
       } else {
         // Step 2 confirmation
         if (pin == _firstEnteredPin) {
-          await SecureTokenStorage.savePin(pin, owner: _resolvedUsername);
+          final saved = await SecureTokenStorage.savePin(
+            pin,
+            owner: _resolvedUsername,
+            currentPin: widget.currentPin,
+          );
+          if (!saved) {
+            _triggerError('Failed to save MPIN on server. Please try again.');
+            setState(() {
+              _isConfirming = false;
+              _firstEnteredPin = '';
+            });
+            return;
+          }
           HapticFeedback.mediumImpact();
           if (widget.onAuthSuccess != null) {
             widget.onAuthSuccess!();

@@ -142,6 +142,11 @@ public class BankingService {
 
     @Transactional
     public void setMpin(String authorization, String mpin, String currentMpin) {
+        setMpin(authorization, mpin, currentMpin, null);
+    }
+
+    @Transactional
+    public void setMpin(String authorization, String mpin, String currentMpin, String password) {
         Customer customer = authenticatedCustomer(authorization);
         if (mpin == null || !mpin.matches("[0-9]{6}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MPIN must be exactly 6 digits.");
@@ -154,11 +159,16 @@ public class BankingService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Unable to check your MPIN. Please try again.");
         }
         if (existingHash != null && !existingHash.isBlank()) {
-            if (currentMpin == null || currentMpin.isBlank()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter your current MPIN to change it.");
-            }
-            if (!currentMpin.trim().matches("[0-9]{6}") || !existingHash.equalsIgnoreCase(hashMpin(currentMpin))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current MPIN is incorrect.");
+            boolean currentMpinMatches = currentMpin != null && currentMpin.trim().matches("[0-9]{6}")
+                    && existingHash.equalsIgnoreCase(hashMpin(currentMpin));
+            boolean passwordMatches = password != null && !password.isBlank()
+                    && passwords.matches(password, customer.getPasswordHash());
+
+            if (!currentMpinMatches && !passwordMatches) {
+                if (currentMpin != null && !currentMpin.isBlank()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current MPIN is incorrect.");
+                }
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter your current MPIN or account password to change it.");
             }
         }
         // Compare-and-set also protects simultaneous first-time setup and concurrent changes.

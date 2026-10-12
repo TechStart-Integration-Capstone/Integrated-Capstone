@@ -9,15 +9,32 @@ class PinAuthSheet extends StatefulWidget {
   final String title;
   final String description;
   final double? amount;
+  final bool returnPinString;
 
   const PinAuthSheet({
     super.key,
     this.title = 'Authorize Transaction',
     required this.description,
     this.amount,
+    this.returnPinString = false,
   });
 
   static Future<bool> show(
+    BuildContext context, {
+    String title = 'Authorize Transaction',
+    required String description,
+    double? amount,
+  }) async {
+    final res = await promptForPin(
+      context,
+      title: title,
+      description: description,
+      amount: amount,
+    );
+    return res != null;
+  }
+
+  static Future<String?> promptForPin(
     BuildContext context, {
     String title = 'Authorize Transaction',
     required String description,
@@ -35,11 +52,11 @@ class PinAuthSheet extends StatefulWidget {
           ),
         );
       }
-      return false;
+      return null;
     }
-    if (!context.mounted) return false;
+    if (!context.mounted) return null;
 
-    final result = await showModalBottomSheet<bool>(
+    final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -47,10 +64,11 @@ class PinAuthSheet extends StatefulWidget {
         title: title,
         description: description,
         amount: amount,
+        returnPinString: true,
       ),
     );
 
-    return result ?? false;
+    return result;
   }
 
   @override
@@ -113,7 +131,11 @@ class _PinAuthSheetState extends State<PinAuthSheet> with SingleTickerProviderSt
 
     if (valid) {
       HapticFeedback.mediumImpact();
-      Navigator.pop(context, true);
+      if (widget.returnPinString) {
+        Navigator.pop(context, pin);
+      } else {
+        Navigator.pop(context, true);
+      }
     } else {
       HapticFeedback.heavyImpact();
       setState(() {
