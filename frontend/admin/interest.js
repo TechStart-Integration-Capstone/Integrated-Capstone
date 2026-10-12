@@ -13,6 +13,7 @@
         POSTED:'Posted', BLOCKED:'Blocked', READY:'Ready to post', ACCRUING:'Accruing'})[value] || value;
     const el = id => document.getElementById('interest-' + id);
     let overview = null, review = null, loading = false, busy = false, generation = 0;
+    let knownAccounts = [], idToNumber = new Map(), numberToId = new Map();
     root.innerHTML = `
         <div class="interest-toolbar"><label>Interest month<input id="interest-month" type="month"></label>
             <div class="interest-actions"><button class="btn btn-secondary" id="interest-refresh">Refresh</button>
@@ -28,13 +29,15 @@
             <div class="interest-scroll"><table><thead><tr><th>Date</th><th>Filed by</th><th>Status</th><th>Action</th></tr></thead>
             <tbody id="interest-proposals"></tbody></table></div></section></div>
         <section class="section-card" id="interest-prepare" hidden><h2 class="card-title">1. File historical balances</h2>
-            <p class="interest-subtitle">Include every eligible account for this date, including accounts since closed. Use a verified historical source; current balances cannot replace missing history. Savings rates are calculated automatically.</p>
+            <p class="interest-subtitle">Include every eligible savings account for this date. Savings rates are calculated automatically from the balance tier.</p>
+            <datalist id="interest-account-numbers"></datalist>
             <form id="interest-file-form"><div class="interest-form-grid">
                 <label>Missing business date<input id="interest-date" type="date" required readonly></label>
                 <label>Source reference<input id="interest-source" maxlength="255" required placeholder="Historical EOD export or incident reference"></label>
             </div><label>Reason for backfill<textarea id="interest-reason" maxlength="1000" required></textarea></label>
-            <div class="interest-scroll"><table><thead><tr><th>Account ID</th><th>Account type</th><th>Historical EOD balance (PHP)</th><th></th></tr></thead><tbody id="interest-accounts"></tbody></table></div>
-            <div class="interest-actions"><button type="button" class="btn btn-secondary" id="interest-add">Add account</button></div>
+            <div class="interest-scroll"><table><thead><tr><th>Account number</th><th>Account type</th><th>Historical EOD balance (PHP)</th><th></th></tr></thead><tbody id="interest-accounts"></tbody></table></div>
+            <div class="interest-actions"><button type="button" class="btn btn-secondary" id="interest-add">Add account</button>
+            <button type="button" class="btn btn-secondary" id="interest-autofill">Load active savings</button></div>
             <label class="interest-check"><input type="checkbox" id="interest-empty">The source confirms there were no eligible accounts on this date.</label>
             <label class="interest-check"><input type="checkbox" id="interest-file-confirm" required>I checked the source and included the complete historical account list.</label>
             <button class="btn btn-primary" id="interest-file-submit" type="submit">File for review</button>
@@ -50,6 +53,49 @@
         el('message').textContent = text;
         el('message').className = 'interest-message' + (error ? ' error' : '');
         el('message').hidden = !text;
+    }
+    async function loadAccounts() {
+        const token = sessionStorage.getItem('paypink_admin_jwt');
+        if (!token) return;
+        try {
+            const response = await fetch(`${API_BASE}/accounts`, {
+                method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(15000),
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) return;
+            const data = await response.json().catch(() => []);
+            if (!Array.isArray(data)) return;
+            knownAccounts = data;
+            idToNumber = new Map();
+            numberToId = new Map();
+            for (const a of data) {
+                if (a && a.accountId != null && a.accountNumber) {
+                    idToNumber.set(String(a.accountId), String(a.accountNumber));
+                    numberToId.set(String(a.accountNumber), String(a.accountId));
+                }
+            }
+            const list = el('account-numbers');
+            if (list) {
+                list.innerHTML = data
+                    .filter(a => a && a.status === 'ACTIVE' && a.currency === 'PHP' && (a.accountType === 'SAVINGS' || a.accountType === 'SAVINGS_ACCOUNT'))
+                    .map(a => `<option value="${esc(a.accountNumber)}">SAVINGS · ${esc(peso(Number(a.currentBalance ?? 0).toFixed(4)))}</option>`)
+                    .join('');
+            }
+        } catch (_) {}
+    }
+    function eligibleSavingsForDay(day) {
+        if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return [];
+        const [y, m, d] = day.split('-').map(Number);
+        const cutoffUtcMs = Date.UTC(y, m - 1, d + 1, 0, 0, 0) - (8 * 3600 * 1000);
+        return knownAccounts.filter(a => {
+            if (!a || a.status !== 'ACTIVE' || a.currency !== 'PHP') return false;
+            if (a.accountType !== 'SAVINGS' && a.accountType !== 'SAVINGS_ACCOUNT') return false;
+            if (!a.createdDate) return true;
+            const raw = String(a.createdDate);
+            const iso = raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw + 'Z';
+            const createdMs = Date.parse(iso);
+            return Number.isNaN(createdMs) || createdMs < cutoffUtcMs;
+        }).sort((a, b) => Number(a.accountId) - Number(b.accountId));
     }
     async function api(path, body) {
         const token = sessionStorage.getItem('paypink_admin_jwt');
@@ -95,7 +141,10 @@
         el('post').disabled = true;
         try {
             const month = el('month').value;
-            const result = await api('/overview' + (month ? `?periodEnd=${periodEnd(month)}` : ''));
+            const [result] = await Promise.all([
+                api('/overview' + (month ? `?periodEnd=${periodEnd(month)}` : '')),
+                loadAccounts()
+            ]);
             if (version !== generation) return;
             overview = result;
             render();
@@ -110,23 +159,48 @@
             message(error.message, true);
         } finally { loading = false; el('refresh').disabled = false; }
     }
-    function addAccount() {
+    function addAccount(accountNumber = '', balance = '') {
         const row = document.createElement('tr');
-        row.innerHTML = `<td><input aria-label="Account ID" data-field="accountId" inputmode="numeric" pattern="[1-9][0-9]*" required></td>
+        row.innerHTML = `<td><input aria-label="Account ID" placeholder="e.g. 001181233469" list="interest-account-numbers" data-field="accountId" inputmode="numeric" pattern="[0-9]+" required></td>
             <td><select aria-label="Account type" data-field="accountType"><option>SAVINGS</option></select></td>
             <td><input aria-label="Historical EOD balance in PHP" data-field="eodBalance" inputmode="decimal" pattern="[0-9]+(\\.[0-9]{1,4})?" required></td>
             <td><button class="btn btn-secondary" type="button" data-remove-row>Remove</button></td>`;
+        const idInput = row.querySelector('[data-field="accountId"]');
+        const balInput = row.querySelector('[data-field="eodBalance"]');
+        if (accountNumber !== '') idInput.value = String(accountNumber);
+        if (balance !== '') balInput.value = String(balance);
+        idInput.addEventListener('change', () => {
+            const val = idInput.value.trim();
+            const matched = knownAccounts.find(a => String(a.accountNumber) === val || String(a.accountId) === val);
+            if (matched) {
+                if (matched.accountNumber) idInput.value = String(matched.accountNumber);
+                if (!balInput.value && matched.currentBalance != null) {
+                    balInput.value = Number(matched.currentBalance).toFixed(4);
+                }
+            }
+        });
         el('accounts').append(row);
+    }
+    function populateActiveSavings(day) {
+        const eligible = eligibleSavingsForDay(day);
+        el('accounts').innerHTML = '';
+        el('empty').checked = false;
+        el('add').disabled = false;
+        if (eligible.length > 0) {
+            for (const a of eligible) {
+                addAccount(a.accountNumber || a.accountId, Number(a.currentBalance ?? 0).toFixed(4));
+            }
+        } else {
+            addAccount();
+        }
     }
     function file(day) {
         if (busy || !overview?.missingDays.includes(day)) return;
         review = null;
         el('review').hidden = true;
         el('file-form').reset();
-        el('accounts').innerHTML = '';
-        el('add').disabled = false;
-        addAccount();
         el('date').value = day;
+        populateActiveSavings(day);
         el('prepare').hidden = false;
         el('prepare').scrollIntoView({ behavior: 'smooth', block: 'start' });
         el('source').focus();
@@ -139,6 +213,7 @@
         el('review').hidden = true;
         review = null;
         try {
+            if (!idToNumber.size) await loadAccounts();
             const result = await api('/backfills/' + encodeURIComponent(id));
             if (version !== generation) return;
             review = result;
@@ -152,8 +227,8 @@
                 <dt>Source reference</dt><dd>${esc(p.request.sourceReference)}</dd><dt>Reason</dt><dd>${esc(p.request.reason)}</dd>
                 <dt>Status</dt><dd>${p.approvedBy ? 'Approved' : canApprove ? 'Pending review' : 'Date already sealed; this proposal cannot be approved'}</dd>
                 ${p.approvedBy ? `<dt>Approved by</dt><dd>${esc(p.approvedBy)} · ${esc(timestamp(p.approvedAt))}</dd><dt>Approval reason</dt><dd>${esc(p.approvalReason)}</dd>` : ''}</dl>
-                <div class="interest-scroll"><table><thead><tr><th>Account ID</th><th>Type</th><th>Historical balance (PHP)</th><th>Annual rate</th></tr></thead><tbody>
-                ${p.request.accounts.map(a => `<tr><td>${esc(a.accountId)}</td><td>SAVINGS</td><td>${esc(peso(a.eodBalance))}</td><td>Calculated from savings tier</td></tr>`).join('') || '<tr><td colspan="4">Source attests there were no eligible accounts.</td></tr>'}
+                <div class="interest-scroll"><table><thead><tr><th>Account number</th><th>Type</th><th>Historical balance (PHP)</th><th>Annual rate</th></tr></thead><tbody>
+                ${p.request.accounts.map(a => `<tr><td>${esc(idToNumber.get(String(a.accountId)) || a.accountNumber || a.accountId)}</td><td>SAVINGS</td><td>${esc(peso(a.eodBalance))}</td><td>Calculated from savings tier</td></tr>`).join('') || '<tr><td colspan="4">Source attests there were no eligible accounts.</td></tr>'}
                 </tbody></table></div>`;
             el('review').hidden = false;
             el('review').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -173,17 +248,25 @@
             el('month').disabled = false;
             root.querySelectorAll('button').forEach(button => button.disabled = false);
             el('add').disabled = el('empty').checked;
+            el('autofill').disabled = el('empty').checked;
             if (version === generation) await load();
         }
     }
     el('file-form').addEventListener('submit', event => {
         event.preventDefault();
         if (!el('file-form').reportValidity()) return;
-        const accounts = [...el('accounts').querySelectorAll('tr')].map(row => {
+        const accounts = [];
+        for (const row of el('accounts').querySelectorAll('tr')) {
             const account = Object.fromEntries([...row.querySelectorAll('[data-field]')].map(input => [input.dataset.field, input.value.trim()]));
             if (!account.annualRate) delete account.annualRate;
-            return account;
-        });
+            const rawAccount = account.accountId;
+            if (numberToId.has(rawAccount)) {
+                account.accountId = numberToId.get(rawAccount);
+            } else if (/^0/.test(rawAccount)) {
+                return message(`Unknown savings account number: ${rawAccount}. Check the account number and try again.`, true);
+            }
+            accounts.push(account);
+        }
         if (!accounts.length && !el('empty').checked) return message('Add all eligible accounts, or explicitly confirm the source has no eligible accounts.', true);
         mutate(async version => {
             const proposal = await api(`/resolve?businessDate=${el('date').value}`, { mode:'BACKFILL', reason:el('reason').value.trim(),
@@ -224,8 +307,13 @@
         if (el('empty').checked) el('accounts').innerHTML = '';
         else addAccount();
         el('add').disabled = el('empty').checked;
+        el('autofill').disabled = el('empty').checked;
     });
-    el('add').addEventListener('click', addAccount);
+    el('add').addEventListener('click', () => addAccount());
+    el('autofill').addEventListener('click', async () => {
+        await loadAccounts();
+        populateActiveSavings(el('date').value);
+    });
     el('cancel-file').addEventListener('click', () => { el('prepare').hidden = true; });
     el('close-review').addEventListener('click', () => { review = null; el('review').hidden = true; });
     el('refresh').addEventListener('click', () => { message(''); load(); });
