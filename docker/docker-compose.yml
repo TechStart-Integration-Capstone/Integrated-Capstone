@@ -497,7 +497,10 @@ services:
       - mobile-app
     ports:
       - "80:80"
+      - "443:443"
       - "3001:80"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
       - ledger-net
 
