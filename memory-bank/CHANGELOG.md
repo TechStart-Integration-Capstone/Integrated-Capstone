@@ -1,4 +1,8 @@
 # Changelog
+- 2026-10-13 — Enable Production HTTPS with Let's Encrypt SSL & Port 443 Support (`frontend/nginx.conf`, `docker/docker-compose.yml`):
+  - **Let's Encrypt TLS Certificate Provisioning:** Issued valid SSL certificate for domain `paypink.westus2.cloudapp.azure.com` using Certbot standalone ACME challenge; certificate and key installed at `/etc/letsencrypt/live/paypink.westus2.cloudapp.azure.com/`.
+  - **Nginx HTTPS & Port 443 Termination (`frontend/nginx.conf`):** Configured dual `listen 80` and `listen 443 ssl` with TLSv1.2/TLSv1.3 and high-security ciphers. All endpoints (Admin, Web Banking `/bank/`, and Mobile PWA `/mobile/`) now operate securely over HTTPS with trusted padlock 🔒, enabling Service Worker registration and PWA installation.
+  - **Docker Compose SSL Port & Volume Mount (`docker/docker-compose.yml`):** Exposed host port `443:443` and mounted `/etc/letsencrypt:/etc/letsencrypt:ro` into `frontend-spa`. — [Antigravity]
 - 2026-10-13 — Implement Port 80 Reverse Proxy for Flutter Mobile PWA (`frontend/nginx.conf`, `docker/docker-compose.yml`):
   - **Port 80 `/mobile/` Reverse Proxy (`frontend/nginx.conf`):** Added `location ^~ /mobile/` to `frontend-spa` Nginx, forwarding requests to `http://mobile-app:80/` with dynamic `sub_filter '<base href="/">' '<base href="/mobile/">';` and `Accept-Encoding: ""`. This permits corporate network users (e.g. under Sangfor SASE / strict firewall proxies that block non-standard port 3002) to access the Flutter Mobile PWA seamlessly over standard Port 80 at `http://<domain>/mobile/`.
   - **Docker Compose Dependencies (`docker/docker-compose.yml`):** Added `mobile-app` to `frontend`'s `depends_on` list to ensure upstream resolution on `ledger-net`.
