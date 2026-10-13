@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -293,7 +294,7 @@ class MainNavigationShell extends StatefulWidget {
   State<MainNavigationShell> createState() => _MainNavigationShellState();
 }
 
-class _MainNavigationShellState extends State<MainNavigationShell> {
+class _MainNavigationShellState extends State<MainNavigationShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
   bool _hideBalances = false;
 
@@ -309,6 +310,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   }
   // In-app notifications, derived from server transactions and PinkCircle invitations (same rules as the web app).
   List<Map<String, dynamic>> _notifications = [];
+  final ValueNotifier<List<Map<String, dynamic>>> _notificationsNotifier =
+      ValueNotifier<List<Map<String, dynamic>>>(const []);
+  final Set<String> _knownNotificationKeys = {};
+  bool _initialNotificationsPrimed = false;
+  Timer? _livePollTimer;
   List<TransactionItem> _serverTransactions = [];
   List<PinkCircleItem> _circles = [];
   Set<String> _readNotificationIds = {};
@@ -322,8 +328,36 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadNotificationState();
     _loadLiveDatabaseData();
+    _livePollTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _loadLiveDatabaseData(
+        preserveLocalTransactions: true,
+        bypassCache: true,
+        silent: true,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _livePollTimer?.cancel();
+    _notificationsNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadLiveDatabaseData(
+        preserveLocalTransactions: true,
+        bypassCache: true,
+        silent: true,
+      );
+    }
   }
 
   Future<void> _loadNotificationState() async {
@@ -344,6 +378,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       read: _readNotificationIds,
       hidden: _hiddenNotificationIds,
     );
+    _notificationsNotifier.value = List<Map<String, dynamic>>.unmodifiable(_notifications);
   }
 
   void _persistNotificationState() {
@@ -357,7 +392,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   bool _isRefreshingData = false;
 
-  Future<void> _loadLiveDatabaseData({bool preserveLocalTransactions = false, bool bypassCache = false}) async {
+  Future<void> _loadLiveDatabaseData({
+    bool preserveLocalTransactions = false,
+    bool bypassCache = false,
+    bool silent = false,
+  }) async {
     if (_isRefreshingData) return;
     _isRefreshingData = true;
     try {
@@ -377,7 +416,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         circles = await SavingsService.fetchCircles();
       } catch (_) {}
       if (!mounted) return;
-      if (profileError != null) {
+      if (profileError != null && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: PayPinkTheme.red,
@@ -390,8 +429,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           ),
         );
       }
+      Map<String, dynamic>? newlyArrivedUnread;
       setState(() {
-        _profileError = profileError;
+        if (!silent || profile != null) {
+          _profileError = profileError;
+        }
         if (profile != null) {
           if (_userProfile == null || !preserveLocalTransactions) {
             _userProfile = profile;
@@ -421,6 +463,20 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         _serverTransactions = txs;
         _circles = circles;
         _rebuildNotifications();
+
+        final currentKeys = <String>{};
+        for (final n in _notifications) {
+          final key = '${n['id']}|${n['title']}|${n['message']}';
+          currentKeys.add(key);
+          if (_initialNotificationsPrimed &&
+              newlyArrivedUnread == null &&
+              n['unread'] == true &&
+              !_knownNotificationKeys.contains(key)) {
+            newlyArrivedUnread = n;
+          }
+        }
+        _knownNotificationKeys.addAll(currentKeys);
+        _initialNotificationsPrimed = true;
 
         if (txs.isNotEmpty) {
           if (!preserveLocalTransactions || _transactions.isEmpty) {
@@ -454,6 +510,11 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           }
         }
       });
+      if (newlyArrivedUnread != null && mounted) {
+        final title = newlyArrivedUnread!['title'] ?? 'New notification';
+        final message = newlyArrivedUnread!['message'] ?? '';
+        _triggerStatusToast('$title: $message', '🔔');
+      }
     } finally {
       _isRefreshingData = false;
     }
@@ -788,9 +849,15 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                                     size: 20,
                                   ),
                                   onPressed: () {
+                                    _loadLiveDatabaseData(
+                                      preserveLocalTransactions: true,
+                                      bypassCache: true,
+                                      silent: true,
+                                    );
                                     PayPinkBottomSheets.showNotificationsDrawer(
                                       context,
                                       notifications: _notifications,
+                                      notificationsListenable: _notificationsNotifier,
                                       onMarkAllRead: _markAllNotificationsRead,
                                       onDismiss: _dismissNotification,
                                     );

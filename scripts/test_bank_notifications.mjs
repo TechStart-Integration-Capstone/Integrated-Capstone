@@ -29,7 +29,7 @@ function banking(storage=new Map()) {
     state.profile={username:'aly'};
     state.generation=1;
     globalThis.subject={state,transferNotifications,updateTransferNotifications,
-      notificationList,persistNotificationReads};
+      updateCircleNotifications,notificationList,persistNotificationReads};
   `,context);
   return {...context.subject,storage,popups,badge,dialog,listeners};
 }
@@ -118,6 +118,29 @@ test('existing transfer and loan notifications remain visible; unrelated entries
   assert.equal(b.transferNotifications.items.length,6);
   assert.equal(b.transferNotifications.items[4].title,'Loan approved and received');
   assert.equal(b.transferNotifications.items[5].title,'Loan payment received');
+});
+
+test('PinkCircle invitation appears in inbox, announces on live poll, and clears once accepted',()=>{
+  const b=banking();
+  b.updateTransferNotifications([]);
+  b.updateCircleNotifications([{circle_id:'C-1',name:'Boracay Trip',membership_status:'ACTIVE',target_amount:20000}],false);
+  assert.equal(b.transferNotifications.items.length,0);
+  b.updateCircleNotifications([
+    {circle_id:'C-1',name:'Boracay Trip',membership_status:'ACTIVE',target_amount:20000},
+    {circle_id:'C-2',name:'Emergency Fund',membership_status:'INVITED',target_amount:50000,target_date:'2026-12-31'}
+  ],true);
+  assert.equal(b.transferNotifications.items.length,1);
+  assert.equal(b.transferNotifications.items[0].title,'PinkCircle invitation');
+  assert.equal(b.badge.textContent,'1');
+  assert.equal(b.popups.length,1);
+  assert.match(b.notificationList(),/PinkCircle invitation/);
+  assert.match(b.notificationList(),/Emergency Fund/);
+  b.updateCircleNotifications([
+    {circle_id:'C-1',name:'Boracay Trip',membership_status:'ACTIVE',target_amount:20000},
+    {circle_id:'C-2',name:'Emergency Fund',membership_status:'ACTIVE',target_amount:50000}
+  ],false);
+  assert.equal(b.transferNotifications.items.length,0);
+  assert.equal(b.badge.hidden,true);
 });
 
 test('new customer does not inherit read markers or announcements from the previous customer',()=>{

@@ -2,13 +2,34 @@
 
 // Uses customer-scoped history, including unposted sender requests.
 // No browser-supplied customer ID: /transactions authenticates ownership on the server.
-const transferNotifications = {owner:null, generation:-1, items:[], known:new Set(), read:new Set(), loaded:false, busy:false, error:''};
+const transferNotifications = {owner:null, generation:-1, items:[], activity:[], circles:[], circlesLoaded:false, circlesBusy:false, known:new Set(), read:new Set(), loaded:false, busy:false, error:''};
 const notificationKey = () => `paypink.notifications.read.${state.profile?.username}`;
 function resetNotificationOwner() {
   if (transferNotifications.owner === state.profile?.username && transferNotifications.generation === state.generation) return;
   dismissTransferPopups();
-  Object.assign(transferNotifications,{owner:state.profile?.username,generation:state.generation,items:[],known:new Set(),read:new Set(),loaded:false,error:''});
+  Object.assign(transferNotifications,{owner:state.profile?.username,generation:state.generation,items:[],activity:[],circles:[],circlesLoaded:false,circlesBusy:false,known:new Set(),read:new Set(),loaded:false,error:''});
   try { transferNotifications.read = new Set(JSON.parse(localStorage.getItem(notificationKey()) || '[]')); } catch { /* Reading remains available without storage. */ }
+}
+function notificationFromCircleInvite(circle) {
+  const circleId = circle.circle_id ?? circle.circleId;
+  const name = circle.name || 'PinkCircle';
+  const targetAmount = money(circle.target_amount ?? circle.targetAmount ?? 0, 'PHP');
+  const rawDate = circle.target_date ?? circle.targetDate ?? '';
+  const dateStr = rawDate ? `${String(rawDate).slice(0, 10)}T00:00:00` : new Date().toISOString();
+  return {
+    id: `CIRCLE_INVITE:${circleId}`,
+    title: 'PinkCircle invitation',
+    message: `You have been invited to join "${name}" (target: ${targetAmount}). Open Savings Hub → PinkCircles to accept.`,
+    circle,
+    tx: {
+      type: 'CIRCLE_INVITE',
+      status: 'INVITED',
+      amount: Number(circle.target_amount ?? circle.targetAmount ?? 0),
+      currency: 'PHP',
+      reference: `CIRCLE-${circleId}`,
+      date: dateStr
+    }
+  };
 }
 function notificationFromLoan(tx) {
   const amount = money(tx.amount,tx.currency);
@@ -35,13 +56,25 @@ function notificationFromTransfer(tx) {
     : `${amount} was sent to ${person} from your account ${account}.`;
   return {id:`${tx.transactionId || tx.reference}:${tx.status}`,title,message,tx};
 }
-function updateTransferNotifications(activity, announce = true) {
+function updateTransferNotifications(activity, announce = true, circles = undefined) {
   if (!state.session || !state.profile) return;
   resetNotificationOwner();
-  const items = activity.filter(tx => (['P2P_REMITTANCE','TRANSFER_IN','TRANSFER_OUT','LOAN_DISBURSEMENT','LOAN_REPAYMENT'].includes(tx.type) || tx.type?.startsWith('EXT_'))
+  const wasLoaded = transferNotifications.loaded;
+  const wasCirclesLoaded = transferNotifications.circlesLoaded;
+  if (Array.isArray(activity)) transferNotifications.activity = activity;
+  if (Array.isArray(circles)) {
+    transferNotifications.circles = circles;
+    transferNotifications.circlesLoaded = true;
+  }
+  const circleItems = (transferNotifications.circles || [])
+    .filter(c => String(c?.membership_status || c?.membershipStatus || '').toUpperCase() === 'INVITED')
+    .map(notificationFromCircleInvite);
+  const txItems = (transferNotifications.activity || []).filter(tx => (['P2P_REMITTANCE','TRANSFER_IN','TRANSFER_OUT','LOAN_DISBURSEMENT','LOAN_REPAYMENT'].includes(tx.type) || tx.type?.startsWith('EXT_'))
     && ['PENDING','FAILED','SUCCESS','COMPLETED','POSTED','CANCELLED','RESERVED','PROCESSING'].includes(String(tx.status).toUpperCase())).map(notificationFromTransfer);
-  const fresh = items.filter(item => !transferNotifications.known.has(item.id));
-  if (announce && transferNotifications.loaded && fresh.length) {
+  const items = [...circleItems, ...txItems];
+  const fresh = items.filter(item => !transferNotifications.known.has(item.id)
+    && (item.circle ? wasCirclesLoaded : wasLoaded));
+  if (announce && fresh.length) {
     fresh.slice(0,3).reverse().forEach(showTransferPopup);
   }
   transferNotifications.items = items;
@@ -49,6 +82,24 @@ function updateTransferNotifications(activity, announce = true) {
   transferNotifications.loaded = true; transferNotifications.error = '';
   renderNotificationBadge();
   if (dialog.open && dialog.dataset.notifications === 'true') renderNotificationInbox();
+  if (!transferNotifications.circlesLoaded && !transferNotifications.circlesBusy && typeof fetch === 'function') {
+    pollCircleInvitations();
+  }
+}
+function updateCircleNotifications(circles, announce = true) {
+  if (!state.session || !state.profile || !Array.isArray(circles)) return;
+  updateTransferNotifications(transferNotifications.activity, announce, circles);
+}
+async function pollCircleInvitations() {
+  if (!state.session || !state.profile || transferNotifications.circlesBusy || typeof fetch !== 'function') return;
+  const generation = state.generation;
+  transferNotifications.circlesBusy = true;
+  try {
+    const circles = await api('/api/v1/accounts/savings/circles');
+    if (generation !== state.generation || !state.session) return;
+    if (Array.isArray(circles)) updateCircleNotifications(circles, true);
+  } catch { /* Savings circles are optional if service is unreachable. */ }
+  finally { transferNotifications.circlesBusy = false; }
 }
 function renderNotificationBadge() {
   const button = document.querySelector('#notification-button');
@@ -61,8 +112,8 @@ function renderNotificationBadge() {
 function notificationList() {
   if (transferNotifications.error) return `<p role="status" class="notice">${escapeHtml(transferNotifications.error)}</p>`;
   if (!transferNotifications.loaded) return '<p role="status" class="muted">Loading notifications…</p>';
-  if (!transferNotifications.items.length) return '<div class="notification-empty"><h3>You’re all caught up.</h3><p>Updates about money you send and receive will appear here.</p></div>';
-  return `<div class="notification-list">${transferNotifications.items.map(item => `<button type="button" class="notification-item ${transferNotifications.read.has(item.id) ? '' : 'unread'}" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? '↓' : '↑'}</span><span><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span><small>${escapeHtml(txDate(item.tx).toLocaleString('en-PH'))}</small>${!transferNotifications.read.has(item.id) ? '<span class="notification-unread-label">Unread</span>' : ''}</span></button>`).join('')}</div>`;
+  if (!transferNotifications.items.length) return '<div class="notification-empty"><h3>You’re all caught up.</h3><p>Updates about money you send, receive, and PinkCircle invitations will appear here.</p></div>';
+  return `<div class="notification-list">${transferNotifications.items.map(item => `<button type="button" class="notification-item ${transferNotifications.read.has(item.id) ? '' : 'unread'}" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${item.circle ? '♡' : ['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? '↓' : '↑'}</span><span><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span><small>${escapeHtml(item.circle ? ((item.circle.target_date || item.circle.targetDate) ? `Target date: ${String(item.circle.target_date || item.circle.targetDate).slice(0, 10)}` : 'Pending invitation') : txDate(item.tx).toLocaleString('en-PH'))}</small>${!transferNotifications.read.has(item.id) ? '<span class="notification-unread-label">Unread</span>' : ''}</span></button>`).join('')}</div>`;
 }
 function renderNotificationInbox() {
   const body = dialog.querySelector('#notification-inbox');
@@ -85,9 +136,12 @@ async function pollTransferNotifications() {
   const generation = state.generation;
   transferNotifications.busy = true;
   try {
-    const activity = await api('/transactions');
+    const [activity, circles] = await Promise.all([
+      api('/transactions'),
+      api('/api/v1/accounts/savings/circles').catch(() => transferNotifications.circles)
+    ]);
     if (generation !== state.generation || !state.session) return;
-    updateTransferNotifications(activity);
+    updateTransferNotifications(activity, true, Array.isArray(circles) ? circles : transferNotifications.circles);
   } catch {
     if (generation !== state.generation || !state.session) return;
     transferNotifications.error = 'Notifications are temporarily unavailable. We’ll retry shortly.';
@@ -97,6 +151,15 @@ async function pollTransferNotifications() {
 document.addEventListener('click', event => {
   const closePopup = event.target.closest('[data-dismiss-transfer-popup]');
   if (closePopup) { closePopup.closest('.transfer-popup').remove(); return; }
+  const openInvite = event.target.closest('[data-open-circle-invite]');
+  if (openInvite) {
+    const circleId = openInvite.dataset.openCircleInvite;
+    dialog.close();
+    window.PayPinkSavingsLive?.selectCircle?.(circleId);
+    state.page = 'savings';
+    if (typeof renderPage === 'function') renderPage();
+    return;
+  }
   if (event.target.closest('#notification-button')) { openNotifications(); return; }
   if (event.target.closest('[data-notifications-read-all]')) {
     transferNotifications.items.forEach(item => transferNotifications.read.add(item.id));
@@ -109,6 +172,12 @@ document.addEventListener('click', event => {
   button.closest('.transfer-popup')?.remove();
   transferNotifications.read.add(item.id); persistNotificationReads();
   dialog.dataset.notifications = 'false';
+  if (item.circle) {
+    const c = item.circle;
+    const circleId = c.circle_id ?? c.circleId ?? '';
+    showDialog(item.title,`<p>${escapeHtml(item.message)}</p><dl class="detail-list">${detail('Circle',escapeHtml(c.name || 'PinkCircle'))}${detail('Shared target',escapeHtml(money(c.target_amount ?? c.targetAmount ?? 0,'PHP')))}${detail('Target date',escapeHtml(String(c.target_date || c.targetDate || 'No date').slice(0,10)))}${detail('Status',statusPill('PENDING'))}</dl>`, `<button class="btn btn-secondary" type="button" id="notification-button-back">All notifications</button><button class="btn btn-primary" type="button" data-open-circle-invite="${escapeHtml(String(circleId))}">Open in PinkCircles</button>`);
+    return;
+  }
   showDialog(item.title,`<p>${escapeHtml(item.message)}</p><dl class="detail-list">${detail('Amount',escapeHtml(money(item.tx.amount,item.tx.currency)))}${detail('Status',statusPill(item.tx.status))}${detail(['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? 'Sender' : 'Recipient',escapeHtml(item.tx.type?.startsWith('LOAN_') ? 'PayPink Loans' : item.tx.counterpartyName || 'PayPink customer'))}${detail('Account',escapeHtml(maskedNumber(item.tx.counterpartyAccountNumber)))}${detail('Reference',escapeHtml(item.tx.reference))}${detail('Date & time',escapeHtml(txDate(item.tx).toLocaleString('en-PH')))}</dl>`, '<button class="btn btn-secondary" type="button" id="notification-button-back">All notifications</button><button class="btn btn-primary" data-action="close-dialog">Done</button>');
 });
 document.addEventListener('click', event => { if (event.target.closest('#notification-button-back')) openNotifications(); });
@@ -128,7 +197,7 @@ function showTransferPopup(item) {
   }
   const popup = document.createElement('div');
   popup.className = 'transfer-popup';
-  popup.innerHTML = `<button type="button" class="transfer-popup-open" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? '↓' : '↑'}</span><span><span role="status"><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span></span><small>View transfer details →</small></span></button><button type="button" class="transfer-popup-close" data-dismiss-transfer-popup aria-label="Dismiss notification">×</button>`;
+  popup.innerHTML = `<button type="button" class="transfer-popup-open" data-notification-id="${escapeHtml(item.id)}"><span class="notification-symbol" aria-hidden="true">${item.circle ? '♡' : ['TRANSFER_IN','LOAN_DISBURSEMENT'].includes(item.tx.type) ? '↓' : '↑'}</span><span><span role="status"><strong>${escapeHtml(item.title)}</strong><span class="notification-message">${escapeHtml(item.message)}</span></span><small>${item.circle ? 'View invitation →' : 'View transfer details →'}</small></span></button><button type="button" class="transfer-popup-close" data-dismiss-transfer-popup aria-label="Dismiss notification">×</button>`;
   host.prepend(popup);
   while (host.children.length > 3) host.lastElementChild.remove();
   let timer;
