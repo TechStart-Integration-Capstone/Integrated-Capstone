@@ -43,8 +43,8 @@ public class TelemetryController {
         double redisLatencyMs = (System.nanoTime() - rStart) / 1_000_000.0;
 
         stats.put("redisAvgCheckLatencyMs", String.format("%.3f", redisLatencyMs));
-        stats.put("hikariPoolMax",   30);
-        stats.put("hikariPoolMinIdle", 5);
+        stats.put("hikariPoolMax",   100);
+        stats.put("hikariPoolMinIdle", 30);
 
         return ResponseEntity.ok(stats);
     }

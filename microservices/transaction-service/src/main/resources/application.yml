@@ -1,23 +1,37 @@
 server:
   port: 8083
+  tomcat:
+    threads:
+      max: 400
+      min-spare: 50
+    accept-count: 500
+    max-connections: 10000
 
 spring:
   application:
     name: transaction-service
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1433;databaseName=master;encrypt=true;trustServerCertificate=true;sendStringParametersAsUnicode=false}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
     username: ${SPRING_DATASOURCE_USERNAME:sa}
     password: ${SPRING_DATASOURCE_PASSWORD:PayPink2.0_StrongPass!}
     hikari:
-      maximum-pool-size: 30
-      minimum-idle: 5
+      maximum-pool-size: 100
+      minimum-idle: 30
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 1200000
       pool-name: TransactionHikariPool
+      data-source-properties:
+        sendStringParametersAsUnicode: false
+        statementPoolingCacheSize: 25
+        disableStatementPooling: false
   jpa:
     database-platform: org.hibernate.dialect.SQLServerDialect
     hibernate:
       ddl-auto: none
     show-sql: false
+    open-in-view: false
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
