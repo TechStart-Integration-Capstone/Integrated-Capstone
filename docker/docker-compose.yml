@@ -494,6 +494,7 @@ services:
     container_name: frontend-spa
     depends_on:
       - api-gateway
+      - mobile-app
     ports:
       - "80:80"
       - "3001:80"
