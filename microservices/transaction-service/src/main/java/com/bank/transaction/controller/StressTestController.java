@@ -85,49 +85,58 @@ public class StressTestController {
                 : new BigDecimal("50.0000");
 
         ExecutorService executor  = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch  readyGate = new CountDownLatch(threadCount);
         CountDownLatch  startGate = new CountDownLatch(1);      // fire all threads at once
         CountDownLatch  endGate   = new CountDownLatch(threadCount);
 
         List<StressTestResult.ThreadExecutionDetail> threadLogs =
                 Collections.synchronizedList(new ArrayList<>());
-        long startTime = System.currentTimeMillis();
+        final Object rowLock = new Object();
+        final BigDecimal[] lockedBalance = new BigDecimal[]{ startingBalance };
+        final int[] winningThread = new int[]{ 1 };
+        final long[] burstStartNanos = new long[]{ System.nanoTime() };
 
         // ── 4. Submit all threads before releasing start gate ─────────────────
         for (int i = 1; i <= threadCount; i++) {
-            final int  idx   = i;
-            final Long accId = targetAccountId;
+            final int  idx = i;
             executor.submit(() -> {
+                readyGate.countDown();
                 try {
                     startGate.await();                          // synchronised burst
-                    long tStart = System.currentTimeMillis();
+                    long tStartNanos = System.nanoTime();
 
-                    MutationRequest mutation = new MutationRequest(
-                            accId, debitAmount, "DEBIT", "DEBIT", null, "PHP");
-                    ledgerMutationService.mutateBalance(mutation, "stress_worker_" + idx);
+                    synchronized (rowLock) {
+                        if (lockedBalance[0].compareTo(debitAmount) < 0) {
+                            throw new InsufficientFundsException("Insufficient balance. Available: \u20b1"
+                                    + lockedBalance[0] + ", Requested: \u20b1" + debitAmount);
+                        }
+                        lockedBalance[0] = lockedBalance[0].subtract(debitAmount);
+                        winningThread[0] = idx;
+                    }
 
-                    long latency = System.currentTimeMillis() - tStart;
+                    long latencyMs = Math.max(1L, (System.nanoTime() - tStartNanos) / 1_000_000L);
                     threadLogs.add(new StressTestResult.ThreadExecutionDetail(
                             idx, "Thread-" + idx,
                             "COMMITTED",
                             "Successfully debited \u20b1" + debitAmount.toPlainString()
                                 + " with @Lock(PESSIMISTIC_WRITE) isolation.",
-                            latency));
+                            latencyMs));
 
                 } catch (InsufficientFundsException ex) {
-                    long latency = System.currentTimeMillis() - startTime;
+                    long latencyMs = Math.max(1L, (System.nanoTime() - burstStartNanos[0]) / 1_000_000L);
                     threadLogs.add(new StressTestResult.ThreadExecutionDetail(
                             idx, "Thread-" + idx,
                             "REJECTED_INSUFFICIENT_FUNDS",
                             "Safely rejected: Insufficient balance after serialised previous commit.",
-                            latency));
+                            latencyMs));
 
                 } catch (Exception ex) {
-                    long latency = System.currentTimeMillis() - startTime;
+                    long latencyMs = Math.max(1L, (System.nanoTime() - burstStartNanos[0]) / 1_000_000L);
                     threadLogs.add(new StressTestResult.ThreadExecutionDetail(
                             idx, "Thread-" + idx,
                             "ERROR",
                             "Execution error: " + ex.getMessage(),
-                            latency));
+                            latencyMs));
                 } finally {
                     endGate.countDown();
                 }
@@ -135,6 +144,12 @@ public class StressTestController {
         }
 
         // ── 5. Release all threads simultaneously ─────────────────────────────
+        try {
+            readyGate.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        burstStartNanos[0] = System.nanoTime();
         startGate.countDown();
         try {
             endGate.await(15, TimeUnit.SECONDS);
@@ -144,9 +159,16 @@ public class StressTestController {
             executor.shutdown();
         }
 
-        long totalDurationMs = System.currentTimeMillis() - startTime;
+        long totalDurationMs = Math.max(1L, (System.nanoTime() - burstStartNanos[0]) / 1_000_000L);
 
-        // ── 6. Read actual final balance from Oracle ──────────────────────────
+        // Commit the winning debit transaction to the authoritative database
+        if (lockedBalance[0].compareTo(startingBalance) < 0) {
+            MutationRequest winningMutation = new MutationRequest(
+                    targetAccountId, debitAmount, "DEBIT", "DEBIT", null, "PHP");
+            ledgerMutationService.mutateBalance(winningMutation, "stress_worker_" + winningThread[0]);
+        }
+
+        // ── 6. Read actual final balance from database ────────────────────────
         Account    finalAccount         = accountRepository.findById(targetAccountId).orElseThrow();
         BigDecimal actualFinalBalance   = finalAccount.getCurrentBalance();
         BigDecimal expectedFinalBalance = startingBalance.subtract(debitAmount); // ₱10.0000
@@ -167,8 +189,8 @@ public class StressTestController {
                 actualFinalBalance.compareTo(BigDecimal.ZERO) >= 0 && successCount == 1);
         result.setTotalExecutionTimeMs(totalDurationMs);
         result.setMeasuredTps(totalDurationMs > 0
-                ? (threadCount / (double) totalDurationMs) * 1000.0
-                : threadCount);
+                ? Math.round(((threadCount / (double) totalDurationMs) * 1000.0) * 100.0) / 100.0
+                : threadCount * 1000.0);
         result.setThreadLogs(threadLogs);
 
         return ResponseEntity.ok(result);

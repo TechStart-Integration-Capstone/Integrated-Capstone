@@ -78,7 +78,7 @@ public class LedgerMutationService {
                 try {
                     MutationResponse cached = objectMapper.readValue(cachedJson, MutationResponse.class);
                     cached.setCachedIdempotentResponse(true);
-                    log.info("[transaction-service] Idempotent hit for key={}", idempotencyKey);
+                    log.debug("[transaction-service] Idempotent hit for key={}", idempotencyKey);
                     telemetryService.recordMutation(true, System.nanoTime() - methodStart);
                     return cached;
                 } catch (Exception e) {
@@ -137,7 +137,7 @@ public class LedgerMutationService {
                 account.getCurrency(), account.getCurrency(),
                 request.getTransactionType(), referenceNo, "SUCCESS", null));
 
-        log.info("[transaction-service] TRANSACTION SUCCESS: Ref={} Type={} Op={} Amount=₱{} Account={} Before=₱{} After=₱{} User={}",
+        log.debug("[transaction-service] TRANSACTION SUCCESS: Ref={} Type={} Op={} Amount=₱{} Account={} Before=₱{} After=₱{} User={}",
                 referenceNo, request.getTransactionType(), operation, amount, account.getAccountNumber(), beforeBalance, afterBalance, username);
 
         // 7. Insert AUDIT_LOG in Oracle
@@ -166,8 +166,7 @@ public class LedgerMutationService {
             payload = "{\"transactionId\":" + tx.getTransactionId()
                     + ",\"referenceNo\":\"" + referenceNo + "\"}";
         }
-        OutboxEvent outbox = outboxEventRepository.save(
-                new OutboxEvent(tx.getTransactionId(), "TRANSACTION_SUCCESS", payload));
+        OutboxEvent outbox = new OutboxEvent(tx.getTransactionId(), "TRANSACTION_SUCCESS", payload);
 
         // 9. Build response
         MutationResponse response = new MutationResponse(
@@ -181,26 +180,24 @@ public class LedgerMutationService {
                 String redisKey = IDEMPOTENCY_KEY_PREFIX + idempotencyKey;
                 String responseJson = objectMapper.writeValueAsString(response);
                 redisTemplate.opsForValue().set(redisKey, responseJson, Duration.ofHours(idempotencyTtlHours));
-                log.info("[transaction-service] Idempotency key cached in Redis: key={} ttl={}h", idempotencyKey, idempotencyTtlHours);
+                log.debug("[transaction-service] Idempotency key cached in Redis: key={} ttl={}h", idempotencyKey, idempotencyTtlHours);
             } catch (Exception e) {
                 log.warn("[transaction-service] Failed to cache idempotency key in Redis: {}", e.getMessage());
             }
         }
 
-        // 11. Publish outbox event to Kafka immediately (best-effort, fire-and-forget)
-        // The dedicated outbox-publisher service will pick up any events that fail
-        // here by polling OUTBOX_EVENT rows with status = 'PENDING' every 5 seconds.
+        // 11. Publish outbox event to Kafka (best-effort) and persist OutboxEvent in a single SQL write
         try {
             kafkaTemplate.send("ledger.transaction.events",
-                    String.valueOf(outbox.getTransactionId()), payload);
+                    String.valueOf(tx.getTransactionId()), payload);
             outbox.setStatus("PROCESSED");
             outbox.setProcessedDate(LocalDateTime.now());
-            outboxEventRepository.save(outbox);
         } catch (Exception e) {
             // Leave status as PENDING — outbox-publisher will retry
-            log.warn("[transaction-service] Immediate Kafka publish failed for eventId={}, " +
-                     "outbox-publisher will retry: {}", outbox.getEventId(), e.getMessage());
+            log.warn("[transaction-service] Immediate Kafka publish failed for txId={}, " +
+                     "outbox-publisher will retry: {}", tx.getTransactionId(), e.getMessage());
         }
+        outboxEventRepository.save(outbox);
 
         // Record mutation telemetry (non-idempotent path)
         telemetryService.recordMutation(false, System.nanoTime() - methodStart);
