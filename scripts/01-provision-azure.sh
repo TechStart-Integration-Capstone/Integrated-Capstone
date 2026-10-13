@@ -43,6 +43,10 @@ az network nsg rule create -g "$RESOURCE_GROUP" --nsg-name "$NSG_NAME" \
   --destination-port-ranges 80 >/dev/null
 
 az network nsg rule create -g "$RESOURCE_GROUP" --nsg-name "$NSG_NAME" \
+  -n Allow-Mobile-PWA --priority 115 --direction Inbound --access Allow --protocol Tcp \
+  --destination-port-ranges 3002 >/dev/null
+
+az network nsg rule create -g "$RESOURCE_GROUP" --nsg-name "$NSG_NAME" \
   -n Allow-API-Gateway --priority 120 --direction Inbound --access Allow --protocol Tcp \
   --destination-port-ranges 8080 >/dev/null
 # Everything else is blocked by Azure's built-in DenyAllInBound rule.
